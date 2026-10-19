@@ -106,7 +106,7 @@ export function createGoogleDriveAuth() {
       const attempt = generation;
       set({ status: 'connecting', error: null });
       const fail = (message: string) => { if (attempt === generation && state.status === 'connecting') disconnect(message); };
-      timer = setTimeout(() => fail('Google sign-in timed out. Try again.'), 180_000);
+      timer = setTimeout(() => fail('Google sign-in timed out. Sign in again to continue.'), 180_000);
       try {
         const client = sdk.initTokenClient({
           client_id: clientId, scope: GOOGLE_DRIVE_SCOPE, include_granted_scopes: false,

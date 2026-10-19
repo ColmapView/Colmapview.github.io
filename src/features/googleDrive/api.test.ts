@@ -173,7 +173,8 @@ describe('Google Drive archive API', () => {
   it('does not start an authorization popup for an inaccessible anonymous file', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(Response.json({ error: {} }, { status: 404 }));
     await expect(resolveGoogleDriveArchive(reference, { ...publicDeps, fetchImpl }))
-      .rejects.toMatchObject({ message: expect.stringContaining('Google Drive button'), failedFile: reference.sourceUrl });
+      .rejects.toMatchObject({ type: 'auth', message: 'This Drive link could not be opened. It may be private or no longer available.',
+        access: { provider: 'google' }, failedFile: reference.sourceUrl });
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
   it.each([false, true])('handles rejected response cancellation while preserving caller cancellation (%s)', async cancelled => {

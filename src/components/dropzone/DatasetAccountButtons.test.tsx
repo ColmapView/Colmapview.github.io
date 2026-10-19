@@ -108,8 +108,8 @@ describe('Dataset provider account icons', () => {
     const { result } = renderHook(useGoogleDrivePublishStoreFacade);
     const account = screen.getByRole('button', { name: 'Google Drive account' });
     fireEvent.click(account);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
     oauth.authorize();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Disconnect' })).toBeVisible());
     expect(result.current.auth.status).toBe('connected');
@@ -136,7 +136,7 @@ describe('Dataset provider account icons', () => {
     expect(screen.getByText('Load a public dataset by URL.')).toBeVisible();
     expect(screen.getByText(/Private file selection is unavailable/)).toBeVisible();
     expect(screen.queryByText(/setup is incomplete/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Choose archive from Drive' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in with Google' })).not.toBeInTheDocument();
     expect(loadGoogleOAuthSdk).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
     expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
@@ -157,7 +157,7 @@ describe('Dataset provider account icons', () => {
     expect(screen.getByText('Private file selection is unavailable.')).toBeVisible();
     expect(screen.queryByText(/public dataset|previously authorized/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Load URL' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Choose archive from Drive' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in with Google' })).not.toBeInTheDocument();
     expect(loadGoogleOAuthSdk).not.toHaveBeenCalled();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
   });
@@ -194,11 +194,11 @@ describe('Dataset provider account icons', () => {
     const connect = vi.spyOn(googleDriveAuth, 'connect');
     render(<DatasetAccountButtons {...createProps()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
     expect(connect).not.toHaveBeenCalled();
     expect(oauth.requestAccessToken).not.toHaveBeenCalled();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
-    expect(screen.getByText(/Sign in to choose a ZIP or TAR archive/)).toBeVisible();
+    expect(screen.getByText(/Sign in to choose a ZIP or TAR file from Google Drive/)).toBeVisible();
     expect(screen.getByText(/Only files you choose or create here are accessible/)).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Privacy' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Terms' })).not.toBeInTheDocument();
@@ -211,14 +211,14 @@ describe('Dataset provider account icons', () => {
       name: 'dataset.tar',
       url: 'https://drive.google.com/file/d/1DpE-bfPPIVp7TwZeMyhmisfEwCrJ0QDd/view',
     },
-  ])('signs in on Choose archive and automatically loads the selected $name URL', async selection => {
+  ])('signs in explicitly and automatically loads the selected $name URL', async selection => {
     const oauth = configureDrive();
     vi.mocked(chooseGoogleDriveArchive).mockResolvedValue(selection);
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
     expect(oauth.requestAccessToken).toHaveBeenCalledOnce();
     expect(screen.getByRole('status')).toHaveTextContent('Waiting for sign-in');
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
@@ -235,7 +235,7 @@ describe('Dataset provider account icons', () => {
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose file from Drive' }));
     await waitFor(() => expect(props.onLoadRemoteDataset).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
     expect(oauth.requestAccessToken).toHaveBeenCalledOnce();
   });
@@ -245,7 +245,7 @@ describe('Dataset provider account icons', () => {
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
     expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
     expect(oauth.requestAccessToken).not.toHaveBeenCalled();
@@ -257,14 +257,39 @@ describe('Dataset provider account icons', () => {
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel sign-in' }));
     oauth.authorize();
     expect(googleDriveAuth.getSnapshot().status).toBe('disconnected');
-    expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
     expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
     expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
+  });
+
+  it('offers an explicit sign-in retry after a timeout and opens the picker only after authorization', async () => {
+    const oauth = configureDrive();
+    vi.mocked(chooseGoogleDriveArchive).mockResolvedValue(selectedArchive);
+    const props = createProps();
+    render(<DatasetAccountButtons {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+      expect(screen.getByRole('button', { name: 'Sign in with Google' })).toHaveTextContent('Signing in…');
+      act(() => vi.advanceTimersByTime(180000));
+      expect(screen.getByRole('alert')).toHaveTextContent('Google sign-in timed out. Sign in again to continue.');
+      expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled();
+      expect(screen.queryByRole('button', { name: 'Choose file from Drive' })).not.toBeInTheDocument();
+      expect(chooseGoogleDriveArchive).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      oauth.authorize();
+      await act(async () => Promise.resolve());
+      expect(chooseGoogleDriveArchive).toHaveBeenCalledOnce();
+      expect(props.onLoadRemoteDataset).toHaveBeenCalledExactlyOnceWith(selectedArchive.url);
+    } finally { vi.useRealTimers(); }
   });
 
   it('keeps a pending Google sign-in on Load URL and still opens the picker when it completes', async () => {
@@ -273,8 +298,8 @@ describe('Dataset provider account icons', () => {
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
     expect(screen.getByRole('status')).toHaveTextContent('Waiting for sign-in');
     expect(screen.getByRole('button', { name: 'Load URL' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
@@ -301,14 +326,14 @@ describe('Dataset provider account icons', () => {
     const driveAccount = screen.getByRole('button', { name: 'Google Drive account' });
     driveAccount.focus();
     fireEvent.click(driveAccount);
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose file from Drive' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await act(async () => Promise.resolve());
     expect(pickerButton).toHaveFocus();
     pickerButton?.remove();
     await act(async () => finish?.(null));
     expect(screen.getByRole('dialog')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Choose file from Drive' })).toBeEnabled();
     expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
     expect(props.onOpenUrlModal).not.toHaveBeenCalled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -325,12 +350,12 @@ describe('Dataset provider account icons', () => {
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose file from Drive' }));
     expect(screen.getByRole('status')).toHaveTextContent('Opening Drive picker');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel selection' }));
     expect(signal?.aborted).toBe(true);
     await act(async () => finish?.(selectedArchive));
-    expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Choose file from Drive' })).toBeEnabled();
     expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
   });
 
@@ -341,10 +366,10 @@ describe('Dataset provider account icons', () => {
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose file from Drive' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Choose a ZIP or TAR archive from Google Drive.');
     expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose file from Drive' }));
     await waitFor(() => expect(props.onLoadRemoteDataset).toHaveBeenCalledExactlyOnceWith(selectedArchive.url));
   });
 
@@ -353,7 +378,7 @@ describe('Dataset provider account icons', () => {
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Hugging Face account' }));
     expect(screen.getByText(/Hugging Face sign-in is unavailable/)).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Choose archive from Drive' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in with Google' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
     expect(props.onOpenUrlModal).toHaveBeenCalledOnce();
     expect(props.onLoadRemoteDataset).not.toHaveBeenCalled();
@@ -465,8 +490,8 @@ describe('Dataset provider account icons', () => {
     const props = createProps();
     render(<DatasetAccountButtons {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Choose archive from Drive' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
     expect(googleDriveAuth.getSnapshot().status).toBe('connecting');
     fireEvent.click(screen.getByRole('button', { name: 'Close account dialog' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -525,7 +550,7 @@ describe('Dataset provider account icons', () => {
     await screen.findByRole('alert');
     fireEvent.click(screen.getByRole('button', { name: 'Close account dialog' }));
     fireEvent.click(screen.getByRole('button', { name: 'Google Drive account' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose archive from Drive' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

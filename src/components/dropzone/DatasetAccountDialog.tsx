@@ -49,11 +49,14 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
   const canSignIn = provider === 'google' ? Boolean(clientId) : hfConfiguration.status === 'ready';
   const description = provider === 'google'
     ? clientId
-      ? connected ? 'Open ZIP or TAR archives.' : 'Sign in to choose a ZIP or TAR archive.'
+      ? connected ? 'Choose a ZIP or TAR file from Google Drive.' : 'Sign in to choose a ZIP or TAR file from Google Drive.'
       : googleApiKey ? 'Load a public dataset by URL.' : 'Google Drive loading is unavailable in this viewer.'
     : connected ? 'Load a public or private dataset.' : canSignIn ? 'Sign in to open private datasets.' : 'Load a public dataset by URL.';
+  const driveAccessHint = connected
+    ? 'Select the file to let ColmapView open it.'
+    : 'For a private file, sign in with an account that has access, then choose the file.';
   const hint = provider === 'google'
-    ? clientId ? 'Only files you choose or create here are accessible. Downloads go directly to your browser.'
+    ? clientId ? accessMessage ? driveAccessHint : 'Only files you choose or create here are accessible. Downloads go directly to your browser.'
       : googleApiKey ? 'Private file selection is unavailable. You can load public datasets by URL.'
         : 'Private file selection is unavailable.'
     : hfConfiguration.status === 'ready'
@@ -154,14 +157,14 @@ export function DatasetAccountDialog({ provider, onClose, onOpenUrlModal, onLoad
         </button>}
         {googleApiKey && <button type="button" disabled={connecting}
           className={getButtonClass(clientId ? 'ghost' : 'primary', 'sm', connecting)}
-          onClick={() => { close(); onOpenUrlModal(); }}>Load URL</button>}
+          onClick={() => { close(); onOpenUrlModal(); }}>{accessMessage ? 'Use another link' : 'Load URL'}</button>}
         {clientId && (sdkError && !connected
           ? <button type="button" className={getButtonClass('primary', 'sm')} onClick={() => {
             setSdkError(null); setSdkAttempt(value => value + 1);
           }}>Retry sign-in</button>
-          : <button type="button" aria-label={!connected && !sdk ? undefined : 'Choose archive from Drive'} disabled={(!connected && !sdk) || connecting || pickerLoading}
+          : <button type="button" aria-label={!connected && !sdk ? undefined : connected ? 'Choose file from Drive' : 'Sign in with Google'} disabled={(!connected && !sdk) || connecting || pickerLoading}
             className={getButtonClass('primary', 'sm', (!connected && !sdk) || connecting || pickerLoading)}
-            onClick={chooseArchive}>{!connected && !sdk ? 'Loading sign-in…' : 'Choose archive'}</button>)}
+            onClick={chooseArchive}>{!connected && !sdk ? 'Loading sign-in…' : connecting ? 'Signing in…' : pickerLoading ? 'Opening Drive…' : connected ? 'Choose file' : 'Sign in'}</button>)}
       </> : connected || connecting ? <>
         <button type="button" className={getButtonClass('ghost', 'sm')} onClick={disconnect}>
           {connected ? 'Disconnect' : 'Cancel sign-in'}

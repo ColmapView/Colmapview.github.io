@@ -363,7 +363,7 @@ describe('useUrlLoader', () => {
     expect(processFilesMock).not.toHaveBeenCalled();
     expect(clearAllCachesMock).not.toHaveBeenCalled();
     expect(useReconstructionStore.getState().loadedFiles).toBe(loadedFiles);
-    expect(useReconstructionStore.getState().urlError?.message).toContain(kind === 'private' ? 'Google Drive button' : 'folder link');
+    expect(useReconstructionStore.getState().urlError?.message).toContain(kind === 'private' ? 'This Drive link could not be opened' : 'folder link');
     expect(useReconstructionStore.getState().urlLoading).toBe(false);
   });
 

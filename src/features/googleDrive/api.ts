@@ -163,7 +163,7 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
       needsAccess = true;
       message = requestToken
         ? 'Choose this archive in the Drive picker to grant file access. If it is still unavailable, check the account and download permissions.'
-        : 'Drive file is unavailable. Share it with Anyone with the link, or use the Google Drive button to choose the archive in the Drive picker.';
+        : 'This Drive link could not be opened. It may be private or no longer available.';
     } else {
       message = `Google Drive could not download this file (${response.status}). Please retry.`;
     }
