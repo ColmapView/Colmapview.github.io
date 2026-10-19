@@ -8,6 +8,15 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores(['.tmp/**', '.playwright-cli/**', 'dist', 'colmap-wasm', 'coverage', 'playwright-report', 'test-results', 'vendor']),
   {
+    files: ['scripts/**/*.mjs', '*.config.js'],
+    extends: [js.configs.recommended],
+    languageOptions: { globals: globals.node },
+  },
+  {
+    files: ['scripts/deployment/github-share-redirect.mjs'],
+    languageOptions: { globals: globals.browser },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,
