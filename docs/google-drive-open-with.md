@@ -6,7 +6,7 @@ ColmapView can open a single ZIP or TAR dataset selected in Google Drive. The us
 
 Use project **`colmapview-prod-20261006`**, project number **`425433759789`**, and its existing browser OAuth client. The exact supported origin remains **`https://colmapview.opsiclear.com`**. GitHub and preview hosts offer an explicit handoff and perform no Google authorization or API calls.
 
-**Setup evidence, 2026-10-19:** the production owner account saved both `drive.file` and `drive.install` in Data Access. Google displayed both under non-sensitive scopes and confirmed the save. The Drive UI registration form is prepared; icon upload and submission are separate remaining steps. A Marketplace listing has not been submitted.
+**Setup evidence, 2026-10-19:** the production owner account saved both `drive.file` and `drive.install` in Data Access. Google displayed both under non-sensitive scopes, confirmed the save, and continued to report verified branding with no scope verification required. The Drive UI form was submitted successfully with the configuration below and all five app icons. A Marketplace listing has not been submitted. Live installation and launch checks must be recorded against the released handler separately.
 
 In Google Drive API → Drive UI Integration, configure:
 

@@ -97,6 +97,13 @@ async function routeArtifact(context: BrowserContext, origin: string, serverOrig
   return { externalRequests, driveRequests, assetRequests };
 }
 
+async function closeArtifact(context: BrowserContext, server: Awaited<ReturnType<typeof startArtifactServer>>) {
+  // A short UI check can finish while image/font routes are still fetching from the fixture server.
+  await context.unrouteAll({ behavior: 'wait' });
+  await context.close();
+  await server.close();
+}
+
 // Profile checks key on the trusted directory name, never on the artifact's own deployment.json, which the selected
 // ref controls: a relabelled preview must not skip the preview-only checks. deploy.yml's `version` is a github build.
 const directoryProfiles: Record<string, DeploymentMetadata['profile']> = { version: 'github', github: 'github', custom: 'custom', preview: 'preview' };
@@ -139,7 +146,7 @@ for (const directory of profiles) {
           expect(traffic.driveRequests).toEqual([]);
         }
         expect(traffic.externalRequests).toEqual([]);
-      } finally { await server.close(); }
+      } finally { await closeArtifact(context, server); }
     });
     test(`${directory} artifact at ${origin}: policies, native loading and Drive origin gate`, async ({ page, context }) => {
       expect(metadata.profile, 'artifact profile').toBe(profile);
@@ -231,7 +238,7 @@ for (const directory of profiles) {
         }
         expect(traffic.externalRequests).toEqual([]);
         expect(errors).toEqual([]);
-      } finally { await server.close(); }
+      } finally { await closeArtifact(context, server); }
     });
   }
   if (profile === 'custom') {
@@ -246,7 +253,7 @@ for (const directory of profiles) {
         expect(await page.evaluate(() => (window as Window & { __driveConsent?: { scope: string } }).__driveConsent?.scope)).toBe('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.install');
         expect(traffic.driveRequests).toEqual([]);
         expect(traffic.externalRequests).toEqual([]);
-      } finally { await server.close(); }
+      } finally { await closeArtifact(context, server); }
     });
     test(`${directory}: canceled and malformed Drive launches never load data`, async ({ page, context }) => {
       const server = await startArtifactServer(output, '/');
@@ -263,7 +270,7 @@ for (const directory of profiles) {
         await expect(page.getByText(/This Google Drive launch link is invalid/)).toBeVisible();
         expect(traffic.driveRequests).toEqual([]);
         expect(traffic.externalRequests).toEqual([]);
-      } finally { await server.close(); }
+      } finally { await closeArtifact(context, server); }
     });
     for (const driveArchive of [
       { filename: 'artifact.tar', mimeType: 'application/x-tar', body: tarArchive, compatibility: false },
@@ -308,7 +315,7 @@ for (const directory of profiles) {
           expect(traffic.assetRequests.some(url => /worker-bundle.*\.js$/.test(url))).toBe(false);
           expect(traffic.externalRequests).toEqual([]);
           expect(errors).toEqual([]);
-        } finally { await server.close(); }
+        } finally { await closeArtifact(context, server); }
       });
     }
   }
