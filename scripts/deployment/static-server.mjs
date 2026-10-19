@@ -22,7 +22,7 @@ function parseHeaderRules(text) {
 }
 
 /** Serve only this prepared artifact. Missing assets are real 404s, never an SPA fallback. */
-export async function startArtifactServer(directory, base = '/') {
+export async function startArtifactServer(directory, base = '/', { githubPages404 = false } = {}) {
   const root = path.resolve(directory);
   const headerFile = await readFile(path.join(root, '_headers'), 'utf8').catch(() => '');
   const headerRules = parseHeaderRules(headerFile);
@@ -48,7 +48,11 @@ export async function startArtifactServer(directory, base = '/') {
       }
       response.writeHead(200, { ...headers, 'Content-Type': types[path.extname(filename)] || 'application/octet-stream' });
       response.end(body);
-    } catch { response.writeHead(404); response.end(); }
+    } catch {
+      const fallback = githubPages404 ? await readFile(path.join(root, '404.html')).catch(() => null) : null;
+      response.writeHead(404, fallback ? { 'Content-Type': 'text/html; charset=utf-8' } : {});
+      response.end(fallback || undefined);
+    }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   return {

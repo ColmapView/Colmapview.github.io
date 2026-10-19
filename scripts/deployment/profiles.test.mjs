@@ -9,6 +9,33 @@ import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, WRANGLER_VERSION, previewAliasUrl
 import { fetchVerifiedArtifact, htmlSha256, verifyPolicyHtml } from './artifact-verification.mjs';
 import { cloudflareStaticHeaders } from './headers.mjs';
 import { startArtifactServer } from './static-server.mjs';
+import { githubShareTarget } from './github-share-redirect.mjs';
+
+test('GitHub short links forward only recognized IDs to the fixed Hub host', () => {
+  for (const id of ['HappyTree', 'happytree', 'HAPPYTREE', 'CalmRiver-AAAAAAAAAAAAAAAA', 'CalmRiver-LAAAAAAAAAAAAAAAA']) {
+    assert.equal(githubShareTarget(`/s/${id}`), `https://colmapview.opsiclear.com/s/${id}`);
+    assert.equal(githubShareTarget(`/s/${id}/`), `https://colmapview.opsiclear.com/s/${id}`);
+  }
+  assert.equal(githubShareTarget('/s/%48appyTree'), 'https://colmapview.opsiclear.com/s/HappyTree');
+  for (const pathname of ['/s/', '/s/tiny', '/s/HappyTree/extra', '/hub/HappyTree', '/latest/',
+    '/s/%2f%2fevil.example', '/s/%00HappyTree', '/s/%ZZ', '/s/HappyTree?url=https://evil.example']) {
+    assert.equal(githubShareTarget(pathname), null, pathname);
+  }
+});
+
+test('GitHub root routing is built before smoke checks and publishes the tested artifact', () => {
+  const steps = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8')).jobs.deploy.steps;
+  const build = steps.findIndex(step => step.name === 'Create root redirect');
+  assert.ok(build >= 0 && build < steps.findIndex(step => step.name === 'Smoke prepared artifacts'));
+  assert.equal(steps[build].run, 'node scripts/deployment/build-github-root.mjs');
+  const output = '.tmp/deployment-root-test';
+  const result = spawnSync(process.execPath, ['scripts/deployment/build-github-root.mjs', `--out=${output}`]);
+  assert.equal(result.status, 0, result.stderr.toString());
+  assert.match(readFileSync(`${output}/index.html`, 'utf8'), /url=\/latest\//);
+  assert.match(readFileSync(`${output}/404.html`, 'utf8'), /src="\/share-redirect.js"/);
+  assert.equal(readFileSync(`${output}/share-redirect.js`, 'utf8'), readFileSync('scripts/deployment/github-share-redirect.mjs', 'utf8'));
+  assert.equal(steps.find(step => step.name === 'Deploy root').with.publish_dir, './.tmp/deployment/root');
+});
 
 const release = {
   CLOUDFLARE_PAGES_ENABLED: 'true', CLOUDFLARE_API_TOKEN_CONFIGURED: 'true',

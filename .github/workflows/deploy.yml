@@ -88,6 +88,9 @@ jobs:
       - name: Build custom production
         if: steps.config.outputs.custom_enabled == 'true'
         run: node scripts/deployment/build-profile.mjs custom --skip-typecheck --out=.tmp/deployment/custom
+      - name: Create root redirect
+        if: steps.target.outputs.is_release == 'true'
+        run: node scripts/deployment/build-github-root.mjs
       - name: Smoke prepared artifacts
         run: npm run test:deployment:browser
         env:
@@ -111,15 +114,6 @@ jobs:
           destination_dir: latest
           keep_files: true
           commit_message: Update latest to ${{ steps.target.outputs.version }}
-      - name: Create root redirect
-        if: steps.target.outputs.is_release == 'true'
-        run: |
-          mkdir -p .tmp/deployment/root
-          cat > .tmp/deployment/root/index.html << 'EOF'
-          <!doctype html>
-          <html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=/latest/"><link rel="canonical" href="/latest/"><title>ColmapView</title></head><body><p>Open <a href="/latest/">ColmapView</a>.</p></body></html>
-          EOF
-          touch .tmp/deployment/root/.nojekyll
       - name: Deploy root
         if: steps.target.outputs.is_release == 'true'
         uses: peaceiris/actions-gh-pages@v4

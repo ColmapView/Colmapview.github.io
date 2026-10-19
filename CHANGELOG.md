@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Use `/s/<id>` for upload share links when the Hub provides the shorter address. Existing Hub links and delete links remain supported.
+- Open `/s/<id>` addresses on colmapview.github.io through the shared Hub while retaining the saved viewer destination.
 
 ### Fixed
 
