@@ -19,6 +19,7 @@ describe('z-index scale', () => {
       modalOverlay: 1200,
       tooltip: 2000,
       mouseTooltip: 9999,
+      providerDialogControl: 10000,
     });
   });
 
