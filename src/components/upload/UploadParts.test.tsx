@@ -8,7 +8,7 @@ afterEach(cleanup);
 const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://huggingface.co/datasets/u/scene';
 const ready: HubLinkState = { phase: 'ready', viewerUrl, url: 'https://hub.invalid/hub/HappyTree' };
 const hub = (state: HubLinkState, enabled = true): HubLink => ({ state, enabled, busy: state.phase === 'checking' || state.phase === 'creating',
-  retry: vi.fn(async () => {}) });
+  retry: vi.fn(async () => {}), getPublicDataset: () => null });
 const provider = { url: 'https://huggingface.co/datasets/u/scene', label: 'Hugging Face page' };
 
 describe('UploadResult', () => {

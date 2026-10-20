@@ -30,6 +30,8 @@
 .publication-preview-button:hover:not(:disabled), .publication-preview-button:focus-visible { border-color: var(--accent-hover); }
 .publication-body .publication-preview-button:disabled { opacity: 1; }
 .publication-preview { display: block; width: 100%; height: auto; max-height: 200px; object-fit: contain; }
+.publication-hub-preview { aspect-ratio: 600 / 315; object-fit: cover; }
+.publication-bot-check { width: 300px; max-width: 100%; flex-shrink: 0; }
 .publication-preview-empty { display: grid; place-items: center; min-height: 135px; padding: 12px; }
 
 /* Compact label-beside-field rows. */
@@ -53,7 +55,7 @@
 .publication-result-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .publication-result-actions a { display: flex; justify-content: center; }
 
-.publication-submit { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.publication-submit { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); }
 .publication-submit p { margin: 0; line-height: 1.5; }
 .publication-body > .publication-section + .publication-submit { border-top: 0; margin-top: 0; }
 .publication-submit-row { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }

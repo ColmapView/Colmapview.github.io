@@ -22,6 +22,12 @@ export interface HubPrepareOptions {
   /** Captures the current view when there is no preview, and again on Retry after a preview failure. */
   capture?: HubCapture | null;
 }
+export interface PublicHubDataset {
+  viewerUrl: string;
+  metadata: HubMetadata;
+  thumbnailBase64: string;
+  source: HubSource;
+}
 export type HubFailureKind = 'network' | 'timeout' | 'rate-limited' | 'unavailable' | 'rejected' | 'preview';
 export interface HubLinkState {
   phase: 'idle' | 'checking' | 'creating' | 'ready' | 'failed';
@@ -215,6 +221,13 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
     isEnabled: () => baseUrl() !== null,
     isBusy: busy,
     blocksUnload: busy,
+    /** Verified public uploads can be explicitly listed without uploading their files again. */
+    getPublicDataset(): PublicHubDataset | null {
+      if (!payload || !draft || draft.access === 'private' || draft.access === 'check' && draft.bucketAccess !== 'public') return null;
+      return { viewerUrl: payload.viewerUrl, metadata: { title: payload.title, description: payload.description,
+        ...(payload.license ? { license: structuredClone(payload.license) } : {}), ...(payload.assets ? { assets: structuredClone(payload.assets) } : {}) },
+        thumbnailBase64: payload.thumbnailBase64, source: draft.source };
+    },
     /**
      * Stages a draft for the upload that `start` begins, then runs `start`. The draft replaces the current
      * link and share link only once that upload starts (commit, which bindHubPublication calls), so an upload

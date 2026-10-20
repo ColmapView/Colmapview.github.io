@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add a compact **Share on Hub** dialog for loaded public dataset URLs and completed public uploads, with optional license metadata, explicit discovery consent, server source verification and Turnstile protection. Sources needing manual review remain unpublished until approved.
+
 ### Changed
 
 - Use the Hugging Face repository name as the dataset title and allow public uploads without a license selection.

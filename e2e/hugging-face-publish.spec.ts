@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import type { BrowserContext, Page } from '@playwright/test';
 import type { PublicationAssetSummary } from '../src/features/datasetPublishing/types';
+import { mockHubPublication } from './fixtures/mock-hub-publication';
 
 const hubEndpoint = 'https://hub.invalid/hub/api/links';
 const shortUrl = 'https://hub.invalid/hub/HappyTree';
@@ -53,6 +54,7 @@ test.describe('Hugging Face dataset publication', () => {
     const publisherErrors: string[] = [];
     page.on('pageerror', error => publisherErrors.push(error.message));
     const hub = mockHub({ lfs: true });
+    const publicListings = await mockHubPublication(page);
     await hub.attach(context, baseURL!);
     await page.goto('/');
     const png = await page.evaluate(() => {
@@ -88,6 +90,7 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.', { exact: true })).toBeVisible();
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
     await expect(dialog.getByRole('region', { name: 'Published dataset' })).toBeVisible({ timeout: 45000 });
+    await expect(dialog.getByRole('button', { name: 'Share on Hub', exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Upload another dataset' })).toHaveCount(0);
     await dialog.screenshot({ path: test.info().outputPath('publication-result.png') });
     expect(publisherErrors).toEqual([]);
@@ -126,6 +129,20 @@ test.describe('Hugging Face dataset publication', () => {
       try { return [bitmap.width, bitmap.height]; } finally { bitmap.close(); }
     }, requests[0].thumbnailBase64);
     expect(dimensions).toEqual([600, 315]);
+    await dialog.getByRole('button', { name: 'Share on Hub', exact: true }).click();
+    const listingDialog = page.getByRole('dialog', { name: 'Share on Hub', exact: true });
+    await expect(listingDialog.getByLabel('Dataset title')).toHaveValue('scene');
+    await listingDialog.getByRole('checkbox', { name: /Make the dataset link/ }).check();
+    await listingDialog.getByRole('button', { name: 'Test bot check' }).click();
+    await listingDialog.getByRole('button', { name: 'Share on Hub', exact: true }).click();
+    await expect(listingDialog.getByRole('status')).toHaveText('Shared on Hub.');
+    expect(publicListings).toHaveLength(1);
+    expect(publicListings[0]).toMatchObject({ viewerUrl: requests[0].viewerUrl, title: 'scene',
+      thumbnailBase64: requests[0].thumbnailBase64, assets: requests[0].assets, license: { ...requests[0].license, id: 'cc-by-4.0' } });
+    expect(JSON.stringify(publicListings[0])).not.toContain('hf_browser_test_only');
+    await listingDialog.getByRole('button', { name: 'Close Share on Hub', exact: true }).click();
+    await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(shortUrl);
+    expect(hub.writes).toEqual(completedWrites); expect(publisherErrors).toEqual([]);
     await expect(dialog.getByRole('region', { name: 'Published dataset' }).locator('.publication-result-title')).toHaveText('✓ Published publisher/scene');
     // Firefox cannot grant clipboard-read, so only Chromium reads the clipboard back.
     if (browserName === 'chromium') await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(baseURL!).origin });
@@ -213,6 +230,7 @@ test.describe('Hugging Face dataset publication', () => {
     await openPublisher(page);
     await dialog.getByRole('button', { name: 'Check previous upload and retry' }).click();
     await expect(dialog.getByRole('region', { name: 'Published dataset' })).toBeVisible({ timeout: 45000 });
+    await expect(dialog.getByRole('button', { name: 'Share on Hub', exact: true })).toHaveCount(0);
     expect(hub.commits).toHaveLength(3);
     expect(hub.commits[1].id).toBe(dataCommit);
     expect(JSON.parse(hub.files.get('colmapview.json')!.toString()).skipImages).toBe(false);

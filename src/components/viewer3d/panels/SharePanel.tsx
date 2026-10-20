@@ -23,13 +23,15 @@ import { GOOGLE_DRIVE_ENABLED_ORIGIN, GOOGLE_DRIVE_HANDOFF_TOOLTIP, isGoogleDriv
 import { getGoogleDriveHandoffUrl } from '../googleDriveHandoff';
 import { HuggingFaceAccountDialog } from '../HuggingFaceAccountDialog';
 import { LazyToolModal } from '../LazyToolModal';
+import { getHubBaseUrl } from '../../../features/colmapviewHub/config';
 
 const actionButton = controlPanelStyles.actionButton;
 const copiedButton = controlPanelStyles.actionButtonPrimary;
 const loadHfPublisher = () => import('../../modals/PublishDatasetModal').then(module => ({ default: module.PublishDatasetModal }));
 const loadDrivePublisher = () => import('../../modals/GoogleDrivePublishModal').then(module => ({ default: module.GoogleDrivePublishModal }));
 const loadBucketPublisher = () => import('../../bucket/BucketPublishModal').then(module => ({ default: module.BucketPublishModal }));
-type Destination = 'bucket' | 'hf' | 'drive' | null;
+const loadHubPublisher = () => import('../../modals/ShareOnHubModal').then(module => ({ default: module.ShareOnHubModal }));
+type Destination = 'bucket' | 'hf' | 'drive' | 'hub' | null;
 
 export interface SharePanelProps {
   activePanel: PanelType;
@@ -152,6 +154,7 @@ export const SharePanel = memo(function SharePanel({
       onClick={() => setActivePanel('share')}
     >
       <div className="flex flex-col gap-3 text-sm">
+        {getHubBaseUrl() && <button type="button" className={`${actionButton} w-full`} disabled={!reconstruction} onClick={() => openDestination('hub')}>Share on Hub</button>}
         {canCopyLink && (
           <div className="flex flex-col gap-2">
             {linksOriginal && <p className="m-0 text-ds-secondary">This link opens the original dataset. Upload to share edits.</p>}
@@ -228,6 +231,7 @@ export const SharePanel = memo(function SharePanel({
       </div>
     </ControlButton>
     <LazyToolModal modal title="Publish to bucket" load={loadBucketPublisher} isOpen={destination === 'bucket'} onClose={closeDestination} />
+    <LazyToolModal modal title="Share on Hub" load={loadHubPublisher} isOpen={destination === 'hub'} onClose={closeDestination} />
     {hfPublishing ? <LazyToolModal modal title="Publish dataset" load={loadHfPublisher} isOpen={destination === 'hf'} onClose={closeDestination} />
       : hfAccount.status === 'ready' && <HuggingFaceAccountDialog config={hfAccount.config} isOpen={destination === 'hf'} onClose={closeDestination} />}
     {driveEnabled && getGoogleDriveClientId() && <LazyToolModal modal title="Publish to Google Drive" load={loadDrivePublisher} isOpen={destination === 'drive'} onClose={closeDestination} />}

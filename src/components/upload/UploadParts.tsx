@@ -7,6 +7,7 @@ import { PUBLICATION_JPEG_QUALITY, type PublicationFormat, type PublicationImage
 import './upload.css';
 import { HubLinkResult } from './HubLink';
 import type { HubLink } from './useHubLink';
+import { ShareOnHubButton } from './ShareOnHubButton';
 import { useFocusOnMount } from './uploadHooks';
 
 const secondary = getButtonClass('secondary', 'sm');
@@ -129,6 +130,7 @@ export function UploadSubmitRow({ id, note, disclosure, disabled, onSubmit, chil
 function ShareLink({ viewerUrl, hub, providerLink }: { viewerUrl: string; hub?: HubLink; providerLink?: { url: string; label: string } }) {
   const hubState = hub?.enabled && hub.state.viewerUrl === viewerUrl ? hub.state : undefined;
   const link = hubState?.phase === 'ready' && hubState.url ? hubState.url : viewerUrl;
+  const publicDataset = hub?.getPublicDataset?.();
   return <>
     <CopyableField label="Share link" value={link} />
     <div className="publication-result-actions">
@@ -136,6 +138,7 @@ function ShareLink({ viewerUrl, hub, providerLink }: { viewerUrl: string; hub?: 
       {providerLink && <a className={`${secondary} publication-button-link`} href={providerLink.url} target="_blank" rel="noopener noreferrer">
         {providerLink.label}<span aria-hidden="true"> ↗</span>
       </a>}
+      {publicDataset?.viewerUrl === viewerUrl && <ShareOnHubButton target={publicDataset} />}
     </div>
     {hub && hubState && <HubLinkResult state={hubState} onRetry={hub.retry} />}
   </>;
