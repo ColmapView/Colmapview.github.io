@@ -129,10 +129,13 @@ export class NativeMediaPathIndex {
   resourceIdentity(path: string): string {
     return this.identity(clean(path));
   }
-  private physicalPaths(path: string): string[] {
+  private exactPhysicalPaths(path: string): string[] {
     if (this.exact.has(path)) return [path];
-    const identity = this.identity(path);
-    return this.identities.get(identity) ?? this.folded.get(path.toLowerCase()) ?? this.identityFolded.get(identity.toLowerCase()) ?? [];
+    return this.identities.get(this.identity(path)) ?? [];
+  }
+  private physicalPaths(path: string): string[] {
+    const exact = this.exactPhysicalPaths(path);
+    return exact.length ? exact : this.folded.get(path.toLowerCase()) ?? this.identityFolded.get(this.identity(path).toLowerCase()) ?? [];
   }
   private allowed(path: string): boolean {
     const owned = this.ownershipPath(path);
@@ -240,14 +243,18 @@ export class NativeMediaPathIndex {
       preferred.push(...forms((parent ? parent + '/' : '') + folder + '/' + relative));
       preferred.push(...forms((this.sceneRoot ? this.sceneRoot + '/' : '') + folder + '/' + name));
     }
-    for (const candidate of unique(preferred)) {
-      const matches = unique(this.physicalPaths(candidate)).filter(path => this.maskFiles.has(path) && allowedMask(path));
-      if (matches.length) {
-        const match = matches.length === 1 ? { status: 'resolved' as const, path: matches[0] } : { status: 'ambiguous' as const, candidates: matches };
-        return { ...match, role: match.path ? this.maskRole(match.path, name, imagePath) : 'unknown' };
+    // Exhaust exact filename conventions before trying case-insensitive aliases.
+    for (const lookup of [(path: string) => this.exactPhysicalPaths(path), (path: string) => this.physicalPaths(path)]) {
+      for (const candidate of unique(preferred)) {
+        const matches = unique(lookup(candidate)).filter(path => this.maskFiles.has(path) && allowedMask(path));
+        if (matches.length) {
+          const match = matches.length === 1 ? { status: 'resolved' as const, path: matches[0] } : { status: 'ambiguous' as const, candidates: matches };
+          return { ...match, role: match.path ? this.maskRole(match.path, name, imagePath) : 'unknown' };
+        }
       }
     }
-    const keys = forms(name), matches = unique(keys.flatMap(key => this.masks.get(key) ?? this.maskFolded.get(key.toLowerCase()) ?? []));
+    const keys = forms(name), exact = unique(keys.flatMap(key => this.masks.get(key) ?? []));
+    const matches = exact.length ? exact : unique(keys.flatMap(key => this.maskFolded.get(key.toLowerCase()) ?? []));
     const match = this.ranked(matches.filter(allowedMask), name, 'masks', true);
     return { ...match, role: match.path ? this.maskRole(match.path, name, imagePath) : 'unknown' };
   }

@@ -21,6 +21,11 @@ describe('native physical media layouts', () => {
     const index = new NativeMediaPathIndex(paths, 'outer/scene/sparse/0');
     expect(index.image('cam/a.jpg', 'segmentation/cam/A.Png')).toMatchObject({ status: 'ambiguous', candidates: paths });
   });
+
+  it('prefers an exact mask filename convention over a folded match for another photo', () => {
+    const index = new NativeMediaPathIndex(['images/frame.JPG', 'masks/frame.jpg.png', 'masks/frame.png'], 'sparse/0');
+    expect(index.mask('frame.JPG', 'images/frame.JPG')).toMatchObject({ status: 'resolved', path: 'masks/frame.png' });
+  });
   it('does not infer validity from a masks folder above a nonstandard mask root', () => {
     const path = 'capture/masks/reference/cam/a.jpg.png';
     const index = new NativeMediaPathIndex([path], 'scene/sparse/0', { role: 'mask' });

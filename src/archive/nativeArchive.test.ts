@@ -19,6 +19,23 @@ function native() {
   return wasm;
 }
 describe('archive compatibility codec', () => {
+  it('preserves case-distinct paths when listing compatibility archives', async () => {
+    const wasm = native(), paths = ['images/café.JPG', 'images/café.jpg'];
+    vi.mocked(wasm.runCode.getEntryType).mockReturnValue(32768);
+    vi.mocked(wasm.runCode.getEntryName).mockImplementation(entry => paths[entry - 1]);
+    const reader = await NativeArchiveBackend.open(buildReadableFile({ name: 'scene.7z', contents: 'archive' }), '/workers/libarchive.wasm');
+    expect((await reader.list(new AbortController().signal)).map(entry => entry.path)).toEqual(paths);
+    await reader.close();
+  });
+  it('rejects duplicate exact paths and closes its native handle', async () => {
+    const wasm = native();
+    vi.mocked(wasm.runCode.getEntryType).mockReturnValue(32768);
+    vi.mocked(wasm.runCode.getEntryName).mockReturnValue('images/photo.jpg');
+    const reader = await NativeArchiveBackend.open(buildReadableFile({ name: 'scene.7z', contents: 'archive' }), '/workers/libarchive.wasm');
+    await expect(reader.list(new AbortController().signal)).rejects.toThrow(/duplicate/i);
+    expect(wasm.runCode.closeArchive).toHaveBeenCalledOnce();
+    await reader.close();
+  });
   it('closes every native scan and frees owned memory once, while returning independent file bytes', async () => {
     const wasm = native(), reader = await NativeArchiveBackend.open(buildReadableFile({ name: 'scene.tar.xz', contents: 'archive' }), 'https://viewer.test/workers/libarchive.wasm');
     expect(factory.mock.calls[0][0].locateFile()).toBe('https://viewer.test/workers/libarchive.wasm');

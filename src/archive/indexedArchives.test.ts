@@ -29,7 +29,25 @@ function tar(files: Array<{ name: string; body: string; kind?: string }>): Uint8
   return result;
 }
 
+it.each(['zip', 'tar'] as const)('preserves case-distinct Unicode photo paths and bytes in %s', async format => {
+  const paths = ['images/café.JPG', 'images/café.jpg'];
+  const bytes = format === 'zip' ? zipSync(Object.fromEntries(paths.map(path => [path, strToU8(path)])))
+    : tar(paths.map(name => ({ name, body: name })));
+  const backend = format === 'zip' ? new IndexedZipBackend(source('scene.zip', bytes)) : new IndexedTarBackend(source('scene.tar', bytes));
+  expect((await backend.list(signal())).map(entry => entry.path)).toEqual(paths);
+  expect((await backend.list(signal())).map(entry => entry.path)).toEqual(paths);
+  for (const path of paths) expect(await (await backend.extract(path, signal())).text()).toBe(path);
+});
+
 describe('indexed ZIP reader', () => {
+  it('rejects duplicate exact paths instead of silently discarding a file', async () => {
+    const bytes = zipSync({ 'images/a.jpg': strToU8('first'), 'images/b.jpg': strToU8('second') });
+    const from = strToU8('images/b.jpg'), to = strToU8('images/a.jpg');
+    for (let offset = 0; offset <= bytes.length - from.length; offset++) {
+      if (from.every((value, index) => bytes[offset + index] === value)) bytes.set(to, offset);
+    }
+    await expect(new IndexedZipBackend(source('duplicate.zip', bytes)).list(signal())).rejects.toThrow(/duplicate/i);
+  });
   it.each([0, 6] as const)('extracts exact original bytes at compression level %s, including Unicode and empty files', async level => {
     const bytes = zipSync({ 'images/café.jpg': strToU8('exact original'), 'empty.txt': new Uint8Array() }, { level });
     const reader = new IndexedZipBackend(source('scene.zip', bytes));
@@ -104,6 +122,10 @@ describe('indexed ZIP reader', () => {
 });
 
 describe('indexed TAR reader', () => {
+  it('rejects duplicate exact paths instead of silently discarding a file', async () => {
+    const bytes = tar([{ name: 'images/a.jpg', body: 'first' }, { name: 'images/a.jpg', body: 'second' }]);
+    await expect(new IndexedTarBackend(source('duplicate.tar', bytes)).list(signal())).rejects.toThrow(/duplicate/i);
+  });
   it('distinguishes GNU timestamps from POSIX filename prefixes', async () => {
     const body = strToU8('original'), gnu = tarHeader('images/photo.jpg', body.length), ustar = tarHeader('photo.png', body.length);
     gnu.set(strToU8('ustar  \0'), 257);

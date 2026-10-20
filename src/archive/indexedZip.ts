@@ -28,6 +28,7 @@ export class IndexedZipBackend implements ArchiveBackend {
   constructor(source: ArchiveByteSource) { this.source = source; }
 
   async list(signal: AbortSignal): Promise<ArchiveMetadata[]> {
+    this.entries.clear();
     const length = Math.min(this.source.size, 65557);
     const tail = await this.source.read(this.source.size - length, length);
     const end = view(tail);
@@ -99,9 +100,12 @@ export class IndexedZipBackend implements ArchiveBackend {
       }
       if (central.getUint16(cursor + 34, true)) throw new Error('Multi-volume ZIP entries are unsupported.');
       validateByteRange(indexOffset, offset, compressedSize);
-      if (path && !path.endsWith('/') && !this.entries.has(path)) this.entries.set(path, {
-        path, size, compressedSize, offset, method, flags, lastModified: 0, crc: central.getUint32(cursor + 16, true),
-      });
+      if (path && !path.endsWith('/')) {
+        if (this.entries.has(path)) throw new Error(`Archive contains duplicate file path: ${path}`);
+        this.entries.set(path, {
+          path, size, compressedSize, offset, method, flags, lastModified: 0, crc: central.getUint32(cursor + 16, true),
+        });
+      }
       cursor = next;
     }
     return [...this.entries.values()].map(({ path, size, lastModified }) => ({ path, size, lastModified }));

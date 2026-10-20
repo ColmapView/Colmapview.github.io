@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update the privacy policy and provider guides for browser-only connections and retirement of existing saved credentials.
 - Prevent caching of Hugging Face OAuth callback responses on Cloudflare, preserving the existing no-referrer and PKCE protections.
 - Preserve distinct case-sensitive filenames in companion photo archives while rejecting duplicate mounted paths.
+- Prefer qualified photo paths and exact mask names over guessed aliases; leave ambiguous case matches unresolved and reject duplicate file paths consistently across archive decoders.
 - Simplify dataset selection helpers and extend type checks to deployment tooling and browser tests.
 
 ## [0.19.2] - 2026-10-19

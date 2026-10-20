@@ -11,7 +11,7 @@ import {
   hasActiveZipArchive,
   setActiveZipArchive,
 } from './zipArchiveState';
-import { getArchiveImageLookupKeys } from './zipLoaderPolicy';
+import { buildArchiveImageIndex } from './zipLoaderPolicy';
 
 function makeEntry(name: string, file = new File([new Uint8Array([1, 2, 3])], name)): ArchiveEntry {
   return buildArchiveEntry({
@@ -23,15 +23,7 @@ function makeEntry(name: string, file = new File([new Uint8Array([1, 2, 3])], na
 }
 
 function indexArchiveImages(entries: Array<{ path: string; entry: ArchiveEntry }>): Map<string, ArchiveEntry> {
-  const index = new Map<string, ArchiveEntry>();
-  for (const { path, entry } of entries) {
-    for (const key of getArchiveImageLookupKeys(path)) {
-      if (!index.has(key)) {
-        index.set(key, entry);
-      }
-    }
-  }
-  return index;
+  return buildArchiveImageIndex(new Map(entries.map(({ path, entry }) => [path, entry])));
 }
 
 describe('zip archive state', () => {
@@ -177,6 +169,43 @@ describe('zip archive state', () => {
 
     expect(findZipEntry('photo.jpg', index)).toBe(photo);
     expect(findZipEntry('masks/photo.jpg', index)).toBe(mask);
+  });
+
+  it.each([false, true])('does not guess between case-distinct photos, reverse order: %s', reverse => {
+    const upper = makeEntry('Palacio.JPG'), lower = makeEntry('Palacio.jpg');
+    const entries: Array<[string, ArchiveEntry]> = [['images/Palacio.JPG', upper], ['images/Palacio.jpg', lower]];
+    const index = new Map(reverse ? entries.reverse() : entries);
+    expect(findZipEntry('Palacio.Jpg', index)).toBeNull();
+    expect(findZipEntry('Palacio.JPG', index)).toBe(upper);
+    expect(findZipEntry('Palacio.jpg', index)).toBe(lower);
+  });
+
+  it('keeps a unique case-insensitive match when several aliases identify the same photo', () => {
+    const photo = makeEntry('PHOTO.JPG');
+    expect(findZipEntry('photo.jpg', new Map([['PHOTO.JPG', photo], ['images/PHOTO.JPG', photo]]))).toBe(photo);
+  });
+
+  it.each(['cam/photo.jpg', 'cam/PHOTO.JPG'])('prefers a qualified photo match over another camera basename for %s', requested => {
+    const other = makeEntry('photo.jpg'), wanted = makeEntry('photo.jpg');
+    const index = new Map([['photo.jpg', other], ['images/cam/photo.jpg', wanted]]);
+    expect(findZipEntry(requested, index)).toBe(wanted);
+  });
+
+  it.each([false, true])('does not retain a first-file-wins basename alias, reverse order: %s', reverse => {
+    const left = makeEntry('photo.jpg'), right = makeEntry('photo.jpg');
+    const entries = [{ path: 'images/left/photo.jpg', entry: left }, { path: 'images/right/photo.jpg', entry: right }];
+    const index = indexArchiveImages(reverse ? entries.reverse() : entries);
+    expect(findZipEntry('photo.jpg', index)).toBeNull();
+    expect(findZipEntry('left/photo.jpg', index)).toBe(left);
+    expect(findZipEntry('right/photo.jpg', index)).toBe(right);
+  });
+
+  it.each([false, true])('preserves an actual full path when another file has the same suffix, reverse order: %s', reverse => {
+    const nested = makeEntry('photo.jpg'), root = makeEntry('photo.jpg');
+    const entries = [{ path: 'images/camera/photo.jpg', entry: nested }, { path: 'photo.jpg', entry: root }];
+    const index = indexArchiveImages(reverse ? entries.reverse() : entries);
+    expect(findZipEntry('photo.jpg', index)).toBe(root);
+    expect(findZipEntry('camera/photo.jpg', index)).toBe(nested);
   });
 
   it('does not resolve ZIP image requests to auxiliary entries with matching suffixes', () => {

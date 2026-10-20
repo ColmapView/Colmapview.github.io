@@ -50,6 +50,7 @@ export class NativeArchiveBackend implements ArchiveBackend {
     const archive = code.openArchive(this.ptr, this.size, null, 'en_US.UTF-8');
     if (!archive) throw new Error('Could not open the archive.');
     const entries: ArchiveMetadata[] = [];
+    const paths = new Set<string>();
     try {
       for (;;) {
         signal.throwIfAborted();
@@ -58,6 +59,8 @@ export class NativeArchiveBackend implements ArchiveBackend {
         const path = code.getEntryName(entry), size = code.getEntrySize(entry);
         if (!Number.isSafeInteger(size) || size < 0) throw new Error('Archive entry has an invalid size.');
         if (code.getEntryType(entry) === 32768) {
+          if (paths.has(path)) throw new Error(`Archive contains duplicate file path: ${path}`);
+          paths.add(path);
           if (target === path) {
             if (size >= ARCHIVE_ENTRY_SIZE_LIMIT) throw new Error('An archive entry exceeds the compatibility decoder memory limit.');
             const ptr = code.getFileData(archive, size);

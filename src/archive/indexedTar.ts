@@ -45,6 +45,7 @@ export class IndexedTarBackend implements ArchiveBackend {
   constructor(source: ArchiveByteSource) { this.source = source; }
 
   async list(signal: AbortSignal): Promise<ArchiveMetadata[]> {
+    this.entries.clear();
     let offset = 0, count = 0;
     let globalFields: Record<string, string> = {}, localFields: Record<string, string> = {};
     let longName: string | undefined;
@@ -83,7 +84,8 @@ export class IndexedTarBackend implements ArchiveBackend {
           if (!/^\d+$/.test(fields.size)) throw new Error('Invalid TAR PAX file size.');
           size = Number(fields.size); validateByteRange(this.source.size, payload, size);
         }
-        if ((kind === '0' || kind === '\0' || kind === '7') && path && !this.entries.has(path)) {
+        if ((kind === '0' || kind === '\0' || kind === '7') && path) {
+          if (this.entries.has(path)) throw new Error(`Archive contains duplicate file path: ${path}`);
           const mtime = fields.mtime === undefined ? tarNumber(header.subarray(136, 148), false) : Number(fields.mtime);
           if (!Number.isFinite(mtime) || Math.abs(mtime * 1000) > Number.MAX_SAFE_INTEGER) throw new Error('Invalid TAR modification time.');
           this.entries.set(path, { path, size, offset: payload, lastModified: mtime * 1000 });

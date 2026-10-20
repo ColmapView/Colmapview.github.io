@@ -30,7 +30,7 @@ import {
 } from './zipValidation';
 import {
   buildArchiveEntryPath,
-  getArchiveImageLookupKeys,
+  buildArchiveImageIndex,
   getColmapArchiveKey,
   hasArchiveExtension,
   hasRequiredColmapArchiveFiles,
@@ -138,10 +138,8 @@ async function processZipArchive(
   // Separate COLMAP files and image files
   const colmapEntries: Array<{ file: ArchiveEntry; path: string }> = [];
   const splatEntries: Array<{ file: ArchiveEntry; path: string; size: number }> = [];
-  const imageIndex = new Map<string, ArchiveEntry>();
   const originalMediaEntries = new Map<string,ArchiveEntry>();
   const settingsEntries = new Map<string, ArchiveEntry>();
-  let imageCount = 0; // Track actual unique images (imageIndex has duplicates for lookup)
 
   for (const entry of filesArray) {
     const fullPath = normalizeSourcePath(buildArchiveEntryPath(entry.path, entry.file.name));
@@ -154,13 +152,6 @@ async function processZipArchive(
       splatEntries.push({ file: entry.file, path: fullPath, size: entry.file.size });
     } else if (isArchiveImagePath(fullPath)) {
       originalMediaEntries.set(fullPath,entry.file);
-      // Store in index for lazy extraction
-      for (const key of getArchiveImageLookupKeys(fullPath)) {
-        if (!imageIndex.has(key)) {
-          imageIndex.set(key, entry.file);
-        }
-      }
-      imageCount++; // Count unique images (only the full path entry)
     }
   }
 
@@ -172,14 +163,9 @@ async function processZipArchive(
   const foreignRoots=nativePaths && !selected?.metadataPath ? [...modelRoots].filter(root=>root && root!==selectedRoot) : [];
   const isForeignScene=(path: string)=>foreignRoots.some(root=>path.startsWith(root+'/')
     && !(selectedRoot.startsWith(root+'/') && path.startsWith(selectedRoot+'/')));
-  if (foreignRoots.length) {
-    imageIndex.clear();imageCount=0;
-    for (const [path,entry] of originalMediaEntries) {
-      if (isForeignScene(path)) continue;
-      for (const key of getArchiveImageLookupKeys(path)) if (!imageIndex.has(key)) imageIndex.set(key,entry);
-      imageCount++;
-    }
-  }
+  const scopedMedia = foreignRoots.length ? new Map([...originalMediaEntries].filter(([path]) => !isForeignScene(path))) : originalMediaEntries;
+  const imageIndex = buildArchiveImageIndex(scopedMedia);
+  const imageCount = scopedMedia.size;
   if (nativePaths) registerZipImagePaths(imageIndex,entries,colmapSceneRoot(nativePaths.dir));
   if ((selected?.metadataPath || !nativePaths) && [...entries.keys()].some(isCameraMetadataPath)) {
     onProgress({ percent: 60, message: 'Importing camera metadata...' });

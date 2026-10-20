@@ -96,6 +96,23 @@ export function getArchiveImageLookupKeys(fullPath: string): string[] {
   return getImagePathLookupSuffixes(fullPath);
 }
 
+/** Retain physical paths and only aliases that identify one archive entry. */
+export function buildArchiveImageIndex<T>(entries: ReadonlyMap<string, T>): Map<string, T> {
+  const index = new Map<string, T>(), ambiguous = new Set<string>();
+  for (const [path, entry] of entries) {
+    for (const key of getArchiveImageLookupKeys(path)) {
+      if (ambiguous.has(key)) continue;
+      if (index.has(key) && index.get(key) !== entry) {
+        index.delete(key);
+        ambiguous.add(key);
+      } else index.set(key, entry);
+    }
+  }
+  // A real file at this complete path wins over aliases from nested files.
+  for (const [path, entry] of entries) index.set(path, entry);
+  return index;
+}
+
 export function getColmapArchiveKey(entryPath: string): string {
   const filename = entryPath.split('/').pop() ?? entryPath;
 

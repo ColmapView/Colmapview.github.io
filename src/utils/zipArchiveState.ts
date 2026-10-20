@@ -106,19 +106,26 @@ export function findZipEntry(
     if (entry) return entry;
   }
   const candidates = getZipEntryLookupCandidates(imageName);
-
-  for (const candidate of candidates) {
-    const entry = index.get(candidate);
-    if (entry) {
-      return entry;
+  // A qualified camera path takes precedence over another camera's basename,
+  // including when that qualified path needs a unique case-insensitive match.
+  const groups = imageName.replace(/\\/g, '/').includes('/')
+    ? [candidates.filter(candidate => candidate.includes('/')), candidates.filter(candidate => !candidate.includes('/'))]
+    : [candidates];
+  for (const group of groups) {
+    if (!group.length) continue;
+    for (const candidate of group) {
+      const entry = index.get(candidate);
+      if (entry) return entry;
     }
-  }
-
-  const lowerCandidates = new Set(candidates.map(candidate => candidate.toLowerCase()));
-  for (const [key, entry] of index.entries()) {
-    if (lowerCandidates.has(key.toLowerCase())) {
-      return entry;
+    const lowerCandidates = new Set(group.map(candidate => candidate.toLowerCase()));
+    let match: ArchiveEntry | null = null;
+    for (const [key, entry] of index) {
+      if (!lowerCandidates.has(key.toLowerCase())) continue;
+      // Several aliases may identify one entry; different entries are ambiguous.
+      if (match && match !== entry) return null;
+      match = entry;
     }
+    if (match) return match;
   }
 
   return null;
