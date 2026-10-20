@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_GEOMETRY_MEMBER_BYTES, MAX_GEOMETRY_PREFIX_BYTES } from '../archive/geometryLimits';
 
 /**
  * COLMAP manifest file format for loading reconstructions from URLs.
@@ -15,8 +16,19 @@ export interface ManifestMediaArchive {
   role?: 'images' | 'masks';
 }
 
+/** One explicit geometry frame; archive timelines are never merged into a static model. */
+export interface ManifestGeometryArchive {
+  url: string;
+  bytes: number;
+  format: 'zip' | 'tar.zst';
+  role: 'points3D' | 'splat';
+  member: { path: string; bytes: number; sha256: string };
+  /** TAR/Zstandard: checked compressed prefix containing the complete first regular file. */
+  prefix?: { bytes: number; sha256: string };
+}
+
 export interface ColmapManifest {
-  /** Version 1 for loose media; version 2 also supports companion archives. */
+  /** Version 1 for loose files, 2 for media archives, 3 for explicit archived geometry frames. */
   version: number;
   /** Optional name for the reconstruction */
   name?: string;
@@ -74,6 +86,8 @@ export interface ColmapManifest {
   splats?: string[];
   /** Version 2: lazily indexed companion photographs or masks. */
   mediaArchives?: ManifestMediaArchive[];
+  /** Version 3: required, integrity-checked geometry extracted using bounded archive reads. */
+  geometryFiles?: ManifestGeometryArchive[];
 }
 
 function safeArchivePath(value: string): boolean {
@@ -81,11 +95,18 @@ function safeArchivePath(value: string): boolean {
     && value.split('/').every(part => part !== '' && part !== '.' && part !== '..');
 }
 
+function archiveUrlMatches(value: string, extensions: readonly string[]): boolean {
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && extensions.some(extension => url.pathname.toLowerCase().endsWith('.' + extension));
+  } catch { return false; }
+}
+
 /**
  * Zod schema for validating manifest files
  */
 export const ColmapManifestSchema = z.object({
-  version: z.number().int().min(1).max(2),
+  version: z.number().int().min(1).max(3),
   name: z.string().optional(),
   baseUrl: z.string().url(),
   viewerStatePath: z.string().min(1).max(4096).optional(),
@@ -106,15 +127,37 @@ export const ColmapManifestSchema = z.object({
   masks: z.array(z.string()).optional(),
   splats: z.array(z.string().min(1)).optional(),
   mediaArchives: z.array(z.object({
-    url: z.string().url().refine(value => /^https?:\/\//i.test(value)
-      && /\.(zip|tar)$/i.test(new URL(value).pathname)),
+    url: z.string().url().refine(value => archiveUrlMatches(value, ['zip', 'tar'])),
     bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     mountPath: z.string().min(1).refine(safeArchivePath),
     stripPrefix: z.string().refine(value => value === '' || safeArchivePath(value.replace(/\/$/, ''))).optional(),
     role: z.enum(['images', 'masks']).optional(),
   })).min(1).max(8).optional(),
-}).refine(value => value.version === 1 ? value.mediaArchives === undefined : value.mediaArchives !== undefined,
-  { message: 'Companion media archives require manifest version 2.' });
+  geometryFiles: z.array(z.object({
+    url: z.string().url().refine(value => /^https?:\/\//i.test(value)),
+    bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    format: z.enum(['zip', 'tar.zst']),
+    role: z.enum(['points3D', 'splat']),
+    member: z.object({
+      path: z.string().min(1).max(4096).refine(safeArchivePath),
+      bytes: z.number().int().positive().max(MAX_GEOMETRY_MEMBER_BYTES),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    }),
+    prefix: z.object({
+      bytes: z.number().int().min(18).max(MAX_GEOMETRY_PREFIX_BYTES),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    }).optional(),
+  }).refine(value => archiveUrlMatches(value.url, [value.format])
+    && (value.role === 'points3D' ? /\.ply$/i.test(value.member.path) : /\.(ply|spz|sog)$/i.test(value.member.path))
+    && (value.format === 'zip' ? value.prefix === undefined : value.prefix !== undefined && value.prefix.bytes <= value.bytes),
+  { message: 'Geometry needs the declared archive format, member type and bounded optional prefix.' })).min(1).max(2).optional(),
+}).refine(value => value.version === 1 ? value.mediaArchives === undefined && value.geometryFiles === undefined
+  : value.version === 2 ? value.mediaArchives !== undefined && value.geometryFiles === undefined : value.geometryFiles !== undefined,
+{ message: 'Media archives require version 2; archived geometry requires version 3.' })
+  .refine(value => !value.geometryFiles || new Set(value.geometryFiles.map(file => file.role)).size === value.geometryFiles.length
+    && !(value.files.points3D && value.geometryFiles.some(file => file.role === 'points3D'))
+    && !(value.splats?.length && value.geometryFiles.some(file => file.role === 'splat')),
+  { message: 'Select one source for points and one for splats.' });
 
 /**
  * Progress state for URL loading

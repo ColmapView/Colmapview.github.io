@@ -69,6 +69,11 @@ worker.onmessage = ({ data }) => {
         }
         controller.signal.throwIfAborted();
         worker.postMessage({ kind: 'result', id: data.id, entries });
+      } else if (operation.kind === 'extract-zstd-prefix') {
+        const { extractZstdTarPrefix } = await import('./zstdTarPrefix');
+        const file = await extractZstdTarPrefix(operation.source, operation.path, operation.bytes, controller.signal);
+        controller.signal.throwIfAborted();
+        worker.postMessage({ kind: 'result', id: data.id, file });
       } else if (operation.kind === 'encode-jpeg') {
         const file = await encodePublicationJpeg(operation.blob, operation.quality, controller.signal);
         controller.signal.throwIfAborted();

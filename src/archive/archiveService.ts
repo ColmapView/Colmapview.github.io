@@ -146,6 +146,18 @@ export async function openArchiveReader(source: ArchiveSource, options: ArchiveS
   return { getFilesArray: async () => entries, close };
 }
 
+/** A short-lived decoder never takes ownership of the installed scene. */
+export async function extractFirstZstdTarMember(source: File, path: string, bytes: number,
+  options: ArchiveServiceOptions = {}): Promise<File> {
+  const session = createArchiveSession(undefined, options);
+  try {
+    const result = await session.request({ kind: 'extract-zstd-prefix', source, path, bytes }, { signal: options.signal });
+    options.signal?.throwIfAborted();
+    if (!result.file) throw new Error('Archive worker returned no selected geometry.');
+    return result.file;
+  } finally { await session.close(); }
+}
+
 /** A publication owns one encoder session; each image uses the same queued worker and is released before the next. */
 export function createArchiveImageEncoder(options: ArchiveServiceOptions = {}) {
   const session = createArchiveSession(undefined, options);

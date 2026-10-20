@@ -99,6 +99,60 @@ the published state's `viewState` as well. The automatic camera overview may cro
 most of the cloud even after the points become visible. Point-filter warnings are
 reported after saved and shared settings apply, so they describe the final filter.
 
+## Selected geometry inside archives
+
+Viewer 0.19.10 adds version 3 manifests with `geometryFiles`. Versions 1 (loose
+files) and 2 (companion media archives) keep their existing behavior. Each entry
+selects one required member, rather than merging an animated sequence into a
+static reconstruction. A version 3 manifest can also include `mediaArchives`.
+
+```json
+{
+  "version": 3,
+  "baseUrl": "https://data.example/pinned/scene/",
+  "files": { "cameras": "cameras.bin", "images": "images.bin" },
+  "skipImages": true,
+  "splats": [],
+  "geometryFiles": [{
+    "url": "https://data.example/pinned/scene/frames.zip",
+    "bytes": 4294967297,
+    "format": "zip",
+    "role": "points3D",
+    "member": {
+      "path": "0000001.ply",
+      "bytes": 4000000,
+      "sha256": "<64 lowercase hexadecimal digits from the complete member>"
+    }
+  }]
+}
+```
+
+The values illustrate the schema; replace sizes and hashes with source receipts.
+ZIP/ZIP64 uses the central directory and bounded HTTP range reads. `tar.zst`
+requires a `prefix` object with `bytes` and `sha256`: a checked compressed prefix
+that decodes the complete first regular TAR member. Later TAR members require a
+different delivery format. Prefixes are bounded to 16 MiB, extracted members to
+64 MiB, Zstandard windows to 32 MiB, and leading TAR metadata to 1 MiB. The source
+must expose accurate 206/Content-Range responses and permit browser CORS reads.
+The archive's declared total size is checked; it is not a claim that the browser
+downloads or hashes the entire archive. The extracted member's size and SHA-256
+are always checked before the new scene is committed. Failures retain the prior
+scene instead of silently omitting declared geometry.
+
+Use `points3D` only for an ordinary XYZ PLY already in the camera world. Auxiliary
+PLY list properties, such as per-vertex visibility indices, are skipped and do
+not create COLMAP observation tracks. Use `splat` for Gaussian PLY/SPZ/SOG; it
+remains a separate render layer and does not increase the COLMAP sparse-point
+count. A saved `config.splat.transform` may align this layer only when supported
+by a pinned publisher declaration or independent camera proof. Do not transform
+the unchanged camera model to fit it. Each role can appear once and cannot
+conflict with a loose points or splat selection.
+
+Label the selected frame in the scene and retain the publisher's frame/camera
+manifest as evidence. `skipImages: true` disables guessed photograph requests;
+an explicitly bound mask remains available even without RGB. Video frames,
+sequence playback and unselected archive masks are separate capabilities.
+
 ## Generating Hub manifests
 
 Generate manifests offline from the catalog's pinned source listing and explicit

@@ -1,7 +1,7 @@
 {
   "name": "colmapview",
   "private": true,
-  "version": "0.19.9",
+  "version": "0.19.10",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -42,6 +42,7 @@
     "@zip.js/zip.js": "2.24.0",
     "aws4fetch": "1.0.20",
     "fflate": "^0.8.2",
+    "fzstd": "0.1.1",
     "gif.js": "^0.2.0",
     "gs-toolbox": "file:vendor/gs-toolbox",
     "hash-wasm": "4.12.0",

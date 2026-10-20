@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.10] - 2026-10-20
+
+### Added
+
+- Version 3 manifests select one integrity-checked XYZ or Gaussian frame from ZIP/ZIP64 or a bounded TAR/Zstandard prefix, preserving the original camera model and avoiding whole-sequence downloads.
+- Read auxiliary list properties in ASCII and binary XYZ PLY vertices without inventing COLMAP observations.
+
 ### Fixed
 
+- Respect `skipImages` during lazy media access, while retaining explicitly bound masks without RGB photographs.
 - Pre-bundle archive worker dependencies on the development server so the first archive import cannot invalidate a concurrent ZIP export.
 
 ## [0.19.9] - 2026-10-20

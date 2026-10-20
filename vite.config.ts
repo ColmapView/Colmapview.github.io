@@ -107,6 +107,7 @@ export default defineConfig(({ mode }) => {
         'react', 'react-dom', 'three', '@zip.js/zip.js/lib/zip-core-native.js',
         'libarchive.js/src/webworker/wasm-gen/libarchive.js',
         'libarchive.js/src/webworker/wasm-module.js',
+          'fzstd',
       ],
     },
 

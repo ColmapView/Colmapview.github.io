@@ -222,6 +222,11 @@ describe('url loader policy helpers', () => {
     });
   });
 
+  it('keeps intentional camera-only launches from inventing image or mask requests', () => {
+    expect(getManifestLazySourceBases({ ...manifest, skipImages: true, imageNameToPath: { 'a.png': 'photos/a.png' } })).toEqual({ imageUrlBase: null, maskUrlBase: null });
+    expect(getManifestLazySourceBases({ ...manifest, skipImages: true, masksPath: 'masks/' })).toEqual({ imageUrlBase: null, maskUrlBase: 'https://example.com/dataset/masks/' });
+  });
+
   it('builds per-image URLs from a mapping, encoding each path exactly once', () => {
     const bases = getManifestLazySourceBases({
       ...manifest,

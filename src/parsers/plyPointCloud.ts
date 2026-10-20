@@ -101,6 +101,9 @@ export function parsePointCloudPlyBuffer(buffer: ArrayBuffer): Map<bigint, Point
   const yIndex = requirePropertyIndex(propertyLookup, 'y');
   const zIndex = requirePropertyIndex(propertyLookup, 'z');
   const colorIndices = getColorPropertyIndices(propertyLookup);
+  for (const index of [xIndex, yIndex, zIndex, ...(colorIndices ?? [])]) {
+    if (vertexElement.properties[index].kind !== 'scalar') throw new Error('PLY coordinates and colors must be scalar properties');
+  }
   const normalizedColors = (colorIndices ?? []).map(index => {
     const property = vertexElement.properties[index];
     return property.kind === 'scalar' && ['float', 'float32', 'double', 'float64'].includes(property.type);
@@ -242,14 +245,31 @@ function parseAsciiPointCloudPly(
   const lines = dataText.split(/\r\n|\n|\r/);
   const vertexStartLine = getAsciiElementStartLine(header, vertexElement.name);
   const points = new Map<bigint, Point3D>();
+  const variable = vertexElement.properties.some(property => property.kind === 'list');
 
   for (let index = 0; index < vertexElement.count; index += 1) {
     const line = lines[vertexStartLine + index];
     if (line === undefined) {
+      if (variable) throw new Error('PLY vertex row is truncated');
       break;
     }
     const values = line.trim().split(/\s+/).map(Number);
-    addPoint(points, index, values, indices);
+    if (variable) {
+      let offset = 0;
+      const scalarValues = vertexElement.properties.map(property => {
+        if (property.kind === 'scalar') {
+          if (offset >= values.length) throw new Error('PLY vertex row is truncated');
+          return values[offset++];
+        }
+        validateListCountType(property.countType);
+        const count = values[offset++];
+        if (!Number.isSafeInteger(count) || count < 0 || count > values.length - offset) throw new Error('Invalid or truncated PLY list');
+        offset += count;
+        return NaN;
+      });
+      if (offset !== values.length) throw new Error('PLY vertex row has unexpected values');
+      addPoint(points, index, scalarValues, indices);
+    } else addPoint(points, index, values, indices);
   }
 
   return points;
@@ -262,11 +282,32 @@ function parseBinaryPointCloudPly(
 ): Map<bigint, Point3D> {
   const vertexElement = getVertexElement(header);
   const vertexOffset = getElementDataOffset(header, vertexElement.name);
-  const rowLayout = getFixedScalarRowLayout(vertexElement);
   const view = new DataView(buffer, vertexOffset);
   const points = new Map<bigint, Point3D>();
   let offset = 0;
   const littleEndian = header.format === 'binary_little_endian';
+  if (vertexElement.properties.some(property => property.kind === 'list')) {
+    for (let index = 0; index < vertexElement.count; index++) {
+      const values = vertexElement.properties.map(property => {
+        const type = property.kind === 'scalar' ? property.type : property.countType;
+        if (property.kind === 'list') validateListCountType(type);
+        const size = getScalarTypeSize(type);
+        if (size > view.byteLength - offset) throw new Error('PLY vertex row is truncated');
+        const value = readScalar(view, offset, type, littleEndian);
+        offset += size;
+        if (property.kind === 'scalar') return value;
+        const bytes = value * getScalarTypeSize(property.itemType);
+        if (!Number.isSafeInteger(value) || value < 0 || !Number.isSafeInteger(bytes) || bytes > view.byteLength - offset) {
+          throw new Error('Invalid or truncated PLY list');
+        }
+        offset += bytes;
+        return NaN;
+      });
+      addPoint(points, index, values, indices);
+    }
+    return points;
+  }
+  const rowLayout = getFixedScalarRowLayout(vertexElement);
 
   for (let index = 0; index < vertexElement.count; index += 1) {
     const values = rowLayout.properties.map((property) =>
@@ -354,6 +395,12 @@ function getFixedScalarRowLayout(element: PlyElement): {
   }
 
   return { byteLength, properties };
+}
+
+function validateListCountType(type: string): void {
+  if (!['char', 'int8', 'uchar', 'uint8', 'short', 'int16', 'ushort', 'uint16', 'int', 'int32', 'uint', 'uint32'].includes(type)) {
+    throw new Error('PLY list counts must use an integer type');
+  }
 }
 
 function addPoint(

@@ -43,6 +43,48 @@ function createGenericBinaryPlyFile(): File {
 
 describe('PLY point cloud parser', () => {
   it.each(['ascii', 'binary_little_endian', 'binary_big_endian'])(
+    'skips variable visibility lists while preserving XYZ/RGB and untracked IDs (%s)', async format => {
+      const header = ['ply', `format ${format} 1.0`, 'element vertex 2', 'property list uint8 uint32 view_indices',
+        'property float32 x', 'property float32 y', 'property float32 z',
+        'property uint8 red', 'property uint8 green', 'property uint8 blue',
+        'property list uint8 float32 view_weights', 'end_header', ''].join('\n');
+      let data: string | ArrayBuffer;
+      if (format === 'ascii') data = '2 7 9 1 2 3 1 0 255 2 .2 .3\n0 -1 -2 -3 10 20 30 1 .7\n';
+      else {
+        data = new ArrayBuffer(2 + 8 + 30 + 2 + 12);
+        const view = new DataView(data), little = format === 'binary_little_endian';
+        let offset = 0;
+        for (const [indices, xyz, rgb, weights] of [
+          [[7, 9], [1, 2, 3], [1, 0, 255], [.2, .3]],
+          [[], [-1, -2, -3], [10, 20, 30], [.7]],
+        ]) {
+          view.setUint8(offset++, indices.length);
+          for (const value of indices) { view.setUint32(offset, value, little); offset += 4; }
+          for (const value of xyz) { view.setFloat32(offset, value, little); offset += 4; }
+          for (const value of rgb) view.setUint8(offset++, value);
+          view.setUint8(offset++, weights.length);
+          for (const value of weights) { view.setFloat32(offset, value, little); offset += 4; }
+        }
+      }
+      const points = await parsePointCloudPlyFile(new File([header, data], 'frame.ply'));
+      expect([...points.keys()]).toEqual([1n, 2n]);
+      expect(points.get(1n)).toMatchObject({ xyz: [1, 2, 3], rgb: [1, 0, 255], track: [] });
+      expect(points.get(2n)).toMatchObject({ xyz: [-1, -2, -3], rgb: [10, 20, 30], track: [] });
+    }
+  );
+
+  it.each(['-1', '4294967295', '2 1'])( 'rejects truncated or invalid ASCII lists (%s)', async list => {
+    const body = 'ply\nformat ascii 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nproperty list uint32 uint32 views\nend_header\n1 2 3 ' + list;
+    await expect(parsePointCloudPlyFile(new File([body], 'frame.ply'))).rejects.toThrow(/list/i);
+  });
+
+  it('rejects a binary list length before allocating or reading its missing elements', async () => {
+    const header = 'ply\nformat binary_little_endian 1.0\nelement vertex 1\nproperty list uint32 uint32 views\nproperty float x\nproperty float y\nproperty float z\nend_header\n';
+    const data = new ArrayBuffer(4); new DataView(data).setUint32(0, 0xffffffff, true);
+    await expect(parsePointCloudPlyFile(new File([header, data], 'frame.ply'))).rejects.toThrow(/list/i);
+    await expect(parsePointCloudPlyFile(new File([header.replace('uint32 uint32 views', 'float uint32 views'), data], 'frame.ply'))).rejects.toThrow(/integer/i);
+  });
+  it.each(['ascii', 'binary_little_endian', 'binary_big_endian'])(
     'preserves dark byte colors while still decoding normalized float colors (%s)', async format => {
       for (const colorType of ['uchar', 'float']) {
         const rgb = colorType === 'uchar' ? [1, 0, 255] : [1, 0.5, 0];

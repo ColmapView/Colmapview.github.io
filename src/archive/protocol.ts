@@ -11,6 +11,7 @@ export type ArchiveSource = File | { kind: 'remote'; name: string; size: number 
 export type ArchiveOperation =
   | { kind: 'open'; source: ArchiveSource; wasmUrl: string; temporaryName: string; diskBacked?: boolean }
   | { kind: 'extract'; path: string; bounds?: CacheDimensionBounds }
+  | { kind: 'extract-zstd-prefix'; source: File; path: string; bytes: number }
   | { kind: 'encode-jpeg'; blob: Blob; quality: number };
 
 export type ArchiveRequest =

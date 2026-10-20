@@ -1,6 +1,7 @@
 import { archiveFileType, validateByteRange, type ArchiveByteSource } from './byteSource';
 import type { ArchiveBackend } from './backend';
 import { archiveError, ARCHIVE_ENTRY_COUNT_LIMIT, ARCHIVE_ENTRY_SIZE_LIMIT, type ArchiveMetadata } from './protocol';
+import { MAX_TAR_PREFIX_METADATA_BYTES } from './geometryLimits';
 
 interface TarEntry extends ArchiveMetadata { offset: number }
 const decoder = new TextDecoder();
@@ -44,13 +45,14 @@ export class IndexedTarBackend implements ArchiveBackend {
   private source: ArchiveByteSource;
   constructor(source: ArchiveByteSource) { this.source = source; }
 
-  async list(signal: AbortSignal): Promise<ArchiveMetadata[]> {
+  async list(signal: AbortSignal, firstFile = false): Promise<ArchiveMetadata[]> {
     this.entries.clear();
     let offset = 0, count = 0;
     let globalFields: Record<string, string> = {}, localFields: Record<string, string> = {};
     let longName: string | undefined;
     while (offset + 512 <= this.source.size) {
       signal.throwIfAborted();
+      if (firstFile && offset > MAX_TAR_PREFIX_METADATA_BYTES) throw new Error('TAR prefix metadata exceeds its read budget.');
       const header = await this.source.read(offset, 512);
       if (header.every(byte => byte === 0)) break;
       let checksum = 0, signedChecksum = 0;
@@ -89,6 +91,7 @@ export class IndexedTarBackend implements ArchiveBackend {
           const mtime = fields.mtime === undefined ? tarNumber(header.subarray(136, 148), false) : Number(fields.mtime);
           if (!Number.isFinite(mtime) || Math.abs(mtime * 1000) > Number.MAX_SAFE_INTEGER) throw new Error('Invalid TAR modification time.');
           this.entries.set(path, { path, size, offset: payload, lastModified: mtime * 1000 });
+          if (firstFile) break;
         }
         localFields = {}; longName = undefined;
       }

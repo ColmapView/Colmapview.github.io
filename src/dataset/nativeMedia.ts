@@ -16,6 +16,8 @@ interface NativeMediaSource {
   paths?: readonly string[];
   /** A manifest's explicit image list declares roles, not a complete directory listing. */
   imagePaths?: readonly string[];
+  /** Explicit camera-only launches must not infer photos or warn about their deliberate absence. */
+  imagesDisabled?: boolean;
   overrides?: Readonly<Record<string, string>>;
   /** Explicit manifests may declare URL prefixes without a server directory listing. */
   declaredImageRoot?: string;
@@ -42,7 +44,7 @@ export async function prepareNativeMedia(
   const source = originalSource.kind === 'local' ? { ...originalSource, files: normalizeSourceIndex(originalSource.files) } : originalSource;
   const physicalPaths = hint?.paths ?? (source.kind === 'local' ? [...source.files.keys()]
     : source.kind === 'archive' ? [...source.entries.keys()] : undefined);
-  if (!physicalPaths && !hint?.declaredImageRoot) return undefined;
+  if (!physicalPaths && !hint?.declaredImageRoot && !hint?.declaredMaskRoot && !Object.keys(hint?.maskOverrides ?? {}).length) return undefined;
   const paths = physicalPaths ?? [];
   const modelDir = hint?.modelDir ?? getParentDir([...files].find(([, file]) => file === camerasFile)?.[0] ?? '');
   const pathOptions = source.kind === 'url' ? { baseUrl: source.baseUrl } : {};
@@ -160,6 +162,7 @@ export async function prepareNativeMedia(
       path: image.name, frameIndex, message: `Ambiguous source mask: ${image.name}.` });
     if (!camera || match.status !== 'resolved') {
       if (camera && maskBinding) nativeMasks.set(image.name, maskBinding);
+      if (hint?.imagesDisabled) { frameIndex++; continue; }
       diagnostics.push({ code: match.status === 'ambiguous' ? 'AMBIGUOUS_IMAGE_PATH' : 'MISSING_IMAGE', severity: 'warning',
         path: image.name, frameIndex: frameIndex++, message: `${match.status === 'ambiguous' ? 'Ambiguous' : 'Missing'} source photo: ${image.name}.` });
       continue;

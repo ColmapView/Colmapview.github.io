@@ -15,6 +15,7 @@ import { rememberNativeMediaSource } from '../dataset/nativeMedia';
 import { openManifestMediaArchives, rememberManifestMediaArchives } from './urlLoaderMediaArchives';
 import { getDiscoveredManifestMedia } from './urlLoaderColmapDiscovery';
 import { CameraDatasetManifestSchema, type CameraDatasetManifest } from '../types/cameraDatasetManifest';
+import { fetchManifestGeometry } from './urlLoaderGeometryArchives';
 
 // Keep the loader's existing entry point stable while discovery owns its implementations.
 export {
@@ -256,6 +257,14 @@ export async function fetchManifestColmapFiles(
     }
   }
 
+  if (manifest.geometryFiles?.length) {
+    deps.setUrlProgress({ percent: 30, message: 'Reading the selected geometry frame...' });
+    const geometry = await fetchManifestGeometry(manifest, { signal: deps.signal, fetchImpl: deps.fetchImpl });
+    for (const [path, file] of geometry) {
+      if (files.has(path)) throw new Error('Selected archive geometry conflicts with a native model file.');
+      files.set(path, file);
+    }
+  }
   const media = getDiscoveredManifestMedia(manifest);
   // Explicit manifest lists and overrides retain their original URL scope when
   // inferred sibling media uses the broader scene as its source.
@@ -268,15 +277,17 @@ export async function fetchManifestColmapFiles(
   const imagePaths = archives ? [...archives.imagePaths, ...(manifest.images?.map(mediaPath) ?? [])] : manifest.images?.map(mediaPath);
   const maskPaths = archives ? [...archives.maskPaths, ...(manifest.masks?.map(mediaPath) ?? [])] : manifest.masks?.map(mediaPath);
   if (archives) rememberManifestMediaArchives(files, archives);
-  if (!manifest.skipImages) rememberNativeMediaSource(files, {
+  const declaredMasks = manifest.masksPath !== undefined || Object.keys(manifest.maskNameToPath ?? {}).length > 0 || Boolean(maskPaths?.length);
+  if (!manifest.skipImages || declaredMasks) rememberNativeMediaSource(files, {
     source: { kind: 'url', baseUrl: joinManifestUrlPath(media?.baseUrl ?? manifest.baseUrl, ''),
       ...(archives && { archiveEntries: archives.entries }) },
     paths: archives ? [...(media?.paths ?? []), ...imagePaths!, ...maskPaths!] : media?.paths,
-    imagePaths, modelDir: media?.modelDir ?? dirnameOf(manifest.files.cameras),
+    imagePaths: manifest.skipImages ? [] : imagePaths, modelDir: media?.modelDir ?? dirnameOf(manifest.files.cameras),
+    imagesDisabled: manifest.skipImages,
     // Keep inferred relative mappings relative so the native index still checks
     // their physical existence; absolutizing them would bypass that check.
-    overrides: media?.overrides ?? manifestOverrides,
-    declaredImageRoot: joinManifestUrlPath(manifest.baseUrl, manifest.imagesPath ?? 'images/').replace(/\/?$/, '/'),
+    overrides: manifest.skipImages ? undefined : media?.overrides ?? manifestOverrides,
+    declaredImageRoot: manifest.skipImages ? undefined : joinManifestUrlPath(manifest.baseUrl, manifest.imagesPath ?? 'images/').replace(/\/?$/, '/'),
     // A discovered sibling prefix is inference; the full listing must bind masks to the resolved photos.
     declaredMaskRoot: media || manifest.masksPath === undefined ? undefined : joinManifestUrlPath(manifest.baseUrl, manifest.masksPath).replace(/\/?$/, '/'),
     maskOverrides: manifest.maskNameToPath && Object.fromEntries(Object.entries(manifest.maskNameToPath)

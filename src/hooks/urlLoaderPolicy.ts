@@ -39,8 +39,8 @@ export interface ManifestColmapFileEntries {
 }
 
 export interface ManifestLazySourceBases {
-  imageUrlBase: string;
-  maskUrlBase: string;
+  imageUrlBase: string | null;
+  maskUrlBase: string | null;
   /**
    * Absolute, already-encoded per-image URLs (COLMAP image name -> URL) for
    * datasets that ship an explicit mapping. Each value is a finished URL and
@@ -466,14 +466,15 @@ export function getManifestLazySourceBases(manifest: ColmapManifest): ManifestLa
   const masksPath = manifest.masksPath ?? 'masks/';
 
   const bases: ManifestLazySourceBases = {
-    imageUrlBase: joinManifestUrlPath(manifest.baseUrl, imagesPath),
-    maskUrlBase: joinManifestUrlPath(manifest.baseUrl, masksPath),
+    imageUrlBase: manifest.skipImages ? null : joinManifestUrlPath(manifest.baseUrl, imagesPath),
+    maskUrlBase: manifest.skipImages && manifest.masksPath === undefined && !manifest.masks?.length
+      && !Object.keys(manifest.maskNameToPath ?? {}).length ? null : joinManifestUrlPath(manifest.baseUrl, masksPath),
   };
 
   // joinManifestUrlPath encodes each path exactly once; the resulting URLs are
   // final and used by the adapter verbatim (never re-encoded via buildImageUrl).
   const mappings = Object.entries(manifest.imageNameToPath ?? {});
-  if (mappings.length > 0) {
+  if (!manifest.skipImages && mappings.length > 0) {
     bases.imageNameToUrl = Object.fromEntries(
       mappings.map(([name, relativePath]) => [name, joinManifestUrlPath(manifest.baseUrl, relativePath)])
     );

@@ -320,7 +320,7 @@ export async function discoverManifestSplatCatalog(
   manifest: ColmapManifest,
   deps: DiscoverManifestSplatDeps = {}
 ): Promise<RemoteSplatCandidate[]> {
-  if (manifest.splats?.length === 0) return [];
+  if (manifest.splats?.length === 0 || manifest.geometryFiles?.some(file => file.role === 'splat')) return [];
   if (manifest.splats?.length) {
     const fetchImpl = deps.fetchImpl ?? defaultFetchUrl;
     const classify = deps.classifySplatUrl ?? ((url: string) => defaultClassifySplatUrl(url, fetchImpl));

@@ -28,6 +28,17 @@ const manifest: ColmapManifest = {
   },
 };
 
+it('retains explicit masks when RGB photographs are intentionally disabled', async () => {
+  const target: ColmapManifest = { ...manifest, skipImages: true, imageNameToPath: { 'cam.png': 'not-a-photo.png' },
+    maskNameToPath: { 'cam.png': 'segmentation/cam.png' }, maskRole: 'unknown' };
+  const files = await fetchManifestColmapFiles(target, { fetchFile: async (_base, path) => buildFile(path.split('/').at(-1)!), setUrlProgress: vi.fn() });
+  const context = await prepareNativeMedia(files, files.get('sparse/0/cameras.bin')!, new Map([[1, buildCamera({ cameraId: 1 })]]),
+    new Map([[1, buildImage({ imageId: 1, cameraId: 1, name: 'cam.png' })]]));
+  expect(context?.bindings.size).toBe(0);
+  expect(context?.nativeMasks?.get('cam.png')).toMatchObject({ kind: 'file', path: 'https://example.com/dataset/segmentation/cam.png', role: 'unknown' });
+  expect(context?.diagnostics.some(diagnostic => diagnostic.code === 'MISSING_IMAGE')).toBe(false);
+});
+
 it('honors an explicitly empty splat selection without listing the manifest host', async () => {
   const fetchImpl = vi.fn();
   expect(await discoverManifestSplatCatalog({ ...manifest, splats: [] }, { fetchImpl })).toEqual([]);
