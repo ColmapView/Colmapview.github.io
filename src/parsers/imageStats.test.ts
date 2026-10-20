@@ -261,6 +261,15 @@ describe('computeImageStatsFromWasm', () => {
     expect(imageStats.get(1)).toEqual({ numPoints3D: 0, avgError: 0, covisibleCount: 0 });
     expect(globalStats.totalPoints).toBe(0);
   });
+  it('computes finite geometry statistics when native untracked points have a null track vector',()=>{
+    const images=makeImages(1);
+    const source=buildWasmReconstructionWrapper({pointCount:2,errors:new Float32Array([.5,1.5]),
+      trackOffsets:new Uint32Array([0,0,0]),trackImageIds:null,point3DIds:BigUint64Array.from([7n,19n])});
+    const result=computeImageStatsFromWasm(images,source);
+    expect(result.globalStats).toMatchObject({totalPoints:2,totalObservations:0,minTrackLength:0,maxTrackLength:0,avgTrackLength:0,
+      minError:.5,maxError:1.5,avgError:1});
+    expect([...result.imageToPoint3DIds.get(1)!]).toEqual([]);
+  });
 
   it('produces same results as computeImageStats for identical data', () => {
     const images = makeImages(1, 2);

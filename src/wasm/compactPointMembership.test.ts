@@ -78,6 +78,16 @@ describe('direct WASM CSR reverse membership', () => {
     expect(() => buildPointMembershipFromWasm(images, buildWasmReconstructionWrapper({ pointCount: 1 }))).toThrow('arrays');
     expect(() => buildPointMembershipFromWasm(images, buildWasmReconstructionWrapper({ pointCount: 0x100000000 }))).toThrow('point count');
   });
+  it('accepts the null native track vector only when every point has a proven empty track',()=>{
+    const images=new Map([[7,buildImage({imageId:7})]]);
+    const source=buildWasmReconstructionWrapper({pointCount:2,trackOffsets:new Uint32Array([0,0,0]),
+      trackImageIds:null,point3DIds:BigUint64Array.from([7n,bigId])});
+    expect(membershipEntries(createPointMembershipViews(buildPointMembershipFromWasm(images,source)))).toEqual([[7,[]]]);
+    for(const offsets of [[0,1,1],[0,1,0],[0,0]]){
+      const invalid=buildWasmReconstructionWrapper({pointCount:2,trackOffsets:Uint32Array.from(offsets),trackImageIds:null});
+      expect(()=>buildPointMembershipFromWasm(images,invalid)).toThrow('arrays');
+    }
+  });
 });
 
 describe('compact reverse point membership', () => {

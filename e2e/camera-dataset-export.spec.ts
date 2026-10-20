@@ -8,6 +8,47 @@ import { parseImagesBinary } from '../src/parsers/images';
 import { parseCamerasBinary } from '../src/parsers/cameras';
 import { parsePoints3DBinary } from '../src/parsers/points3d';
 
+for (const transport of ['folder','zip','url'] as const) {
+  test(`imports visible embedded OpenSfM points and exports original photos from ${transport}`,async({page})=>{
+    const failures:string[]=[];page.on('console',message=>{if(message.type()==='error')failures.push(message.text());});page.on('pageerror',error=>failures.push(error.message));
+    await page.goto('/');const files=await cameraFixture(page,'opensfm');
+    const metadata=files.find(file=>file.name==='reconstruction.json')!;
+    const source=JSON.parse(Buffer.from(metadata.base64,'base64').toString());
+    source[0].points={'7':{coordinates:[1,2,3],color:[10,20,30]},'9007199254740993':{coordinates:[-1,0,.5],color:[0,128,255]}};
+    metadata.base64=Buffer.from(JSON.stringify(source)).toString('base64');
+    if(transport==='url'){
+      const base='https://opensfm.example.test/scene/';
+      await page.route(base+'**',route=>{
+        const file=files.find(file=>base+file.relativePath.slice('scene/'.length)===route.request().url());
+        return route.fulfill(file?{status:200,body:Buffer.from(file.base64,'base64')}:{status:404});
+      });
+      await page.goto('/?url='+encodeURIComponent(base+'reconstruction.json'));
+    }else if(transport==='zip')await dropDatasetFiles(page,[{relativePath:'scene.zip',name:'scene.zip',base64:fixtureZip(files).toString('base64')}]);
+    else await dropDatasetFiles(page,files);
+    await expect.poll(async()=>page.evaluate(async()=>{
+      const path='/src/store/reconstructionStore.ts';
+      const {useReconstructionStore}=await import(path) as typeof import('../src/store/reconstructionStore');
+      const state=useReconstructionStore.getState();return state.error ?? (state.reconstruction?'loaded':null);
+    }).then(value=>value ?? (failures.join(' | ') || null)),{timeout:15000}).toBe('loaded');
+    const state=await page.evaluate(async()=>{
+      const path='/src/store/stores/pointCloudStore.ts';
+      const {usePointCloudStore}=await import(path) as typeof import('../src/store/stores/pointCloudStore');
+      const {minTrackLength,showPointCloud}=usePointCloudStore.getState();return{minTrackLength,showPointCloud};
+    });
+    expect(state).toEqual({minTrackLength:0,showPointCloud:true});
+    await page.keyboard.press('Tab');await page.getByRole('button',{name:'Export',exact:true}).hover();
+    await page.getByRole('combobox',{name:'Format',exact:true}).selectOption('zip-images');
+    const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download COLMAP',exact:true}).click();
+    const archive=unzipSync(readFileSync((await(await pending).path())!));
+    const points=parsePoints3DBinary(new Uint8Array(archive['sparse/0/points3D.bin']).buffer);
+    expect([...points.keys()]).toEqual([7n,9007199254740993n]);
+    expect([...points.values()].map(({xyz,rgb,track,error})=>({xyz,rgb,track,error}))).toEqual([
+      {xyz:[1,2,3],rgb:[10,20,30],track:[],error:0},{xyz:[-1,0,.5],rgb:[0,128,255],track:[],error:0}]);
+    expect([...parseImagesBinary(new Uint8Array(archive['sparse/0/images.bin']).buffer).values()].every(image=>image.points2D.length===0)).toBe(true);
+    for(const name of ['a.png','b.png'])expect(Buffer.from(archive['images/'+name])).toEqual(Buffer.from(files.find(file=>file.name===name)!.base64,'base64'));
+  });
+}
+
 for (const sourceKind of ['folder', 'zip', 'url'] as const) {
   test(`imports and exports untracked companion XYZ points from a NeRF ${sourceKind}`, async ({ page }) => {
     await page.goto('/');

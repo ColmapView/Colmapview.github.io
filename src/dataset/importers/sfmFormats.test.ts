@@ -82,10 +82,40 @@ describe('SfM camera adapters', () => {
     expect(result.images.get(1)?.qvec[0]).toBeCloseTo(Math.SQRT1_2, 12);
     expect(result.images.get(1)?.qvec[3]).toBeCloseTo(Math.SQRT1_2, 12);
   });
+  it('preserves OpenSfM XYZ, RGB and uint64 point IDs without inventing image observations',async()=>{
+    const result=await normalizeOpenSfm({cameras:{c:perspective},shots:{'a.jpg':{camera:'c',rotation:[0,0,0],translation:[0,0,0]}},
+      points:{'0':{coordinates:[1.123456789,2,3],color:[0,128,255]},'9007199254740993':{coordinates:[-1,0,2],color:[1,2,3]}}},resolve);
+    expect([...result.points3D!.keys()]).toEqual([0n,9007199254740993n]);
+    expect(result.points3D!.get(0n)).toEqual({point3DId:0n,xyz:[1.123456789,2,3],rgb:[0,128,255],track:[],error:0});
+    expect(result.images.get(1)?.points2D).toEqual([]);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({code:'UNTRACKED_STRUCTURE'}));
+  });
+  it('reindexes arbitrary OpenSfM string IDs without collisions or unsafe integer conversion',async()=>{
+    const point={coordinates:[1,2,3],color:[5,6,7]};
+    const result=await normalizeOpenSfm({cameras:{c:perspective},shots:{'a.jpg':{camera:'c',rotation:[0,0,0],translation:[0,0,0]}},
+      points:{'track-a':point,'1':{...point,coordinates:[4,5,6]},'01':point,'18446744073709551615':point}},resolve);
+    expect([...result.points3D!.keys()]).toEqual([1n,2n,3n,4n]);
+    expect(result.points3D!.get(2n)?.xyz).toEqual([4,5,6]);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({code:'REINDEXED_POINT_IDS'}));
+  });
+  it.each([null,[],{a:{coordinates:[0,1],color:[1,2,3]}},{a:{coordinates:[0,1,Infinity],color:[1,2,3]}},
+    {a:{coordinates:[0,1,2],color:[-1,2,3]}},{a:{coordinates:[0,1,2],color:[1,2,256]}},
+    {a:{coordinates:[0,1,2],color:[1,2,.5]}},{a:{coordinates:[0,1,2]}}])('rejects malformed OpenSfM points: %j',async points=>{
+    await expect(normalizeOpenSfm({cameras:{c:perspective},shots:{'a.jpg':{camera:'c',rotation:[0,0,0],translation:[0,0,0]}},points},resolve))
+      .rejects.toMatchObject({code:'INVALID_METADATA'});
+  });
+  it('observes cancellation while reading OpenSfM geometry',async()=>{
+    const controller=new AbortController();setTimeout(()=>controller.abort(),0);
+    await expect(normalizeOpenSfm({cameras:{c:perspective},shots:{'a.jpg':{camera:'c',rotation:[0,0,0],translation:[0,0,0]}},
+      points:Object.fromEntries(Array.from({length:2000},(_,i)=>[String(i),{coordinates:[1,2,3],color:[1,2,3]}]))},resolve,controller.signal))
+      .rejects.toMatchObject({name:'AbortError'});
+  });
   it('selects an OpenSfM component without merging coordinate systems', async () => {
-    const component = (name: string) => ({ cameras: { c: perspective }, shots: { [name]: { camera: 'c', rotation: [0,0,0], translation: [0,0,0] } } });
-    const result = await normalizeOpenSfm([component('a.jpg'),component('b.jpg')], resolve, undefined, 1);
+    const component = (name: string, x: number) => ({ cameras: { c: perspective }, shots: { [name]: { camera: 'c', rotation: [0,0,0], translation: [0,0,0] } },
+      points:{'7':{coordinates:[x,0,1],color:[1,2,3]}} });
+    const result = await normalizeOpenSfm([component('a.jpg',1),component('b.jpg',2)], resolve, undefined, 1);
     expect([...result.images.values()].map(image => image.name)).toEqual(['b.jpg']);
+    expect(result.points3D!.get(7n)?.xyz).toEqual([2,0,1]);
     await expect(normalizeOpenSfm({ cameras: {c:{...perspective,projection_type:'spherical'}}, shots: {'a.jpg':{camera:'c'}} },resolve)).rejects.toThrow(/projection/);
   });
   it('joins OpenMVG IDs and maps polynomial k3 to a zero-denominator FULL_OPENCV camera', async () => {

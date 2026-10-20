@@ -69,7 +69,7 @@ export interface CameraDatasetImportContext {
   diagnostics: readonly ImportDiagnostic[];
   metadataFrameCount: number;
   savedWorldMetadata?: Record<string, unknown>;
-  /** XYZ coordinates retain the camera metadata's world frame; observations are not synthesized. */
+  /** Untracked XYZ geometry (companion PLY or embedded OpenSfM points); no observations are synthesized. */
   pointCloud?: { sourcePath: string };
 }
 

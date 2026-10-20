@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.5] - 2026-10-20
+
+### Fixed
+
+- Import the selected OpenSfM reconstruction's embedded XYZ/RGB points, including Berlin's 1,430 landmarks, without inventing observation tracks.
+- Accept the native parser's null track buffer when every point has an empty track. Preserve finite statistics and COLMAP export for these binary models, and show imported OpenSfM geometry with a zero track threshold.
+
 ## [0.19.4] - 2026-10-20
 
 ### Fixed

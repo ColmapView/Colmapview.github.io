@@ -5,6 +5,7 @@ import { dimension, finite, importError, object, positive, MAX_CAMERA_FRAMES,
 import type { ResolveCameraFrame } from './nerfTransforms';
 import { emptyCameraDataset as empty, addCameraFrame as add, finishCameraDataset as finish } from './cameraDatasetBuilder';
 import { addOpenMvgStructure, openMvgId } from './openMvgStructure';
+import { addOpenSfmPoints } from './openSfmPoints';
 import type { Image } from '../../types/colmap';
 
 export function isOpenSfm(value: unknown): boolean {
@@ -30,6 +31,7 @@ export async function normalizeOpenSfm(value: unknown, resolve: ResolveCameraFra
     add(result,index,resolved,pose,{ modelId:CameraModelId.RADIAL,width,height,
       params:[f,width/2,height/2,finite(camera.k1 === undefined ? 0 : camera.k1,'k1'),finite(camera.k2 === undefined ? 0 : camera.k2,'k2')] },name);
   }
+  await addOpenSfmPoints(root.points,result,signal);
   return finish(result);
 }
 

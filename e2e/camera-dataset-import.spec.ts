@@ -175,7 +175,7 @@ if(publicFixture) test('loads the downloaded complete GrowSplat quinoa capture',
   await page.goto('/');
   await dropDatasetFiles(page,[{relativePath:'quinoa.zip',name:'quinoa.zip',base64:readFileSync(publicFixture).toString('base64')}]);
   await expect.poll(async()=> (await state(page)).names.length,{timeout:45000}).toBe(15);
-  expect((await state(page)).points).toBe(0);
+  expect((await state(page)).points).toBe(16315);
   const result=await page.evaluate(async()=>{
     const storePath='/src/store/reconstructionStore.ts',datasetPath='/src/dataset/index.ts';
     const {useReconstructionStore}=await import(storePath) as typeof import('../src/store/reconstructionStore');
@@ -195,12 +195,12 @@ if(publicFixture) test('loads the downloaded complete GrowSplat quinoa capture',
 });
 
 const sfmFixtureRoot=process.env.COLMAP_CAMERA_SFM_FIXTURES;
-if(sfmFixtureRoot) for(const [name,schema,count] of [['opensfm-berlin','opensfm',3],['openmvg-sceaux','openmvg',2],['bundler-kermit','bundler',2]] as const) {
+if(sfmFixtureRoot) for(const [name,schema,count,points] of [['opensfm-berlin','opensfm',3,1430],['openmvg-sceaux','openmvg',2,6586],['bundler-kermit','bundler',2,0]] as const) {
   test(`loads and exports the downloaded ${name} source sample`,async({page})=>{
     await page.goto('/');
     await dropDatasetFiles(page,[{relativePath:name+'.zip',name:name+'.zip',base64:readFileSync(join(sfmFixtureRoot,name+'.zip')).toString('base64')}]);
     await expect.poll(async()=> (await state(page)).schema,{timeout:45000}).toBe(schema);
-    expect((await state(page)).names).toHaveLength(count);expect((await state(page)).points).toBe(0);
+    expect((await state(page)).names).toHaveLength(count);expect((await state(page)).points).toBe(points);
     const button=page.locator('button[aria-label*="Export" i], button[data-tooltip*="Export" i]').first();
     await page.keyboard.press('Tab');await button.hover();await page.locator('select').first().selectOption('zip-images');
     const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download COLMAP',exact:true}).click();

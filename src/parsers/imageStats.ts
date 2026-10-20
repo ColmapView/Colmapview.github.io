@@ -200,7 +200,8 @@ export function computeImageStatsFromWasm(
   const pointCount = wasm.pointCount;
   const errors = wasm.getErrors();
   const trackOffsets = wasm.getTrackOffsets();
-  const trackImageIdsArr = wasm.getTrackImageIds();
+  const trackImageIdsArr = wasm.getTrackImageIds()
+    ?? (trackOffsets?.length === pointCount + 1 && trackOffsets.every(offset => offset === 0) ? new Uint32Array() : null);
   const includePointMembership = options.includePointMembership !== false;
   const point3DIds = includePointMembership ? wasm.getPoint3DIds() : null;
 

@@ -1,18 +1,20 @@
 # Camera datasets
 
-ColmapView can import the following open camera metadata formats together with their photos. Imported models contain posed cameras and images. NeRF-style metadata can also import an associated XYZ PLY cloud. OpenMVG `sfm_data.json` imports its optional `structure` landmarks and their image observations. Other camera-only imports contain zero sparse points; feature observations are not synthesized.
+ColmapView can import the following open camera metadata formats together with their photos. Imported models contain posed cameras and images. NeRF-style metadata can also import an associated XYZ PLY cloud. OpenMVG `sfm_data.json` imports its optional `structure` landmarks and their image observations. OpenSfM imports its embedded XYZ/RGB points. Other camera-only imports contain zero sparse points; feature observations are not synthesized.
 
 | Format | Metadata | Supported cameras |
 | --- | --- | --- |
 | Blender / NeRF | `transforms.json` or `transforms_train.json` | Perspective FOV; dimensions from a representative original photo when absent |
 | Nerfstudio | `transforms.json` | PINHOLE, OPENCV and OPENCV_FISHEYE; global or per-frame intrinsics |
 | Legacy Instant-NGP | `transforms.json` | Perspective focal/FOV and named distortion; undeclared camera models retain nonzero distortion |
-| OpenSfM | `reconstruction.json` | Perspective cameras with normalized focal and radial distortion |
+| OpenSfM | `reconstruction.json` | Perspective cameras with normalized focal and radial distortion; optional embedded XYZ/RGB points |
 | OpenMVG | `sfm_data.json` | Pinhole, radial k1 and radial k3 |
 | Bundler | `bundle.out` version 0.3 plus `list.txt` or `images.txt` | Perspective with radial k1/k2; the list must preserve original camera order |
 | Standard 3DGS camera JSON | `cameras.json` | Pinhole `fx`/`fy`, dimensions, camera-to-world rotation and position; optional `cx`/`cy` |
 | LLFF | `poses_bounds.npy` | N by 17 float camera arrays with a complete ordered RGB directory or `list.txt` |
 | DTU / IDR | `cameras.npz`, `cameras_sphere.npz` or `cameras_normalized.npz` | Consecutive 4 by 4 `world_mat_N` / `scale_mat_N` pairs with pinhole calibration |
+
+OpenSfM imports the selected component's `points` as XYZ/RGB in the camera world frame. Canonical unsigned integer IDs are preserved; arbitrary string IDs are reindexed in lexical order. Feature tracks live outside the JSON and are not synthesized. Unavailable reprojection errors use zero, and the initial track threshold is zero so these points are visible. Existing saved viewer settings still take precedence. The Berlin example contains 1,430 points and three posed photographs.
 
 Drop a scene folder or an archive containing metadata and photos. ZIP and plain TAR keep media lazy. Supported compressed archives use the existing archive reader. A checksummed plain TAR named `.tar.gz` is detected before choosing a decoder. When camera metadata spans several scene roots, choose a scene; a complete native COLMAP model takes priority within its root. Native archive files come from one complete model directory, and files from incomplete directories are never combined to invent a model. Existing automatic native-model preference applies to archives containing native models alone. Media lookup omits other named native roots, and multi-scene settings lookup stays on the chosen model's ancestry. NeRF train is the default split. OpenSfM reconstructions are selected separately.
 

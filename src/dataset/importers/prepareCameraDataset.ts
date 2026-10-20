@@ -303,7 +303,9 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
     }
   }
   const context: CameraDatasetImportContext={ source,bindings:normalized.bindings,diagnostics:normalized.diagnostics,
-    ...(pointCloud && { pointCloud: { sourcePath: pointCloud.sourcePath } }),
+    ...(pointCloud ? { pointCloud: { sourcePath: pointCloud.sourcePath } }
+      : normalized.schema==='opensfm' && normalized.points3D?.size
+        ? { pointCloud: { sourcePath: source.kind==='url' ? imageResourceUrl(source.baseUrl,metadataPath) : metadataPath } } : {}),
     metadataFrameCount:normalized.metadataFrameCount,savedWorldMetadata:normalized.savedWorldMetadata,
     selection:{ metadataPath,sceneRoot:root,schema:normalized.schema,split:/transforms_([^/.]+)\.json$/i.exec(metadataPath)?.[1] ?? null,component } };
   const settings=root ? root+'/colmapview.yaml' : 'colmapview.yaml';

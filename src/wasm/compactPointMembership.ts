@@ -38,7 +38,10 @@ export function buildPointMembershipFromWasm(images: ReadonlyMap<number, unknown
   if (!Number.isSafeInteger(pointCount) || pointCount < 0 || pointCount > 0xffffffff) throw new Error('Unsupported point membership point count');
   if (pointCount === 0) return { imageIds, offsets, pointIds: new BigUint64Array() };
   const trackOffsets = source.getTrackOffsets();
-  const trackImages = source.getTrackImageIds();
+  // Embind exposes an empty native track vector as null, while keeping the
+  // pointCount+1 zero offsets. This is a valid wholly untracked reconstruction.
+  const trackImages = source.getTrackImageIds()
+    ?? (trackOffsets?.length === pointCount + 1 && trackOffsets.every(offset => offset === 0) ? new Uint32Array() : null);
   const sourceIds = source.getPoint3DIds();
   if (!trackOffsets || !trackImages || trackOffsets.length !== pointCount + 1 || trackOffsets[0] !== 0
     || trackOffsets[pointCount] !== trackImages.length || (sourceIds && sourceIds.length !== pointCount)) {
