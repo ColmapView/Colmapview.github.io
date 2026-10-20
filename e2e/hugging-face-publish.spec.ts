@@ -91,6 +91,8 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
     await expect(dialog.getByRole('region', { name: 'Published dataset' })).toBeVisible({ timeout: 45000 });
     await expect(dialog.getByRole('button', { name: 'Share on Hub', exact: true })).toBeVisible();
+    await expect(dialog.getByRole('link', { name: 'Open link', exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('link', { name: 'Hugging Face page', exact: true })).toHaveText('🤗');
     await expect(dialog.getByRole('button', { name: 'Upload another dataset' })).toHaveCount(0);
     await dialog.screenshot({ path: test.info().outputPath('publication-result.png') });
     expect(publisherErrors).toEqual([]);

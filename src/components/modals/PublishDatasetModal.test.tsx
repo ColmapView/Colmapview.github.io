@@ -211,9 +211,10 @@ describe('PublishDatasetModal', () => {
     const field = screen.getByLabelText('Share link');
     expect(field).toHaveValue(viewerUrl);
     expect(within(field.parentElement!).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open link' })).toHaveAttribute('href', viewerUrl);
+    expect(screen.queryByRole('link', { name: 'Open link' })).not.toBeInTheDocument();
     expect(repositoryLinks()).toHaveLength(1);
     expect(repositoryLinks()[0]).toHaveAccessibleName('Hugging Face page');
+    expect(repositoryLinks()[0]).toHaveTextContent(/^🤗$/);
     expect(screen.getByText(visibility === 'private'
       ? 'Private. Viewers must sign in to Hugging Face with an account that has access.' : 'Anyone can open this link without signing in.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Upload another dataset' })).toBeNull();

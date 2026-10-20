@@ -126,27 +126,29 @@ export function UploadSubmitRow({ id, note, disclosure, disabled, onSubmit, chil
   </div>;
 }
 
-/** The link to share: the Hub link once it is ready, otherwise the viewer link; then the Hub status. */
-function ShareLink({ viewerUrl, hub, providerLink }: { viewerUrl: string; hub?: HubLink; providerLink?: { url: string; label: string } }) {
+interface UploadProviderLink { url: string; label: string; icon?: ReactNode }
+
+/** The copyable share link, optional provider/discovery actions and Hub status. */
+function ShareLink({ viewerUrl, hub, providerLink }: { viewerUrl: string; hub?: HubLink; providerLink?: UploadProviderLink }) {
   const hubState = hub?.enabled && hub.state.viewerUrl === viewerUrl ? hub.state : undefined;
   const link = hubState?.phase === 'ready' && hubState.url ? hubState.url : viewerUrl;
   const publicDataset = hub?.getPublicDataset?.();
   return <>
     <CopyableField label="Share link" value={link} />
-    <div className="publication-result-actions">
-      <a className={`${secondary} publication-button-link`} href={link} target="_blank" rel="noopener noreferrer">Open link<span aria-hidden="true"> ↗</span></a>
-      {providerLink && <a className={`${secondary} publication-button-link`} href={providerLink.url} target="_blank" rel="noopener noreferrer">
-        {providerLink.label}<span aria-hidden="true"> ↗</span>
+    {(providerLink || publicDataset?.viewerUrl === viewerUrl) && <div className="publication-result-actions">
+      {providerLink && <a className={providerLink.icon ? `${getButtonClass('ghost', 'sm')} publication-provider-icon` : `${secondary} publication-button-link`}
+        href={providerLink.url} aria-label={providerLink.label} title={providerLink.label} target="_blank" rel="noopener noreferrer">
+        {providerLink.icon ? <span aria-hidden="true">{providerLink.icon}</span> : <>{providerLink.label}<span aria-hidden="true"> ↗</span></>}
       </a>}
       {publicDataset?.viewerUrl === viewerUrl && <ShareOnHubButton target={publicDataset} />}
-    </div>
+    </div>}
     {hub && hubState && <HubLinkResult state={hubState} onRetry={hub.retry} />}
   </>;
 }
 
 export function UploadResult({ label, title, notice, viewerUrl, providerLink, hub }: {
   label: string; title: ReactNode; notice?: string; viewerUrl: string;
-  providerLink?: { url: string; label: string };
+  providerLink?: UploadProviderLink;
   hub?: HubLink;
 }) {
   const titleRef = useFocusOnMount<HTMLParagraphElement>();

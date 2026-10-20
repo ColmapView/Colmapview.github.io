@@ -9,7 +9,7 @@ const viewerUrl = 'https://colmapview.opsiclear.com/?url=https://huggingface.co/
 const ready: HubLinkState = { phase: 'ready', viewerUrl, url: 'https://hub.invalid/hub/HappyTree' };
 const hub = (state: HubLinkState, enabled = true): HubLink => ({ state, enabled, busy: state.phase === 'checking' || state.phase === 'creating',
   retry: vi.fn(async () => {}), getPublicDataset: () => null });
-const provider = { url: 'https://huggingface.co/datasets/u/scene', label: 'Hugging Face page' };
+const provider = { url: 'https://huggingface.co/datasets/u/scene', label: 'Hugging Face page', icon: '🤗' };
 
 describe('UploadResult', () => {
   it.each([
@@ -36,8 +36,9 @@ describe('UploadResult', () => {
     expect(screen.getByText('Creating Hub link…')).toBeVisible();
     rerender(<UploadResult label="Published dataset" title="Published u/scene" notice="Anyone can open this link." viewerUrl={viewerUrl} providerLink={provider} hub={hub(ready)} />);
     expect(screen.getByLabelText('Share link')).toHaveValue(ready.url);
-    expect(screen.getByRole('link', { name: 'Open link' })).toHaveAttribute('href', ready.url);
+    expect(screen.queryByRole('link', { name: 'Open link' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Hugging Face page' })).toHaveAttribute('href', provider.url);
+    expect(screen.getByRole('link', { name: 'Hugging Face page' })).toHaveTextContent(/^🤗$/);
     expect(screen.queryByLabelText('Private delete link')).toBeNull();
     expect(screen.queryByRole('link', { name: 'Delete Hub link' })).toBeNull();
   });

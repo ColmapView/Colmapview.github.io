@@ -147,7 +147,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
           </section>}
           {publish.receipt && <UploadResult label="Published dataset" title={publish.receipt.visibility === 'public' ? <>Published <strong>{publish.receipt.repoId}</strong></> : <>Saved <strong>{publish.receipt.repoId}</strong> privately</>}
             notice={publish.receipt.visibility === 'private' ? 'Private. Viewers must sign in to Hugging Face with an account that has access.' : 'Anyone can open this link without signing in.'}
-            viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.repoUrl, label: 'Hugging Face page' }}
+            viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.repoUrl, label: 'Hugging Face page', icon: '🤗' }}
             hub={hub} />}
         </div>
       </UploadLayout>
