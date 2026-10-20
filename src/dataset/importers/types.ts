@@ -69,7 +69,7 @@ export interface CameraDatasetImportContext {
   diagnostics: readonly ImportDiagnostic[];
   metadataFrameCount: number;
   savedWorldMetadata?: Record<string, unknown>;
-  /** Untracked XYZ geometry (companion PLY or embedded OpenSfM points); no observations are synthesized. */
+  /** XYZ geometry requiring an initial zero track filter; source OpenSfM tracks, when present, are retained. */
   pointCloud?: { sourcePath: string };
 }
 

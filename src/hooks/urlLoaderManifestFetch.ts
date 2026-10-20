@@ -14,6 +14,7 @@ import { MAX_CAMERA_METADATA_BYTES } from '../dataset/importers/types';
 import { rememberNativeMediaSource } from '../dataset/nativeMedia';
 import { openManifestMediaArchives, rememberManifestMediaArchives } from './urlLoaderMediaArchives';
 import { getDiscoveredManifestMedia } from './urlLoaderColmapDiscovery';
+import { CameraDatasetManifestSchema, type CameraDatasetManifest } from '../types/cameraDatasetManifest';
 
 // Keep the loader's existing entry point stable while discovery owns its implementations.
 export {
@@ -65,7 +66,7 @@ function dirnameOf(path: string): string {
   return slash >= 0 ? path.slice(0, slash) : '';
 }
 
-export interface CameraDatasetDocument { kind: 'camera-dataset'; metadataFile: File }
+export interface CameraDatasetDocument { kind: 'camera-dataset'; metadataFile?: File; manifest?: CameraDatasetManifest }
 
 export function fetchUrlManifest(manifestUrl: string, deps: FetchUrlManifestDeps): Promise<ColmapManifest>;
 export function fetchUrlManifest(manifestUrl: string, deps: FetchUrlManifestDeps, allowCamera: true): Promise<ColmapManifest | CameraDatasetDocument>;
@@ -95,6 +96,11 @@ export async function fetchUrlManifest(
   const metadataFile = chunks ? new File(chunks, getFilenameFromUrl(manifestUrl)) : null;
   const decoder = new TextDecoder();
   const data: unknown = chunks ? JSON.parse((chunks.map(chunk => decoder.decode(chunk, { stream: true })).join('') + decoder.decode()).replace(/^\uFEFF/, '')) : await response.json();
+  if (allowCamera && data && typeof data === 'object' && 'format' in data && data.format === 'colmapview-camera-dataset') {
+    const parsed = CameraDatasetManifestSchema.safeParse(data);
+    if (!parsed.success) throw { type: 'invalid_manifest', message: 'Invalid camera dataset manifest', details: parsed.error.message, failedFile: manifestUrl } satisfies UrlLoadError;
+    return { kind: 'camera-dataset', manifest: parsed.data };
+  }
   // A manifest-shaped document must pass manifest validation, even if it also contains frames.
   if (metadataFile && !(data && typeof data === 'object' && 'files' in data)
     && (isNerfTransforms(data) || isOpenSfm(data) || isOpenMvg(data) || isGaussianCameraJson(data))) {

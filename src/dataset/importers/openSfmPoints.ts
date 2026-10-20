@@ -1,6 +1,13 @@
 import type { Point3D, Point3DId } from '../../types/colmap';
 import { importError, object, type NormalizedCameraDataset } from './types';
 
+export function openSfmPointIds(value: unknown): Map<string, bigint> {
+  const ids = value === undefined ? [] : Object.keys(object(value, 'OpenSfM points'));
+  const numeric = ids.every(id => /^(?:0|[1-9]\d*)$/.test(id) && id.length <= 20 && BigInt(id) < 0xffffffffffffffffn);
+  if (!numeric) ids.sort();
+  return new Map(ids.map((id, index) => [id, numeric ? BigInt(id) : BigInt(index + 1)]));
+}
+
 /** reconstruction.json stores XYZ/RGB; feature tracks live in separate OpenSfM files. */
 export async function addOpenSfmPoints(value: unknown, result: NormalizedCameraDataset, signal?: AbortSignal): Promise<void> {
   if (value === undefined) return;

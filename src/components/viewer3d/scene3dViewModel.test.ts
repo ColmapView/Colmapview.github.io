@@ -45,7 +45,7 @@ describe('scene 3d view-model helpers', () => {
     expect(getInitialSceneCameraPosition(null)).toEqual([0, 0, 5]);
   });
 
-  it('builds robust scene bounds from camera world positions before point bounds', () => {
+  it('frames point geometry as well as camera world positions', () => {
     const reconstruction = buildReconstruction({
       images: [
         buildImage({ imageId: 1, tvec: [0, 0, 0] }),
@@ -61,8 +61,8 @@ describe('scene 3d view-model helpers', () => {
     expect(buildSceneBounds(reconstruction, buildWasmBounds({
       minX: -50, minY: -50, minZ: -50, maxX: 50, maxY: 50, maxZ: 50,
     }))).toEqual({
-      center: [10, 0, 0],
-      radius: 9,
+      center: [0, 0, 0],
+      radius: Math.sqrt(30000) / 2,
     });
   });
 
@@ -73,8 +73,16 @@ describe('scene 3d view-model helpers', () => {
       minX: -2, minY: -4, minZ: 1, maxX: 6, maxY: 2, maxZ: 3,
     }))).toEqual({
       center: [2, -1, 2],
-      radius: 4,
+      radius: Math.sqrt(104) / 2,
     });
+  });
+
+  it('encloses a cloud in front of a tight camera cluster and keeps camera-only bounds useful',()=>{
+    const reconstruction=buildReconstruction({images:[buildImage({imageId:1,tvec:[0,0,0]})],points3D:[]});
+    const bounds=buildSceneBounds(reconstruction,buildWasmBounds({minX:-2,maxX:2,minY:10,maxY:20,minZ:30,maxZ:40}));
+    for (const point of [[0,0,0],[-2,10,30],[2,20,40]]) expect(Math.hypot(...point.map((value,axis)=>value-bounds.center[axis]))).toBeLessThanOrEqual(bounds.radius+1e-8);
+    expect(buildSceneBounds(reconstruction,buildWasmBounds(null))).toEqual({center:[0,0,0],radius:.001});
+    expect(buildSceneBounds(reconstruction,buildWasmBounds({minX:NaN,maxX:1,minY:0,maxY:1,minZ:0,maxZ:1}))).toEqual({center:[0,0,0],radius:.001});
   });
 
   it('uses JS point-map bounds when WASM bounds are unavailable', () => {
@@ -88,7 +96,7 @@ describe('scene 3d view-model helpers', () => {
 
     expect(buildSceneBounds(reconstruction, buildWasmBounds(null))).toEqual({
       center: [1, -2, 3],
-      radius: 4,
+      radius: Math.sqrt(116) / 2,
     });
   });
 

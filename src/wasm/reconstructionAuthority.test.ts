@@ -96,6 +96,20 @@ describe.each(['text', 'binary'] as const)('reconstruction authority %s parity',
     expect(parsePoints3DBinary(result['points3D.bin'].buffer as ArrayBuffer).size).toBe(0);
     expect(snapshot.warnings.join(' ')).toContain('Camera-only model');
   });
+  it('keeps source feature coordinates but never joins unrelated COLMAP IDs to generic PLY vertex numbers',async()=>{
+    const authority=owner(),input=files(format);
+    input.points3DFile=new File(['ply\nformat ascii 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n1 2 3\n'],'points3D.ply');
+    const snapshot=await execute(authority,'load',input);
+    expect(snapshot.point3DIds).toEqual(new BigUint64Array([1n]));
+    expect(snapshot.reconstruction.globalStats.totalObservations).toBe(0);
+    const result=await execute(authority,'export',{format:'binary'}),images=parseImagesBinary(result['images.bin'].buffer as ArrayBuffer);
+    for (const [id,image] of images) {
+      expect(image.points2D.map(point=>point.xy)).toEqual(original.images.get(id)!.points2D.map(point=>point.xy));
+      expect(image.points2D.every(point=>point.point3DId===-1n || point.point3DId===0xffffffffffffffffn)).toBe(true);
+    }
+    expect([...parsePoints3DBinary(result['points3D.bin'].buffer as ArrayBuffer).values()][0].track).toEqual([]);
+    expect(snapshot.warnings.join(' ')).toContain('no COLMAP point IDs');
+  });
   it.skipIf(format === 'binary' && !existsSync(resolve('public/wasm/colmap_wasm.wasm')))('keeps observations/records in its owner while transferring stable render data, IDs, statistics and rigs', async () => {
     const authority = owner();
     const snapshot = await execute(authority, 'load', files(format));

@@ -46,6 +46,15 @@ it('honors a declared URL without a directory listing and preserves its query', 
   expect(fetch).toHaveBeenCalledWith('https://geometry.example.test/source.ply?version=2', expect.anything());
 });
 
+it('applies an explicit row-major world similarity to XYZ without changing source bytes', async () => {
+  const source={kind:'url' as const,baseUrl:'https://example.test/scene/'};
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(ply)));
+  const result=await readCompanionPointCloud(source,'transforms.json',{},[],undefined,{url:'https://example.test/cloud.ply',format:'ply',transform:[0,1,0,10,1,0,0,0,0,0,-1,0,0,0,0,1]});
+  const {parsePointCloudPlyFile}=await import('../../parsers/plyPointCloud');
+  expect([...(await parsePointCloudPlyFile(result!.file)).values()][0].xyz).toEqual([12,1,-3]);
+  await expect(readCompanionPointCloud(source,'transforms.json',{},[],undefined,{url:'https://example.test/cloud.ply',format:'ply',transform:[1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,1]})).rejects.toThrow(/similarity/);
+});
+
 it.each(['../other.ply', '/other.ply', 'C:\\other.ply'])('rejects local declared point paths outside the scene: %s', async path => {
   await expect(readCompanionPointCloud({ kind: 'local', files: new Map() }, 'scene/transforms.json', { ply_file_path: path }, [])).rejects.toThrow();
 });

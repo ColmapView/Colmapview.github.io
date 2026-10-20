@@ -49,6 +49,15 @@ function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
   });
 }
 
+it('validates explicit camera-dataset manifests without interpreting them as camera JSON',async()=>{
+  const input={format:'colmapview-camera-dataset',version:1,metadataUrl:'https://camera.test/transforms.json',pointCloud:{url:'https://cloud.test/input.ply'}};
+  expect(await fetchUrlManifest('https://catalog.test/scene.json',{fetchImpl:async()=>jsonResponse(input),setUrlProgress:vi.fn()},true))
+    .toMatchObject({kind:'camera-dataset',manifest:{...input,pointCloud:{...input.pointCloud,format:'ply'}}});
+  for (const changed of [{metadataUrl:'file:///local.json'},{pointCloud:{url:'https://cloud.test/points.npz',format:'npz'}},{unknown:true}]) {
+    await expect(fetchUrlManifest('https://catalog.test/scene.json',{fetchImpl:async()=>jsonResponse({...input,...changed}),setUrlProgress:vi.fn()},true)).rejects.toMatchObject({type:'invalid_manifest'});
+  }
+});
+
 it('fetches only declared camera-only model files and retains the explicit media listing', async () => {
   const cameraOnly: ColmapManifest={version:1,baseUrl:'https://models.test/pinned',files:{cameras:'cameras.bin',images:'images.bin'},
     images:['https://photos.test/cam/a.png?key=one%2Ftwo'],masks:['masks/cam/a.jpg.png'],maskRole:'validity'};

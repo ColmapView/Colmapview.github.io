@@ -3,10 +3,62 @@ import { cameraFixture, fixtureZip } from './fixtures/camera-dataset';
 import { dropDatasetFiles } from './fixtures/load-test-data';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { unzipSync } from 'fflate';
+import { unzipSync, zipSync } from 'fflate';
+import { numpyFixture } from '../src/test/numpyCameraFixtures';
 import { parseImagesBinary } from '../src/parsers/images';
 import { parseCamerasBinary } from '../src/parsers/cameras';
 import { parsePoints3DBinary } from '../src/parsers/points3d';
+
+for (const transport of ['folder','zip','url'] as const) {
+  test(`preserves OpenSfM sidecar feature coordinates and reciprocal tracks from ${transport}`,async({page})=>{
+    await page.goto('/');const files=await cameraFixture(page,'opensfm'),metadata=files.find(file=>file.name==='reconstruction.json')!;
+    const source=JSON.parse(Buffer.from(metadata.base64,'base64').toString());
+    source[0].points={'landmark':{coordinates:[0,0,5],color:[10,20,30]}};
+    metadata.base64=Buffer.from(JSON.stringify(source)).toString('base64');
+    files.push({relativePath:'scene/tracks.csv',name:'tracks.csv',base64:Buffer.from('OPENSFM_TRACKS_VERSION_v2\na.png\tlandmark\t900\t0.1\t-0.1\t1\t10\t20\t30\t-1\t-1\nb.png\tlandmark\t30\t0.1\t-0.1\t1\t10\t20\t30\t-1\t-1\n').toString('base64')});
+    if(transport==='url'){
+      const base='https://tracks.example.test/scene/';
+      await page.route(base+'**',route=>{const file=files.find(f=>base+f.relativePath.slice(6)===route.request().url());return route.fulfill(file?{status:200,body:Buffer.from(file.base64,'base64')}:{status:404});});
+      await page.goto('/?url='+encodeURIComponent(base+'reconstruction.json'));
+    }else if(transport==='zip')await dropDatasetFiles(page,[{relativePath:'tracked.zip',name:'tracked.zip',base64:fixtureZip(files).toString('base64')}]);
+    else await dropDatasetFiles(page,files);
+    await expect(page.locator('text=Source:')).toBeVisible({timeout:45000});
+    await page.keyboard.press('Tab');await page.getByRole('button',{name:'Export',exact:true}).hover();await page.getByRole('combobox',{name:'Format',exact:true}).selectOption('zip-images');
+    const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download COLMAP',exact:true}).click();
+    const archive=unzipSync(readFileSync((await(await pending).path())!)),points=parsePoints3DBinary(new Uint8Array(archive['sparse/0/points3D.bin']).buffer),images=parseImagesBinary(new Uint8Array(archive['sparse/0/images.bin']).buffer);
+    expect(points.get(1n)!.track).toEqual([{imageId:1,point2DIdx:0},{imageId:2,point2DIdx:0}]);
+    for(const image of images.values()){
+      expect(image.points2D[0].point3DId).toBe(1n);expect(image.points2D[0].xy[0]).toBeCloseTo(4.8);expect(image.points2D[0].xy[1]).toBeCloseTo(1.2);
+    }
+    for(const name of ['a.png','b.png'])expect(Buffer.from(archive['images/'+name])).toEqual(Buffer.from(files.find(file=>file.name===name)!.base64,'base64'));
+  });
+}
+
+for (const kind of ['ply','npz'] as const) {
+  test(`loads an explicit camera manifest with ${kind} geometry and retains the selected original photos`,async({page})=>{
+    await page.goto('/');const files=await cameraFixture(page,'nerf-blender'),base='https://selection.example.test/scene/';
+    let cloud:Buffer;
+    if(kind==='ply')cloud=Buffer.from('ply\nformat ascii 1.0\nelement vertex 2\nproperty float x\nproperty float y\nproperty float z\nend_header\n1 2 3\n4 5 6\n');
+    else{
+      const array=numpyFixture(4,3,[1,2,3,4,5,6,10,11,12,13,14,15]),length=new DataView(array.buffer).getUint16(8,true),header=new TextDecoder().decode(array.subarray(10,10+length));
+      array.set(new TextEncoder().encode(header.replace('(4, 3)','(2, 2, 3)').trimEnd().padEnd(length-1)+'\n'),10);
+      cloud=Buffer.from(zipSync({'pos.npy':array}));
+    }
+    files.push({relativePath:'scene/cloud.'+kind,name:'cloud.'+kind,base64:cloud.toString('base64')});
+    await page.route(base+'**',route=>{const file=files.find(f=>base+f.relativePath.slice(6)===route.request().url());return route.fulfill(file?{status:200,body:Buffer.from(file.base64,'base64')}:{status:404});});
+    const manifest={format:'colmapview-camera-dataset',version:1,metadataUrl:base+'transforms_train.json',
+      pointCloud:{url:base+'cloud.'+kind,format:kind,...(kind==='npz'?{array:'pos',frame:1}:{transform:[0,1,0,0,1,0,0,0,0,0,-1,0,0,0,0,1]})},...(kind==='npz'?{frameIndices:[1]}:{})};
+    await page.route('https://catalog.example.test/scene.json',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(manifest)}));
+    await page.goto('/?url='+encodeURIComponent('https://catalog.example.test/scene.json'));
+    await expect(page.locator('text=Source:')).toBeVisible({timeout:45000});
+    await page.keyboard.press('Tab');await page.getByRole('button',{name:'Export',exact:true}).hover();await page.getByRole('combobox',{name:'Format',exact:true}).selectOption('zip-images');
+    const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download COLMAP',exact:true}).click();
+    const archive=unzipSync(readFileSync((await(await pending).path())!)),points=parsePoints3DBinary(new Uint8Array(archive['sparse/0/points3D.bin']).buffer);
+    expect([...points.values()].map(p=>p.xyz)).toEqual(kind==='ply'?[[2,1,-3],[5,4,-6]]:[[10,11,12],[13,14,15]]);
+    expect(parseImagesBinary(new Uint8Array(archive['sparse/0/images.bin']).buffer).size).toBe(kind==='npz'?1:2);
+    expect(Boolean(archive['images/a.png'])).toBe(kind==='ply');expect(Buffer.from(archive['images/b.png'])).toEqual(Buffer.from(files.find(f=>f.name==='b.png')!.base64,'base64'));
+  });
+}
 
 for (const transport of ['folder','zip','url'] as const) {
   test(`imports visible embedded OpenSfM points and exports original photos from ${transport}`,async({page})=>{

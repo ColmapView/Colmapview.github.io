@@ -3,10 +3,11 @@ import { readCameraSourceFile } from '../dataset/importers/sourceAccess';
 import { MAX_CAMERA_METADATA_BYTES } from '../dataset/importers/types';
 import type { LoadZipUrlSourceDeps } from './urlLoaderZipSource';
 import { getHuggingFaceUrlFilePaths } from './urlLoaderHuggingFaceListing';
+import type { CameraDatasetManifest } from '../types/cameraDatasetManifest';
 
 export async function loadCameraUrlSource(url: string, deps: Pick<LoadZipUrlSourceDeps,
   'signal' | 'assertCurrent' | 'processFiles' | 'setSourceInfo' | 'setUrlProgress' | 'beforeSceneCommit'>,
-  metadataFile?: File): Promise<boolean> {
+  metadataFile?: File, manifest?: CameraDatasetManifest): Promise<boolean> {
   const originalUrl = new URL(url);
   deps.setUrlProgress({ percent: 10, message: 'Importing posed photos...' });
   const source={kind:'url' as const,baseUrl:new URL('.',originalUrl).href};
@@ -15,6 +16,7 @@ export async function loadCameraUrlSource(url: string, deps: Pick<LoadZipUrlSour
   const filePaths = await getHuggingFaceUrlFilePaths(source.baseUrl,deps.signal);
   const prepared = await prepareCameraDataset(filePaths ? {...source,filePaths} : source, {
     metadataPath: decodeURIComponent(originalUrl.pathname.split('/').pop()!), metadataFile:originalMetadata, signal: deps.signal,
+    ...(manifest && {pointCloud: manifest.pointCloud, tracksUrl: manifest.tracksUrl, frameIndices: manifest.frameIndices}),
   });
   deps.signal?.throwIfAborted(); deps.assertCurrent?.();
   if (!prepared) throw new Error('Unsupported camera dataset.');

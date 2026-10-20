@@ -14,6 +14,7 @@ import { appLogger } from '../utils/logger';
 import type { RigData } from '../types/rig';
 import { ReconstructionService, type ReconstructionSnapshot, type ReconstructionSource } from '../wasm/reconstructionService';
 import type { ReconstructionPhase } from '../wasm/reconstructionProtocol';
+import { detachUntrackedCloudObservations } from '../parsers/untrackedCloudObservations';
 
 export interface ColmapParserFiles {
   camerasFile: File;
@@ -129,6 +130,10 @@ export async function parseColmapFiles({
   if (cameraOnly) {
     for (const image of images.values()) { image.points2D = []; image.numPoints2D = 0; }
     addNotification('info', 'Camera-only model: no points3D file was supplied. Observations were omitted from the exported model.');
+  }
+  if (points3DFile.name.toLowerCase().endsWith('.ply')) {
+    const detached = detachUntrackedCloudObservations(images);
+    if (detached) addNotification('info', `Disconnected ${detached} source point references: generic XYZ PLY vertices have no COLMAP IDs.`);
   }
 
   if (skippedCameras.length > 0) {

@@ -6,6 +6,29 @@ large source files stay at their original public URLs. The existing format suppo
 COLMAP binary/text models, camera-only models and a camera model with an XYZ PLY;
 these layouts do not need a new manifest version.
 
+## Camera metadata and explicit companions
+
+For NeRF/Nerfstudio, DTU or other supported camera metadata, a separate JSON document can retain the original metadata URL while selecting a companion cloud:
+
+```json
+{
+  "format": "colmapview-camera-dataset",
+  "version": 1,
+  "metadataUrl": "https://data.example/pinned/scene/transforms.json",
+  "pointCloud": {
+    "url": "https://data.example/pinned/scene/3dgs_output/input.ply",
+    "format": "ply",
+    "transform": [0, 1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1]
+  }
+}
+```
+
+The optional transform is a finite row-major similarity from cloud coordinates into the world already used by the metadata. It changes XYZ only. It does not change camera poses or automatically apply Nerfstudio's `applied_transform` a second time. Omit it when the cloud already uses the metadata's world frame. Mesh faces and Gaussian properties are rejected. A generic PLY has no COLMAP point IDs: existing image feature coordinates are retained, but their old 3D references are disconnected instead of being joined to unrelated vertex numbers.
+
+For a numeric NPZ trajectory shaped `(frames, vertices, 3)`, use `"pointCloud": {"url": ".../trajectory.npz", "format": "npz", "array": "pos", "frame": 0}` and `"frameIndices": [0, 23, 46, 69]` to select the matching views in NeRF metadata. Indices refer to the original metadata array; their order becomes the exported camera order. This is an explicit static frame selection, without mixing times. Only the named float32/float64 C-order array is decoded, with ZIP size/CRC checks. Pickles and object arrays are rejected. NPZ and expanded arrays are bounded to 16 MiB; PLY sources to 64 MiB.
+
+An optional absolute HTTP(S) `tracksUrl` makes an OpenSfM observation sidecar required. Without it, conventional sibling tracks are optional; failures produce a diagnostic while retaining the source geometry. All metadata/media/cloud requests run in the browser and require source CORS access. Native COLMAP manifests above remain unchanged.
+
 ## Separate source folders
 
 For a Hub-hosted manifest, set `baseUrl` to its published asset directory and use

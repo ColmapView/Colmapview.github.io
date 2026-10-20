@@ -12,12 +12,14 @@ import { indexDtuMasks } from './dtuMaskPaths';
 import { findNerfstudioImageVariant, nerfstudioVariantPath } from './nerfstudioImageVariants';
 import { readCameraSourceFile } from './sourceAccess';
 import { readCompanionPointCloud } from './companionPointCloud';
+import type { ExplicitCameraPointCloud } from '../../types/cameraDatasetManifest';
+import { addOpenSfmTracks, readOpenSfmTracks } from './openSfmTracks';
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { CAMERA_IMAGE_EXTENSIONS,canonicalImageName,isCameraMetadataPath,isCameraImagePath,isAbsoluteResourceUrl,
   normalizeSourcePath,normalizeSourceIndex,parentPath,resolveIndexedImage,indexExtensionlessImages,resolveSourcePath,imageResourceUrl,
   commonSourceRoot,cameraSourceSceneScope,cameraMetadataSceneRoot } from './sourcePaths';
 import { requestCameraDatasetSelection,type SelectCameraDataset,type CameraDatasetCandidate } from './selection';
-import { importError,MAX_CAMERA_METADATA_BYTES,MAX_CAMERA_METADATA_CANDIDATES,
+import { importError,object,MAX_CAMERA_METADATA_BYTES,MAX_CAMERA_METADATA_CANDIDATES,
   type CameraDatasetSource,type CameraDatasetImportContext,type PreparedCameraDataset,type NormalizedCameraDataset,
   type ImportedImageBinding } from './types';
 
@@ -30,6 +32,9 @@ export interface PrepareCameraDatasetOptions {
   metadataFile?: File;
   signal?: AbortSignal;
   select?: SelectCameraDataset;
+  pointCloud?: ExplicitCameraPointCloud;
+  tracksUrl?: string;
+  frameIndices?: readonly number[];
 }
 
 function defaultCandidate(paths: readonly string[]): string|undefined {
@@ -100,6 +105,15 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
     const next=defaultCandidate([...remainingCandidates]);
     if (!next) return null;
     metadataPath=next;
+  }
+  if (options.frameIndices) {
+    const indices=options.frameIndices;
+    if (!isNerfTransforms(value) || !indices.length || new Set(indices).size!==indices.length
+      || indices.some(index=>!Number.isSafeInteger(index) || index<0 || index>= (value as {frames:unknown[]}).frames.length)) {
+      return importError('INVALID_METADATA','Frame selection requires unique valid indices into NeRF metadata.');
+    }
+    const original=value as Record<string,unknown> & {frames:unknown[]};
+    value={...original,frames:indices.map(index=>original.frames[index])};
   }
   let root=parentPath(metadataPath);
   if (isOpenSfm(value) && Array.isArray(value) && value.length > 1) {
@@ -270,9 +284,14 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
   }
   else if (gaussian) normalized=await normalizeGaussianCameraJson(value,resolve,signal);
   else if (bundler) normalized=await normalizeBundler(text,names,resolve,signal);
-  else if (isOpenSfm(value)) normalized=await normalizeOpenSfm(value,resolve,signal,component);
+  else if (isOpenSfm(value)) {
+    normalized=await normalizeOpenSfm(value,resolve,signal,component);
+    const tracks=await readOpenSfmTracks(source,metadataPath,options.tracksUrl,signal,normalized.diagnostics);
+    if (tracks) await addOpenSfmTracks(object(Array.isArray(value) ? value[component ?? 0] : value,'OpenSfM reconstruction'),normalized,await tracks.text(),signal);
+  }
   else if (isOpenMvg(value)) normalized=await normalizeOpenMvg(value,resolve,signal);
   else normalized=await normalizeNerfTransforms(value,resolve,signal);
+  if (options.tracksUrl && normalized.schema!=='opensfm') return importError('INVALID_METADATA','tracksUrl requires OpenSfM metadata.');
   if (source.kind!=='url' && nameRoot!==scope) {
     const bindings=new Map<string,ImportedImageBinding>(),seen=new Set<string>();
     for (const image of normalized.images.values()) {
@@ -285,7 +304,8 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
   }
   root=nameRoot;
   signal?.throwIfAborted();
-  const pointCloud = nerf ? await readCompanionPointCloud(source, metadataPath, global, normalized.diagnostics, signal) : undefined;
+  if (options.pointCloud && normalized.points3D?.size) return importError('INVALID_POINT_CLOUD', 'A companion cannot replace embedded source geometry.');
+  const pointCloud = nerf || options.pointCloud ? await readCompanionPointCloud(source, metadataPath, global, normalized.diagnostics, signal, options.pointCloud) : undefined;
   const modelFiles=new Map<string,File>([
     ['sparse/0/cameras.bin',new File([writeCamerasBinary(normalized.cameras)],'cameras.bin')],
     ['sparse/0/images.bin',new File([writeImagesBinary(normalized.images)],'images.bin')],

@@ -307,8 +307,9 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
     if (isManifestUrl(normalizedUrl)) {
       const document = await fetchUrlManifest(normalizedUrl, load, true);
       if ('kind' in document && document.kind === 'camera-dataset') {
-        const settings = settingsBesideOnce(normalizedUrl, load); settings.start();
-        return loadCameraUrlSource(normalizedUrl, { ...load, beforeSceneCommit: settings.beforeSceneCommit }, document.metadataFile);
+        const metadataUrl = document.manifest?.metadataUrl ?? normalizedUrl;
+        const settings = settingsBesideOnce(metadataUrl, load); settings.start();
+        return loadCameraUrlSource(metadataUrl, { ...load, beforeSceneCommit: settings.beforeSceneCommit }, document.metadataFile, document.manifest);
       }
       manifest = document as ColmapManifest;
       logInfo(getManifestLoadedLogMessage(manifest));

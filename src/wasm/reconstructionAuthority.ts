@@ -4,6 +4,7 @@ import { parseImagesBinary, parseImagesText } from '../parsers/images';
 import { isPhotometricImagesText, PHOTOMETRIC_COLMAP_WARNING } from '../parsers/photometricColmap';
 import { parsePoints3DBinary, parsePoints3DText } from '../parsers/points3d';
 import { parsePointCloudPlyBuffer } from '../parsers/plyPointCloud';
+import { detachUntrackedCloudObservations } from '../parsers/untrackedCloudObservations';
 import { parseRigsBinary, parseRigsText } from '../parsers/rigs';
 import { parseFramesBinary, parseFramesText } from '../parsers/frames';
 import { computeImageStats, computeImageStatsFromWasm } from '../parsers/imageStats';
@@ -129,6 +130,10 @@ export class ReconstructionAuthority {
     if (files.cameraOnly) {
       for (const image of images.values()) { image.points2D = []; image.numPoints2D = 0; }
       this.warnings.push('Camera-only model: no points3D file was supplied. Observations were omitted from the exported model.');
+    }
+    if (files.points3DFile.name.toLowerCase().endsWith('.ply')) {
+      const detached = detachUntrackedCloudObservations(images);
+      if (detached) this.warnings.push(`XYZ PLY has no COLMAP point IDs. Preserved feature coordinates and disconnected ${detached.toLocaleString()} source 3D references; no matches were inferred.`);
     }
     if (!rigData && files.rigsFile && files.framesFile) {
       try {

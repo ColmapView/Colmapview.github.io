@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.6] - 2026-10-20
+
+### Added
+
+- Explicit camera metadata manifests with nonstandard XYZ cloud paths, checked world transforms, and bounded numeric NPZ frame selections with matching NeRF camera subsets.
+- OpenSfM native track sidecars, preserving source feature coordinates, reciprocal tracks, untriangulated observations and computed pixel errors.
+
+### Fixed
+
+- Frame the point cloud together with camera positions on initial load and reset.
+- Disconnect source image references when loading generic XYZ PLY vertices, whose IDs do not identify the original COLMAP landmarks. Preserve the feature coordinates and native model behavior.
+
 ## [0.19.5] - 2026-10-20
 
 ### Fixed

@@ -74,16 +74,18 @@ export function buildSceneBounds(
 
   const images = Array.from(reconstruction.images.values());
 
-  if (images.length > 0) {
-    return buildCameraPositionBounds(images.map(getImageWorldPosition));
-  }
-
-  const wasmBounds = buildWasmPointBounds(wasmReconstruction);
-  if (wasmBounds) {
-    return wasmBounds;
-  }
-
-  return buildPointMapBounds(reconstruction) ?? DEFAULT_SCENE_BOUNDS;
+  const cameras = images.length ? buildCameraPositionBounds(images.map(getImageWorldPosition)) : null;
+  const points = buildWasmPointBounds(wasmReconstruction) ?? buildPointMapBounds(reconstruction);
+  if (!cameras) return points ?? DEFAULT_SCENE_BOUNDS;
+  if (!points) return cameras;
+  // Enclose both spheres: camera trajectories can be far from the subject they see.
+  const delta = points.center.map((value, axis) => value - cameras.center[axis]);
+  const distance = Math.hypot(...delta);
+  if (cameras.radius >= distance + points.radius) return cameras;
+  if (points.radius >= distance + cameras.radius) return points;
+  const radius = (distance + cameras.radius + points.radius) / 2;
+  const shift = distance ? (radius - cameras.radius) / distance : 0;
+  return {center: cameras.center.map((value, axis) => value + shift * delta[axis]) as [number, number, number], radius};
 }
 
 export function getInitialSceneCameraPosition(
@@ -225,7 +227,7 @@ function buildCameraPositionBounds(positions: Array<{ x: number; y: number; z: n
   const rangeX = percentile(sortedX, 95) - percentile(sortedX, 5);
   const rangeY = percentile(sortedY, 95) - percentile(sortedY, 5);
   const rangeZ = percentile(sortedZ, 95) - percentile(sortedZ, 5);
-  const radius = Math.max(rangeX, rangeY, rangeZ, 0.001) / 2;
+  const radius = Math.max(Math.hypot(rangeX, rangeY, rangeZ) / 2, 0.001);
 
   return { center, radius };
 }
@@ -239,7 +241,7 @@ function buildWasmPointBounds(wasmReconstruction: SceneWasmBoundsSource | null |
     (bbox.minY + bbox.maxY) / 2,
     (bbox.minZ + bbox.maxZ) / 2,
   ];
-  const radius = Math.max(
+  const radius = Math.hypot(
     bbox.maxX - bbox.minX,
     bbox.maxY - bbox.minY,
     bbox.maxZ - bbox.minZ
@@ -249,7 +251,9 @@ function buildWasmPointBounds(wasmReconstruction: SceneWasmBoundsSource | null |
 
 function getWasmBoundingBox(wasmReconstruction: SceneWasmBoundsSource | null | undefined): BoundingBox | null {
   if (!wasmReconstruction?.hasPoints()) return null;
-  return wasmReconstruction.getBoundingBox();
+  const bbox = wasmReconstruction.getBoundingBox();
+  return bbox && Object.values(bbox).every(Number.isFinite)
+    && bbox.minX <= bbox.maxX && bbox.minY <= bbox.maxY && bbox.minZ <= bbox.maxZ ? bbox : null;
 }
 
 function buildPointMapBounds(reconstruction: Reconstruction): SceneBounds | null {
@@ -262,6 +266,7 @@ function buildPointMapBounds(reconstruction: Reconstruction): SceneBounds | null
   let minZ = Infinity, maxZ = -Infinity;
 
   for (const point of reconstruction.points3D.values()) {
+    if (!point.xyz.every(Number.isFinite)) continue;
     minX = Math.min(minX, point.xyz[0]);
     maxX = Math.max(maxX, point.xyz[0]);
     minY = Math.min(minY, point.xyz[1]);
@@ -270,12 +275,13 @@ function buildPointMapBounds(reconstruction: Reconstruction): SceneBounds | null
     maxZ = Math.max(maxZ, point.xyz[2]);
   }
 
+  if (!Number.isFinite(minX)) return null;
   const center: [number, number, number] = [
     (minX + maxX) / 2,
     (minY + maxY) / 2,
     (minZ + maxZ) / 2,
   ];
-  const radius = Math.max(maxX - minX, maxY - minY, maxZ - minZ) / 2;
+  const radius = Math.max(Math.hypot(maxX - minX, maxY - minY, maxZ - minZ) / 2, 0.001);
 
   return { center, radius };
 }
