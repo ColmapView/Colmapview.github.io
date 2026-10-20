@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Use the Hugging Face repository name as the dataset title and allow public uploads without a license selection.
+
 ## [0.19.11] - 2026-10-20
 
 ### Fixed

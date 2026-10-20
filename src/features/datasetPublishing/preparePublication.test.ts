@@ -170,7 +170,7 @@ describe('publication snapshot preparation', () => {
       upload: vi.fn().mockImplementation(async () => (++commit).toString(16).padStart(40, '0')),
       reconcile: vi.fn().mockResolvedValue(null), files: vi.fn(), request: vi.fn(), assertVisibility: vi.fn().mockResolvedValue(undefined) };
     const controller = createPublicationController(client, vi.fn().mockResolvedValue(undefined));
-    await controller.publish('owner', { name: 'scene', title: 'Scene', description: '', license: 'cc0-1.0', visibility: 'public' },
+    await controller.publish('owner', { name: 'scene', description: '', license: 'cc0-1.0', visibility: 'public' },
       signal => preparePublication(source, signal, deps()));
     expect(controller.getSnapshot()).toMatchObject({ phase: 'completed', error: undefined });
     const batches = vi.mocked(client.upload).mock.calls.map(call => call[1].map(file => file.path));
@@ -190,7 +190,7 @@ describe('publication snapshot preparation', () => {
     expect(asset.size).toBe(reviewed.size);
     expect(await asset.open(new AbortController().signal)).toBe(reviewed);
     const inventory = prepared.assets.map(asset => ({ path: asset.path, size: asset.size! }));
-    const files = publicationMetadata(prepared, { name: 'scene', title: 'Scene', description: '', license: 'cc0-1.0', visibility: 'public' }, 'owner/scene', 'd'.repeat(40), inventory);
+    const files = publicationMetadata(prepared, { name: 'scene', description: '', license: 'cc0-1.0', visibility: 'public' }, 'owner/scene', 'd'.repeat(40), inventory);
     const readme = await files.find(file => file.path === 'README.md')!.content.text();
     expect(readme).toContain(`![Dataset preview](https://huggingface.co/datasets/owner/scene/resolve/${'d'.repeat(40)}/colmapview-preview.png)`);
     expect(readme).not.toContain('/resolve/main/');
@@ -416,7 +416,7 @@ describe('publication snapshot preparation', () => {
 
   it('pins the manifest to D while the README links the viewer to the dataset page', async () => {
     const prepared = await preparePublication(input(), new AbortController().signal, deps());
-    const files = publicationMetadata(prepared, { name: 'scene', title: 'Scene', description: 'Example', license: 'cc-by-4.0', visibility: 'public' }, 'owner/scene', 'd'.repeat(40), []);
+    const files = publicationMetadata(prepared, { name: 'scene', description: 'Example', license: 'cc-by-4.0', visibility: 'public' }, 'owner/scene', 'd'.repeat(40), []);
     const manifest = JSON.parse(await files.find(file => file.path === 'colmapview.json')!.content.text());
     expect(manifest.baseUrl).toContain('/resolve/' + 'd'.repeat(40) + '/');
     expect(manifest.viewerStatePath).toBe('colmapview.yaml');

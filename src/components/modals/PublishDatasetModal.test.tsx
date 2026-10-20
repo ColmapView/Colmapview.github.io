@@ -44,7 +44,6 @@ describe('PublishDatasetModal', () => {
     expect(screen.queryByRole('checkbox', { name: 'Shorten URL' })).toBeNull();
     expect(screen.queryByText(/Public uploads receive|Includes .*images/)).toBeNull();
     fireEvent.change(screen.getByLabelText('Repository name'), { target: { value: 'scene' } });
-    fireEvent.change(screen.getByLabelText('Dataset title'), { target: { value: 'Scene' } });
     fireEvent.change(screen.getByLabelText('Dataset license'), { target: { value: 'cc0-1.0' } });
     fireEvent.click(screen.getByRole('button', { name: 'Publish public dataset' }));
     await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('publisher',
@@ -64,7 +63,6 @@ describe('PublishDatasetModal', () => {
     expect(screen.getByText(/Lossy, full resolution/)).toBeVisible();
     expect(screen.queryByText(/Original image metadata is retained/)).toBeNull();
     fireEvent.change(screen.getByLabelText('Repository name'), { target: { value: 'scene' } });
-    fireEvent.change(screen.getByLabelText('Dataset title'), { target: { value: 'Scene' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
     await waitFor(() => expect(actions.publishDataset).toHaveBeenLastCalledWith('publisher',
       expect.objectContaining({ format: 'zip', imageFormat: 'jpeg' }), expect.any(File)));
@@ -81,7 +79,6 @@ describe('PublishDatasetModal', () => {
     expect(screen.getByRole('combobox', { name: 'Access' })).toHaveValue('public');
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: visibility } });
     fireEvent.change(screen.getByLabelText('Repository name'), { target: { value: 'scene' } });
-    fireEvent.change(screen.getByLabelText('Dataset title'), { target: { value: 'Scene' } });
     if (visibility === 'public') fireEvent.change(screen.getByLabelText('Dataset license'), { target: { value: 'cc0-1.0' } });
     fireEvent.click(screen.getByRole('button', { name: visibility === 'private' ? 'Save private dataset' : 'Publish public dataset' }));
     await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('publisher',
@@ -141,26 +138,24 @@ describe('PublishDatasetModal', () => {
     expect(screen.queryByRole('checkbox', { name: 'Shorten URL' })).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: 'List on Hub' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review dataset' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Dataset title')).not.toBeInTheDocument();
     expect(screen.getByText(/public, discoverable dataset/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Repository name'), { target: { value: 'scene' } });
-    fireEvent.change(screen.getByLabelText('Dataset title'), { target: { value: 'Current scene' } });
     fireEvent.change(screen.getByLabelText('Dataset license'), { target: { value: 'cc0-1.0' } });
     fireEvent.click(screen.getByRole('button', { name: 'Publish public dataset' }));
     await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('publisher',
-      expect.objectContaining({ name: 'scene', title: 'Current scene', license: 'cc0-1.0', visibility: 'public' }), expect.any(File)));
+      expect.objectContaining({ name: 'scene', license: 'cc0-1.0', visibility: 'public' }), expect.any(File)));
   });
 
-  it('saves privately when selected without requiring a public license', async () => {
+  it.each(['public', 'private'] as const)('allows a %s upload with no license selected', async visibility => {
     render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
-    expect(screen.getByRole('combobox', { name: 'Access' })).toHaveValue('private');
-    expect(screen.queryByText(/public, discoverable dataset/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: 'List on Hub' })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Repository name'), { target: { value: 'private-scene' } });
-    fireEvent.change(screen.getByLabelText('Dataset title'), { target: { value: 'Private scene' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save private dataset' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: visibility } });
+    expect(screen.getByRole('combobox', { name: 'Dataset license' })).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'No license specified' })).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Repository name'), { target: { value: 'scene' } });
+    fireEvent.click(screen.getByRole('button', { name: visibility === 'private' ? 'Save private dataset' : 'Publish public dataset' }));
     await waitFor(() => expect(actions.publishDataset).toHaveBeenCalledWith('publisher',
-      expect.objectContaining({ visibility: 'private', license: '' }), expect.any(File)));
+      expect.objectContaining({ name: 'scene', visibility, license: '' }), expect.any(File)));
   });
 
   it('keeps the editable form with the error when nothing reached Hugging Face', () => {
@@ -232,8 +227,8 @@ describe('PublishDatasetModal', () => {
 
   it('strips control characters as you type and limits the custom license fields like the Hub', () => {
     render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText('Dataset title'), { target: { value: 'Sce\u0007ne' } });
-    expect(screen.getByLabelText('Dataset title')).toHaveValue('Scene');
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Sce\u0007ne\nnotes' } });
+    expect(screen.getByLabelText('Description')).toHaveValue('Scene\nnotes');
     fireEvent.change(screen.getByLabelText('Dataset license'), { target: { value: 'other' } });
     expect(screen.getByLabelText('Custom license name')).toHaveAttribute('maxLength', '160');
     expect(screen.getByLabelText('Custom license URL')).toHaveAttribute('maxLength', '2048');

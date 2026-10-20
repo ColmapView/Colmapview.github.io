@@ -30,7 +30,9 @@ export interface PublicationAssetSummary {
   preview: boolean;
 }
 export interface PublicationDetails {
-  name: string; title: string; description: string; license: string;
+  /** Repository name, also used as the dataset title. */
+  name: string;
+  description: string; license: string;
   visibility: PublicationVisibility;
   format?: PublicationFormat;
   imageFormat?: PublicationImageFormat;

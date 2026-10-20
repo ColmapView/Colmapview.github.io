@@ -49,11 +49,11 @@ describe('an upload its controller refuses keeps the previous Hub link and share
     const hub = await hubWithLink('huggingFace');
     const publication = createPublicationController({} as HubClient, vi.fn());
     unbind = bindHubPublication(publication, hub, state => ({ uploading: isPublishing(state.phase) }));
-    const details: PublicationDetails = { name: 'scene', title: 'Scene', description: '', license: 'mit', visibility: 'public' };
+    const details: PublicationDetails = { name: 'scene', description: '', license: 'mit', visibility: 'public' };
     const work = vi.fn(never as () => Promise<PreparedPublication>);
     // A validation error returns the form to idle with the error.
     await hub.prepare({ title: 'Bad' }, { access: 'public', preview, source }, () => publication.publish('not a user!', details, work));
-    await hub.prepare({ title: 'Bad' }, { access: 'public', preview, source }, () => publication.publish('user', { ...details, title: ' ' }, work));
+    await hub.prepare({ title: 'Bad' }, { access: 'public', preview, source }, () => publication.publish('user', { ...details, name: ' ' }, work));
     expect(publication.getSnapshot().error).toBeTruthy();
     expectPreviousLink(hub);
     // An upload already running refuses another.

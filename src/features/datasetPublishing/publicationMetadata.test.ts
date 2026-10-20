@@ -39,10 +39,20 @@ describe('publication receipt', () => {
 });
 
 describe('dataset card', () => {
+  it('uses the trimmed repository name as the README and manifest title', async () => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const checked = validatePublicationDetails({ name: '  scene_01  ', description: '', license: '', visibility: 'public' });
+    const files = publicationMetadata(prepared([]), checked, 'owner/scene_01', DATA_COMMIT, []);
+    const readme = await files.find(file => file.path === 'README.md')!.content.text();
+    expect(readme).toContain('\n# scene\\_01\n');
+    const manifest = JSON.parse(await files.find(file => file.path === 'colmapview.json')!.content.text());
+    expect(manifest.name).toBe('scene_01');
+  });
+
   it('describes JPEG copies accurately and rejects the conversion for loose Folder uploads', async () => {
     vi.stubGlobal('Blob', NodeBlob);
     const input = prepared([]); input.imageFormat = 'jpeg'; input.archive = { path: 'dataset.zip', size: 100, files: [] };
-    const details = { name: 'scene', title: 'Scene', description: '', license: '', visibility: 'private' as const,
+    const details = { name: 'scene', description: '', license: '', visibility: 'private' as const,
       format: 'zip' as const, imageFormat: 'jpeg' as const };
     expect(validatePublicationDetails(details).imageFormat).toBe('jpeg');
     expect(() => validatePublicationDetails({ ...details, format: 'folder' })).toThrow('requires ZIP');
@@ -57,7 +67,7 @@ describe('dataset card', () => {
     vi.stubGlobal('Blob', NodeBlob);
     const input = prepared(['splats/scene.sog']);
     input.archive = { path: 'dataset.zip', size: 100, files: [{ path: 'masks/photo.jpg.png', size: 4 }] };
-    const details = { name: 'scene', title: 'Scene', description: '', license: '', visibility: 'private' as const, format: 'zip' as const };
+    const details = { name: 'scene', description: '', license: '', visibility: 'private' as const, format: 'zip' as const };
     const inventory = [{ path: 'dataset.zip', size: 100 }];
     const files = publicationMetadata(input, details, 'owner/scene', DATA_COMMIT, inventory);
     expect(files.map(file => file.path)).toEqual(['README.md', 'colmapview-inventory.json']);
@@ -72,7 +82,7 @@ describe('dataset card', () => {
 
   it('links the viewer to the dataset page, the same clean link the dialog shares', async () => {
     vi.stubGlobal('Blob', NodeBlob);
-    const checked = validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: 'cc-by-4.0', visibility: 'public' });
+    const checked = validatePublicationDetails({ name: 'scene', description: '', license: 'cc-by-4.0', visibility: 'public' });
     const readme = await publicationMetadata(prepared([]), checked, 'owner/scene', DATA_COMMIT, [])
       .find(file => file.path === 'README.md')!.content.text();
     const link = 'https://viewer.example/?url=https://huggingface.co/datasets/owner/scene';
@@ -88,24 +98,24 @@ describe('dataset card', () => {
 describe('dataset card license', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('allows a private save without granting a license and explains recipient access', async () => {
+  it.each(['public', 'private'] as const)('allows a %s upload without granting a license', async visibility => {
     vi.stubGlobal('Blob', NodeBlob);
-    const checked = validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: '', visibility: 'private' });
+    const checked = validatePublicationDetails({ name: 'scene', description: '', license: '', visibility });
     const readme = await publicationMetadata(prepared([]), checked, 'owner/scene', DATA_COMMIT, []).find(file => file.path === 'README.md')!.content.text();
-    expect(readme).not.toMatch(/^license:/m);
-    expect(readme).toContain('Private dataset. Sign in to Hugging Face');
-    const receipt = publicationReceipt(prepared([]), 'owner/scene', DATA_COMMIT, 'e'.repeat(40), 'private');
-    expect(receipt.visibility).toBe('private');
+    expect(readme).not.toMatch(/^license(?:_name|_link)?:/m);
+    expect(readme.includes('Private dataset. Sign in to Hugging Face')).toBe(visibility === 'private');
+    const receipt = publicationReceipt(prepared([]), 'owner/scene', DATA_COMMIT, 'e'.repeat(40), visibility);
+    expect(receipt.visibility).toBe(visibility);
     expect(receipt.viewerUrl).toBe('https://viewer.example/?url=https://huggingface.co/datasets/owner/scene');
   });
 
-  it('still requires a license for a public dataset', () => {
-    expect(() => validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: '', visibility: 'public' })).toThrow('Choose the license');
+  it.each(['public', 'private'] as const)('rejects an unknown license for a %s dataset', visibility => {
+    expect(() => validatePublicationDetails({ name: 'scene', description: '', license: 'unknown', visibility })).toThrow('Choose the license');
   });
 
   it.each(['cc-by-nc-4.0', 'cc-by-nc-sa-4.0', 'cc-by-nd-4.0', 'cc-by-nc-nd-4.0'])('publishes the %s license identifier', async license => {
     vi.stubGlobal('Blob', NodeBlob);
-    const checked = validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license, visibility: 'public' });
+    const checked = validatePublicationDetails({ name: 'scene', description: '', license, visibility: 'public' });
     const readme = publicationMetadata(prepared([]), checked, 'owner/scene', DATA_COMMIT, []).find(file => file.path === 'README.md')!;
     expect(await readme.content.text()).toContain(`license: ${license}\n`);
   });
@@ -194,7 +204,7 @@ describe('license names, links and form text rules', () => {
   });
 
   it('caps a custom license name at 160 characters and its URL at 2048, like the Hub', () => {
-    const details = { name: 'scene', title: 'Scene', description: '', license: 'other', visibility: 'public' as const, licenseUrl: 'https://example.com/l' };
+    const details = { name: 'scene', description: '', license: 'other', visibility: 'public' as const, licenseUrl: 'https://example.com/l' };
     expect(() => validatePublicationDetails({ ...details, licenseName: 'L'.repeat(160) })).not.toThrow();
     expect(() => validatePublicationDetails({ ...details, licenseName: 'L'.repeat(161) })).toThrow('Shorten the custom license name to 160 characters and its URL to 2,048.');
     expect(() => validatePublicationDetails({ ...details, licenseName: 'Custom', licenseUrl: `https://example.com/${'a'.repeat(2048)}` }))
@@ -205,7 +215,7 @@ describe('license names, links and form text rules', () => {
     const licenseUrl = `https://example.com/${'€'.repeat(300)}`;
     expect(licenseUrl.length).toBeLessThanOrEqual(2048);
     expect(new URL(licenseUrl).href.length).toBeGreaterThan(2048);
-    expect(() => validatePublicationDetails({ name: 'scene', title: 'Scene', description: '', license: 'other', visibility: 'public', licenseName: 'Custom', licenseUrl }))
+    expect(() => validatePublicationDetails({ name: 'scene', description: '', license: 'other', visibility: 'public', licenseName: 'Custom', licenseUrl }))
       .toThrow('Shorten the custom license name to 160 characters and its URL to 2,048.');
   });
 });

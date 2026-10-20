@@ -76,7 +76,7 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible({ timeout: 30000 });
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
-    await dialog.getByLabel('Dataset title', { exact: true }).fill('Browser test scene');
+    await expect(dialog.getByLabel('Dataset title', { exact: true })).toHaveCount(0);
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc-by-4.0');
     await expect(dialog.getByRole('combobox', { name: 'Access' })).toHaveValue('public');
     await expect(dialog.getByRole('checkbox', { name: 'Shorten URL', exact: true })).toHaveCount(0);
@@ -104,7 +104,7 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hub.writes).toEqual(completedWrites);
     const requests = hubRequests.get(page)!;
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ title: 'Browser test scene',
+    expect(requests[0]).toMatchObject({ title: 'scene',
       license: { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' } });
     expect(requests[0]).not.toHaveProperty('listed');
     expect(requests[0]).not.toHaveProperty('access');
@@ -139,11 +139,13 @@ test.describe('Hugging Face dataset publication', () => {
     if (browserName === 'chromium') await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(shortUrl);
     else await expect(sharePanel.getByRole('button', { name: 'Copied!', exact: true })).toBeVisible();
     const manifest = JSON.parse(hub.files.get('colmapview.json')!.toString());
+    expect(manifest.name).toBe('scene');
     expect(manifest.baseUrl).not.toContain('/main/');
     expect(manifest.viewerStatePath).toBe('colmapview.yaml');
     expect(hub.files.has('colmapview-state.json')).toBe(false);
     expect(hub.files.get('colmapview.yaml')!.toString()).toContain('background_color:');
     const readme = hub.files.get('README.md')!.toString();
+    expect(readme).toContain('\n# scene\n');
     const preview = hub.files.get('colmapview-preview.png')!;
     expect(preview.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     expect(readme).toContain(`![Dataset preview](${manifest.baseUrl}colmapview-preview.png)`);
@@ -200,8 +202,6 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
-    await dialog.getByLabel('Dataset title', { exact: true }).fill('Complete dataset');
-    await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
     await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).toHaveCount(0);
     await dialog.getByRole('combobox', { name: 'Access' }).selectOption('private');
     await expect(dialog.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.', { exact: true })).toBeVisible();
@@ -285,8 +285,7 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
-    await dialog.getByLabel('Dataset title', { exact: true }).fill('Public scene');
-    await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
+    await expect(dialog.getByLabel('Dataset license', { exact: true })).toHaveValue('');
     await dialog.getByRole('combobox', { name: 'Access' }).selectOption('public');
     await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).toHaveCount(0);
     await dialog.getByRole('combobox', { name: 'Format' }).selectOption('zip');
@@ -303,6 +302,11 @@ test.describe('Hugging Face dataset publication', () => {
     expect(hubRequests.get(page)).toHaveLength(2);
     const requests = hubRequests.get(page)!;
     expect(requests[0]).not.toHaveProperty('access');
+    expect(requests[0].title).toBe('scene');
+    expect(requests[0]).not.toHaveProperty('license');
+    const readme = hub.files.get('README.md')!.toString();
+    expect(readme).toContain('\n# scene\n');
+    expect(readme).not.toMatch(/^license(?:_name|_link)?:/m);
     const archive = unzipSync(hub.files.get('dataset.zip')!);
     const paths = Object.keys(archive);
     for (const path of paths.filter(path => path.startsWith('images/'))) expect([...archive[path].subarray(0, 2)]).toEqual([0xff, 0xd8]);
@@ -331,7 +335,6 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
-    await dialog.getByLabel('Dataset title', { exact: true }).fill('Taken name');
     await dialog.getByLabel('Dataset license', { exact: true }).selectOption('cc0-1.0');
     await dialog.getByRole('combobox', { name: 'Access' }).selectOption('public');
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();

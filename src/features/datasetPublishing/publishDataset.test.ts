@@ -9,7 +9,7 @@ import { downloadRemoteFile } from './downloadRemoteFile';
 import { MAX_BUFFERED_PUBLICATION_FILE_BYTES, MAX_PUBLICATION_BATCH_BYTES, MAX_PUBLICATION_BATCH_FILES, type PreparedPublication } from './types';
 import { createIdentityEuler } from '../../utils/sim3dTransforms';
 
-const details = { name: 'scene', title: 'Scene', description: 'Test dataset', license: 'cc-by-4.0', visibility: 'public' as const };
+const details = { name: 'scene', description: 'Test dataset', license: 'cc-by-4.0', visibility: 'public' as const };
 function fixture(count = 3): PreparedPublication {
   return { operationId: 'test-operation', sourceKey: 'source', modelRevision: 1, counts: { cameras: 1, images: 1, points: 1 },
     imageNameToPath: {}, splatPaths: [], viewerBaseUrl: 'https://viewer.example/',

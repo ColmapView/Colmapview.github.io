@@ -64,9 +64,8 @@ export function validatePublicationDetails(details: PublicationDetails): Publica
   if (details.imageFormat === 'jpeg' && details.format !== 'zip') throw new HfError('JPEG image conversion requires ZIP archive format.');
   if (!['private', 'public'].includes(details.visibility)) throw new HfError('Choose private or public access for this dataset.');
   const name = validateRepositoryName(details.name);
-  const title = details.title.trim();
-  if (!title || title.length > 200 || details.description.length > 10_000) throw new HfError('Enter a title of 1–200 characters and a description under 10,000 characters.');
-  if (!(details.visibility === 'private' && details.license === '') && !PUBLICATION_LICENSES.some(license => license.id === details.license)) {
+  if (details.description.length > 10_000) throw new HfError('Keep the description to 10,000 characters or fewer.');
+  if (details.license !== '' && !PUBLICATION_LICENSES.some(license => license.id === details.license)) {
     throw new HfError('Choose the license you are authorized to use for this dataset.');
   }
   if (details.license === 'other') {
@@ -77,7 +76,7 @@ export function validatePublicationDetails(details: PublicationDetails): Publica
       throw new HfError(`Shorten the custom license name to ${PUBLICATION_LICENSE_NAME_LIMIT} characters and its URL to ${PUBLICATION_LICENSE_URL_LIMIT.toLocaleString('en-US')}.`);
     }
   }
-  return { ...details, name, title };
+  return { ...details, name };
 }
 
 export function publicationManifest(prepared: PreparedPublication, repoId: string, dataCommit: string, title: string): ColmapManifest {
@@ -119,7 +118,7 @@ export function publicationMetadata(prepared: PreparedPublication, details: Publ
     // Not a tabular dataset: without this, Hugging Face converts images/ to Parquet for its table viewer.
     viewer: false,
   }, { lineWidth: -1 });
-  const readme = `---\n${card}---\n\n# ${markdown(details.title)}\n\n${markdown(details.description)}\n\n`
+  const readme = `---\n${card}---\n\n# ${markdown(details.name)}\n\n${markdown(details.description)}\n\n`
     + (prepared.previewPath ? `![Dataset preview](${datasetFileUrl(repoId, dataCommit, prepared.previewPath)})\n\n` : '')
     + `[Open in ColmapView](${viewerLink})\n\n`
     + `Viewer link: <${viewerLink}>\n\n`
@@ -136,7 +135,7 @@ export function publicationMetadata(prepared: PreparedPublication, details: Publ
     + `Dataset files are pinned to revision ${dataCommit}. See colmapview-inventory.json for filenames and sizes.\n`;
   const files: Record<string, string> = {
     'README.md': readme,
-    ...(!prepared.archive ? { 'colmapview.json': JSON.stringify(publicationManifest(prepared, repoId, dataCommit, details.title), null, 2) } : {}),
+    ...(!prepared.archive ? { 'colmapview.json': JSON.stringify(publicationManifest(prepared, repoId, dataCommit, details.name), null, 2) } : {}),
     'colmapview-inventory.json': JSON.stringify({ version: 1, operationId: prepared.operationId,
       viewerVersion: prepared.viewerState.viewerVersion, dataCommit, counts: prepared.counts, files: inventory,
       ...(prepared.archive ? { archive: prepared.archive } : {}) }, null, 2),

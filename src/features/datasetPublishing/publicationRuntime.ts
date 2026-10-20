@@ -29,7 +29,7 @@ onPublicationSourceChange(change => {
 });
 
 export function publishCurrentDataset(username: string, details: PublicationDetails, preview: File): Promise<void> {
-  return hubPublications.huggingFace.prepare({ title: details.title, description: details.description, license: publicationLicenseInfo(details) },
+  return hubPublications.huggingFace.prepare({ title: details.name.trim(), description: details.description, license: publicationLicenseInfo(details) },
     { access: details.visibility === 'public' ? 'public' : 'private', preview, capture: captureCurrentView, source: getHubSource() },
     () => publication.publish(username, details, async (signal, progress) => {
       const input = capturePublicationInput();

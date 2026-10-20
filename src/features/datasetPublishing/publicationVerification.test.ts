@@ -54,7 +54,7 @@ async function setupZip(visibility: PublicationVisibility, corruptInventory = fa
   const inventory = zipped.assets.map(asset => ({ path: asset.path, size: asset.size! }));
   const blobs = new Map<string, Blob>();
   for (const asset of zipped.assets) blobs.set(asset.path, await asset.open(signal));
-  for (const file of publicationMetadata(zipped, { name: 'scene', title: 'Scene', description: '', license: visibility === 'public' ? 'cc0-1.0' : '', visibility },
+  for (const file of publicationMetadata(zipped, { name: 'scene', description: '', license: visibility === 'public' ? 'cc0-1.0' : '', visibility },
     repoId, dataCommit, inventory)) blobs.set(file.path, file.content);
   if (corruptInventory) {
     const document = JSON.parse(await blobs.get('colmapview-inventory.json')!.text());

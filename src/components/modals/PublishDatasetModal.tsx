@@ -24,7 +24,6 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   const id = useId();
   const previewInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState('');
-  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [license, setLicense] = useState('');
   const [licenseName, setLicenseName] = useState('');
@@ -45,7 +44,7 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
   const disclosure = hubDisclosure(hub.enabled, visibility, selectedImageFormat === 'original');
   const connected = auth.status === 'connected' && hfAuth.canPublish?.() !== false;
   useFocusWhenBecomesTrue(connected, `${id}-access`);
-  const details = { name, title, description, license, licenseName, licenseUrl, visibility, format, imageFormat: selectedImageFormat };
+  const details = { name, description, license, licenseName, licenseUrl, visibility, format, imageFormat: selectedImageFormat };
 
   const publishNow = async () => {
     setFormError(null);
@@ -118,11 +117,9 @@ export function PublishDatasetModal({ isOpen, onClose }: { isOpen: boolean; onCl
               </span>
               <input id={`${id}-name`} className={fieldClass} value={name} maxLength={96} onChange={event => setName(event.target.value)} autoComplete="off" />
             </div>
-            <label htmlFor={`${id}-dataset-title`}>Dataset title</label>
-            <input id={`${id}-dataset-title`} className={fieldClass} value={title} maxLength={200} onChange={event => setTitle(stripControlCharacters(event.target.value))} />
             <label htmlFor={`${id}-license`}>Dataset license</label>
             <select id={`${id}-license`} className={`${inputStyles.select} ${inputStyles.selectSizes.sm} w-full min-w-0`} value={license} onChange={event => setLicense(event.target.value)}>
-              <option value="">{visibility === 'private' ? 'No license specified' : 'Choose a license you can grant'}</option>
+              <option value="">No license specified</option>
               {PUBLICATION_LICENSES.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
             </select>
             {license === 'other' && <>
