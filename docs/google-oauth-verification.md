@@ -1,7 +1,6 @@
 # Google OAuth verification packet
 
-> Connection update, October 19, 2026: this revision removes remembered connections. Google and Hugging Face tokens and bucket keys stay in the current tab; reconnect after reload or expiry. No credential service is used. See [browser connections and retirement](account-sessions.md). Earlier live receipts describe their dated builds, not this revision.
-
+See [browser connections](account-sessions.md) for the current auth model and dated live checks. The setup observations below retain their original dates.
 
 Prepared **2026-10-04** for **ColmapView**, maintained by **OpsiClear LLC**. Support and privacy contact: **info@opsiclear.com**. This packet records implementation evidence and dated live setup, distinguishing verified Google branding, scope requirements and feature checks.
 

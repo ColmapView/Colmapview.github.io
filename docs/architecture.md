@@ -38,9 +38,13 @@ Shared reconstruction calculations live in `utils/floorPlaneAlignment.ts` and `u
 
 Storage providers own authentication and transport under `features/`. Google Drive and Hugging Face access tokens stay in tab memory. `bucketStorage/connection.ts` signs requests directly in the browser with keys held in a closure and exposes only a redacted render snapshot. No provider credentials are persisted by the app or sent to its Worker. See [browser connections](account-sessions.md) for ownership, expiry and the retirement of the former service.
 
+Provider auth modules expose synchronous getters for the current tab token. They check expiry and permissions; reconnecting requires an explicit sign-in action. Request code reads the current token when needed and keeps public reads anonymous.
+
 `fetchDatasetResource` composes bucket and Hugging Face request policies for discovery, lazy media, ranges, and re-publication; authenticated bucket requests stay within the configured bucket root. Provider credentials never enter reconstruction state or published manifests.
 
 Upload dialogs share access, progress, and result controls under `components/upload/`. The provider controllers retain their own transport and permission rules. All three use `prepareTransferPublication` to pin source revisions and copy original assets, including authorized private sources. Hugging Face captures the chosen visibility with the upload job and receipt, checks it before each commit, verifies private destinations with repository-scoped authentication, and verifies public files anonymously. Bucket uploads preserve existing bucket permissions.
+
+`datasetPublishing/publicationSnapshot.ts` captures the current scene and its revision. Default upload names belong to the pure `publicationDatasetName.ts` policy, also used as the Drive and bucket dialogs' store selector. Provider-specific archive-name validation belongs to `googleDrive/archivePolicy.ts`.
 
 Bucket listing, multipart transfers, and manifest-last publication have independent, dependency-injected boundaries. Store subscriptions and scene invalidation live in `bucketStorage/publicationRuntime.ts`; the dialog consumes component facades. `datasetPublishing/prepareTransferPublication.ts` shares original-media preparation between Drive ZIP packaging and bucket object uploads. See [bucket storage](bucket-storage.md) for connection formats, permissions, and CORS.
 

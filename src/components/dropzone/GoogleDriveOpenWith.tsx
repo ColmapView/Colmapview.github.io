@@ -25,7 +25,7 @@ export function GoogleDriveOpenWith({ loadFromUrl, loadFromManifest, onOpenUrlMo
     if (!prepared.current) {
       prepared.current = true;
       // The launch hint selects an account in Google's UI; it never authorizes file access itself.
-      googleDriveAuth.clear();
+      googleDriveAuth.disconnect();
       window.history.replaceState(window.history.state, '', googleDriveOpenWithViewerUrl(window.location.href, request));
     }
   }, [request, dismissed]);

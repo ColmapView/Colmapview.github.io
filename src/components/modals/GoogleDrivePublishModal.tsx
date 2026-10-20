@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { getGoogleDriveClientId, loadGoogleOAuthSdk, type GoogleOAuthSdk } from '../../features/googleDrive/auth';
-import { DRIVE_FILE_NAME_MAX, drivePublicationErrorMessage, isDrivePublishing } from '../../features/googleDrive/publishDataset';
+import { drivePublicationErrorMessage, isDrivePublishing } from '../../features/googleDrive/publishDataset';
+import { DRIVE_FILE_NAME_MAX } from '../../features/googleDrive/archivePolicy';
 import { useGoogleDrivePublishStoreFacade } from './useGoogleDrivePublishStoreFacade';
 import { UploadAccessField, UploadDialog, UploadImageFormatField, UploadLayout, UploadProgress, UploadResult, UploadSubmitRow, UploadViewPreview, PreviousUpload } from '../upload/UploadParts';
 import { useDatasetScopedValue, useFocusWhenBecomesTrue } from '../upload/uploadHooks';
@@ -94,7 +95,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
             <p className="publication-note">Cancelling stops transfers. A completed file or sharing change may remain in Drive.</p>
           </section>}
           {publish.receipt && <UploadResult label="Published Drive dataset" title={publish.receipt.shared ? 'Published to Google Drive' : 'Saved privately to Google Drive'}
-            notice={publish.receipt.shared ? 'Anyone with the link can view.' : 'Private. Viewers need permission to this file and must choose it in the Drive picker.'}
+            notice={publish.receipt.shared ? 'Anyone with the link can view.' : 'Private. Viewers need permission to this file. ColmapView may ask them to sign in or choose the archive in Drive.'}
             viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.driveUrl, label: 'Google Drive' }}
             hub={hub} />}
         </div>

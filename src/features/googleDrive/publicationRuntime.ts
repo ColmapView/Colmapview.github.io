@@ -10,7 +10,7 @@ import { hubPublications } from '../colmapviewHub/publication';
 import { bindHubPublication, onPublicationSourceChange } from '../colmapviewHub/bindHubPublication';
 
 export const drivePublication = createDrivePublicationController(createDriveUploadClient({
-  getAccessToken: googleDriveAuth.ensureAccessToken, expireSession: googleDriveAuth.expire,
+  getAccessToken: googleDriveAuth.getAccessToken, expireSession: googleDriveAuth.expire,
 }));
 drivePublication.subscribe(() => useDrivePublicationStatus.setState({ active: drivePublication.getSnapshot().phase !== 'idle' }));
 bindHubPublication(drivePublication, hubPublications.googleDrive, current => ({

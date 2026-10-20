@@ -6,7 +6,7 @@ import { HfError } from '../huggingface/http';
 import { buildCamera, buildDatasetState, buildImage, buildLoadedFiles, buildPoint3D, buildReconstruction } from '../../test/builders';
 import { createIdentityEuler } from '../../utils/sim3dTransforms';
 import { prepareDriveArchive } from './prepareArchive';
-import { createDrivePublicationController, normalizeDriveArchiveName } from './publishDataset';
+import { createDrivePublicationController } from './publishDataset';
 import { DRIVE_UPLOAD_CHUNK_BYTES, GoogleDrivePublishError, type DrivePublishedFile } from './upload';
 
 beforeEach(() => { vi.stubGlobal('Blob', NodeBlob); });
@@ -409,9 +409,6 @@ describe('Drive publication lifecycle', () => {
     const { controller } = fixture();
     await controller.publish('scene', false, async () => { controller.cancel(); throw new HfError('Limit', undefined, true); });
     expect(controller.getSnapshot()).toMatchObject({ phase: 'cancelled', canRetry: true });
-  });
-  it.each(['', '../dataset', 'folder/name', 'line\nname', '.'])('validates file names before any API call: %s', name => {
-    expect(() => normalizeDriveArchiveName(name)).toThrow('file name');
   });
 });
 

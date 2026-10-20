@@ -8,6 +8,8 @@ Use project **`colmapview-prod-20261006`**, project number **`425433759789`**, a
 
 **Setup evidence, 2026-10-19:** the production owner account saved both `drive.file` and `drive.install` in Data Access. Google displayed both under non-sensitive scopes, confirmed the save, and continued to report verified branding with no scope verification required. The Drive UI form was submitted successfully with the configuration below and all five app icons. Private Drive Open with, account matching, reload/separate-tab restoration and renewal passed in Chrome against the released custom handler; see the [dated live checks](account-sessions.md#live-checks--2026-10-19). A Marketplace listing has not been submitted.
 
+**Browser-only validation, 2026-10-20:** after server credential retirement, a private save and an actual Drive Open with launch passed with viewer 0.19.5. Sign-in loaded the selected archive without Picker; see the [current-flow receipt](account-sessions.md#live-checks--2026-10-20).
+
 In Google Drive API → Drive UI Integration, configure:
 
 | Field | Value |

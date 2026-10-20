@@ -92,8 +92,6 @@ export function createGoogleDriveAuth() {
     getSnapshot: () => state,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     getAccessToken: readToken,
-    ensureAccessToken: async (): Promise<string | null> => readToken(),
-    clear: () => disconnect(),
     disconnect: () => disconnect(),
     /** Expire the session that holds the rejected token; one signed in while its request ran stays connected. */
     expire: (token: string) => { if (session?.token === token) disconnect(expired); },

@@ -1,7 +1,6 @@
 # Loading Hugging Face datasets
 
-> Connection update, October 19, 2026: this revision removes remembered connections. Google and Hugging Face tokens and bucket keys stay in the current tab; reconnect after reload or expiry. No credential service is used. See [browser connections and retirement](account-sessions.md). Earlier live receipts describe their dated builds, not this revision.
-
+See [browser connections](account-sessions.md) for token lifetime, reconnect behavior and dated live checks.
 
 Public dataset links work without signing in. To open a private dataset:
 

@@ -63,13 +63,13 @@ export async function fetchHuggingFaceDatasetRequest(url: string, init: RequestI
     return response;
   };
 
-  const token = privateRepos.get(hfAuth.getSnapshot())?.has(repo) ? await hfAuth.ensureReadAccessToken() : null;
+  const token = privateRepos.get(hfAuth.getSnapshot())?.has(repo) ? hfAuth.getReadAccessToken() : null;
   if (token) return authenticated(token);
   const response = await fetch(url, request);
   init.signal?.throwIfAborted();
   // Only an answer an account could change is retried: a public repo's missing file stays one request.
   if (!mayBeAccessDenial(response)) return response;
-  const retryToken = hfAuth.getReadAccessToken() ?? await hfAuth.ensureReadAccessToken();
+  const retryToken = hfAuth.getReadAccessToken();
   if (retryToken) {
     discard(response);
     return authenticated(retryToken);

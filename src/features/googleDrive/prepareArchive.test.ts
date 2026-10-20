@@ -15,11 +15,10 @@ import { appLogger } from '../../utils/logger';
 // does not absorb a cold module load under parallel runs.
 import '@huggingface/hub';
 
-vi.mock('../huggingface/auth', () => ({ hfAuth: { getReadAccessToken: vi.fn(), ensureReadAccessToken: vi.fn(async () => null), getSnapshot: vi.fn(), expire: vi.fn() } }));
+vi.mock('../huggingface/auth', () => ({ hfAuth: { getReadAccessToken: vi.fn(), getSnapshot: vi.fn(), expire: vi.fn() } }));
 
 beforeEach(() => {
   vi.stubGlobal('Blob', NodeBlob);
-  vi.mocked(hfAuth.ensureReadAccessToken).mockImplementation(async () => hfAuth.getReadAccessToken());
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const asset = (path: string, text: string, kind: PublishAsset['kind'] = 'colmap'): PublishAsset => ({ path, kind, size: text.length, open: async () => new Blob([text]) });

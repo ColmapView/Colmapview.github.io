@@ -100,7 +100,7 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
   if (import.meta.env.PROD && !configuration.apiKey && !configuration.clientId) {
     throw driveError(reference, 'Google Drive loading is not configured for this viewer.');
   }
-  const getAccessToken = deps.getAccessToken ?? (() => googleDriveAuth.getAccessToken());
+  const getAccessToken = deps.getAccessToken ?? googleDriveAuth.getAccessToken;
   const expireSession = deps.expireSession ?? googleDriveAuth.expire;
   const fetchImpl = deps.fetchImpl ?? fetchWithTimeout;
   const root = `https://www.googleapis.com/drive/v3/files/${reference.fileId}`;
@@ -128,14 +128,14 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
       if (import.meta.env.PROD && !configuration.clientId) {
         throw driveError(reference, 'Google Drive sign-in is not configured for this viewer.');
       }
-      sentToken = deps.getAccessToken ? getAccessToken() : await googleDriveAuth.ensureAccessToken();
+      sentToken = getAccessToken();
       if (!sentToken) throw driveError(reference, 'Sign in with Google Drive, then choose this archive in the Drive picker.', true);
       headers.set('Authorization', `Bearer ${sentToken}`);
     }
     const signal = init?.signal ? (deps.signal ? anySignal([deps.signal, init.signal]) : init.signal) : deps.signal;
     return [await fetchImpl(url, timeout, { headers, credentials: 'omit', signal }), sentToken];
   };
-  // The account only reaches files chosen in the picker, which also needs the API key.
+  // The API key is required for both public reads and files authorized for this app.
   if (!apiKey) {
     throw driveError(reference, 'Google Drive loading is not configured for this viewer. Contact the site administrator.');
   }
@@ -181,7 +181,7 @@ export async function resolveGoogleDriveArchive(reference: GoogleDriveFileRefere
   };
   let [response, metadataToken] = await request(makeUrl(false));
   // Public files stay anonymous. drive.file permits the private fallback only for app-created/selected files.
-  if (!useAccount && [403, 404].includes(response.status) && (getAccessToken() || (!deps.getAccessToken && await googleDriveAuth.ensureAccessToken()))) {
+  if (!useAccount && [403, 404].includes(response.status) && getAccessToken()) {
     await response.body?.cancel().catch(() => {});
     deps.signal?.throwIfAborted();
     useAccount = true;

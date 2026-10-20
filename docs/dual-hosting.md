@@ -1,7 +1,6 @@
 # Independent GitHub and custom hosting
 
-> Connection update, October 19, 2026: this revision removes remembered connections. Google and Hugging Face tokens and bucket keys stay in the current tab; reconnect after reload or expiry. No credential service is used. See [browser connections and retirement](account-sessions.md). Earlier live receipts describe their dated builds, not this revision.
-
+See [browser connections](account-sessions.md) for token lifetime, reconnect behavior and dated live checks.
 
 ColmapView is served from these hosts. A release tag builds the GitHub profile and, when the custom gate is enabled, the custom profile from the same commit; `/dev/` is built from `main` or a manual branch run, and a preview from an explicitly selected ref:
 

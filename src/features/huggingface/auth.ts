@@ -101,13 +101,6 @@ export function createHfAuth() {
     getReadAccessToken,
     canPublish: () => Boolean(session?.canPublish),
     expire,
-    ensureReadAccessToken: async (): Promise<string | null> => getReadAccessToken(),
-    async ensureAccessToken(username?: string): Promise<string> {
-      if (!getReadAccessToken() || !session) throw new HfError('Reconnect the same Hugging Face account to continue.', 401);
-      if (!session.canPublish) throw new HfError('Sign in from the publishing dialog to allow dataset publication.', 403);
-      if (username && username !== session.identity.username) throw new HfError('Reconnect the account that started this publication.');
-      return session.accessToken;
-    },
     getAccessToken(username?: string) {
       if (!getReadAccessToken() || !session) {
         throw new HfError('Reconnect the same Hugging Face account to continue.', 401);
