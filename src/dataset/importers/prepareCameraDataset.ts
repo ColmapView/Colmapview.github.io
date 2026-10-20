@@ -11,6 +11,7 @@ import { orderedCameraImages } from './orderedCameraImages';
 import { indexDtuMasks } from './dtuMaskPaths';
 import { findNerfstudioImageVariant, nerfstudioVariantPath } from './nerfstudioImageVariants';
 import { readCameraSourceFile } from './sourceAccess';
+import { readCompanionPointCloud } from './companionPointCloud';
 import { fetchDatasetResource } from '../../utils/fetchDatasetResource';
 import { CAMERA_IMAGE_EXTENSIONS,canonicalImageName,isCameraMetadataPath,isCameraImagePath,isAbsoluteResourceUrl,
   normalizeSourcePath,normalizeSourceIndex,parentPath,resolveIndexedImage,indexExtensionlessImages,resolveSourcePath,imageResourceUrl,
@@ -284,10 +285,12 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
   }
   root=nameRoot;
   signal?.throwIfAborted();
+  const pointCloud = nerf ? await readCompanionPointCloud(source, metadataPath, global, normalized.diagnostics, signal) : undefined;
   const modelFiles=new Map<string,File>([
     ['sparse/0/cameras.bin',new File([writeCamerasBinary(normalized.cameras)],'cameras.bin')],
     ['sparse/0/images.bin',new File([writeImagesBinary(normalized.images)],'images.bin')],
-    ['sparse/0/points3D.bin',new File([writePoints3DBinary(new Map())],'points3D.bin')],
+    pointCloud ? ['sparse/0/points3D.ply', pointCloud.file]
+      : ['sparse/0/points3D.bin',new File([writePoints3DBinary(new Map())],'points3D.bin')],
   ]);
   if (source.kind==='local') {
     for (const [name,binding] of normalized.bindings) {
@@ -300,6 +303,7 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
     }
   }
   const context: CameraDatasetImportContext={ source,bindings:normalized.bindings,diagnostics:normalized.diagnostics,
+    ...(pointCloud && { pointCloud: { sourcePath: pointCloud.sourcePath } }),
     metadataFrameCount:normalized.metadataFrameCount,savedWorldMetadata:normalized.savedWorldMetadata,
     selection:{ metadataPath,sceneRoot:root,schema:normalized.schema,split:/transforms_([^/.]+)\.json$/i.exec(metadataPath)?.[1] ?? null,component } };
   const settings=root ? root+'/colmapview.yaml' : 'colmapview.yaml';

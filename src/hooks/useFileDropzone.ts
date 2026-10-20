@@ -68,6 +68,11 @@ export function useFileDropzone() {
       splatSelectionRevision = initialSplatSelectionRevision) => applySavedViewerState(state, null, assertCurrent, splatSelectionRevision));
     try {
       return await processFileDropzoneFiles(files, {
+        showUntrackedPointCloud: () => {
+          const points = usePointCloudStore.getState();
+          points.setMinTrackLength(0);
+          points.setShowPointCloud(true);
+        },
         addNotification: useNotificationStore.getState().addNotification,
         clearSplatPsnr: useImageMetricsStore.getState().clearSplatPsnr,
         getLoadedFiles: () => useReconstructionStore.getState().loadedFiles,

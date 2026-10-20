@@ -69,6 +69,8 @@ export interface CameraDatasetImportContext {
   diagnostics: readonly ImportDiagnostic[];
   metadataFrameCount: number;
   savedWorldMetadata?: Record<string, unknown>;
+  /** XYZ coordinates retain the camera metadata's world frame; observations are not synthesized. */
+  pointCloud?: { sourcePath: string };
 }
 
 export interface NormalizedCameraDataset {

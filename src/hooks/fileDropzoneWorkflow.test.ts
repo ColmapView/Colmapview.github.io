@@ -17,6 +17,7 @@ import { serializeDatasetViewerSettings } from '../utils/datasetViewerSettings';
 import { getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
 import { buildTextFile, buildImage, buildPoint3D, buildReconstruction as buildTestReconstruction, buildWasmReconstructionWrapper } from '../test/builders';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
+import { rememberPreparedCameraContext } from '../dataset/importers/prepareCameraDataset';
 
 function file(name: string): File {
   return new File([''], name);
@@ -154,6 +155,23 @@ function workerLoadFixture() {
 }
 
 describe('file dropzone workflow', () => {
+  it.each(['success', 'failure'] as const)('enables untracked companion points only after a %s commit, before saved filters restore', async outcome => {
+    const fixture = workerLoadFixture();
+    rememberPreparedCameraContext(fixture.files, { source: { kind: 'local', files: new Map() },
+      selection: { metadataPath: 'transforms.json', sceneRoot: '', schema: 'nerfstudio', split: null },
+      bindings: new Map(), diagnostics: [], metadataFrameCount: 0, pointCloud: { sourcePath: 'points_gt.ply' } });
+    const sequence: string[] = [];
+    const deps = createDeps({ parseFiles: async () => {
+      if (outcome === 'failure') throw new Error('Invalid point payload');
+      return fixture.parseResult;
+    }, setReconstruction: () => { sequence.push('commit'); }, showUntrackedPointCloud: () => { sequence.push('points'); },
+    onViewerState: () => { sequence.push('saved'); } });
+    try {
+      const success = await processFileDropzoneFiles(fixture.files, deps, { viewerState: { version: 1, viewerVersion: 'test', viewState: null, config: {} } });
+      expect(success).toBe(outcome === 'success');
+      expect(sequence).toEqual(outcome === 'success' ? ['commit', 'points', 'saved'] : []);
+    } finally { fixture.service.dispose(); }
+  });
   it('restores the selected splat and alignment from a wrapped project folder', async () => {
     const fixture = workerLoadFixture();
     const preferred = new File(['a'.repeat(20)], 'default.spz');

@@ -8,6 +8,7 @@ import { prepareLocalCameraDataset } from './prepareCameraDataset';
 import { CameraModelId } from '../../types/cameraModelId';
 import type { ArchiveEntry } from '../../archive/types';
 import { prepareCameraDataset } from './prepareCameraDataset';
+import { parsePointCloudPlyFile } from '../../parsers/plyPointCloud';
 
 const matrix=[[1,0,0,1],[0,1,0,2],[0,0,1,3],[0,0,0,1]];
 const file=(data: string|Uint8Array<ArrayBuffer>,name: string) => new NodeFile([data],name) as unknown as File;
@@ -22,6 +23,18 @@ beforeEach(() => vi.stubGlobal('File',NodeFile));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('camera metadata preparation',() => {
+  it('attaches a scene-local ground-truth cloud without changing point coordinates or camera poses', async () => {
+    const input = files({ ...data, applied_scale: 2, applied_transform: [[1,0,0,10],[0,1,0,0],[0,0,1,0]] });
+    input.set('scene/points_gt.ply', file('ply\nformat ascii 1.0\nelement vertex 1\nproperty float x\nproperty float y\nproperty float z\nend_header\n1 2 3\n', 'points_gt.ply'));
+    const prepared = (await prepareLocalCameraDataset(input))!;
+    expect(prepared.files.has('sparse/0/points3D.bin')).toBe(false);
+    const points = await parsePointCloudPlyFile(prepared.files.get('sparse/0/points3D.ply')!);
+    expect([...points.values()][0]).toMatchObject({ xyz: [1,2,3], track: [] });
+    expect(prepared.context.pointCloud?.sourcePath).toBe('scene/points_gt.ply');
+    const images = parseImagesBinary(await prepared.files.get('sparse/0/images.bin')!.arrayBuffer());
+    expect([...images.values()][0].tvec).toEqual([-1,2,3]);
+    expect(prepared.context.savedWorldMetadata?.applied_scale).toBe(2);
+  });
   it.each(['local','archive'] as const)('imports sibling original photos and masks from %s metadata subfolders',async kind=>{
     const metadata={camera_model:'PINHOLE',w:800,h:800,fl_x:400,fl_y:400,cx:400,cy:400,
       frames:[{...frame('../images/a.png'),mask_path:'../masks/a.png'}]};

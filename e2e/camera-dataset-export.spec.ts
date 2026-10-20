@@ -1,11 +1,54 @@
 import { test, expect } from './fixtures/test-fixtures';
-import { cameraFixture } from './fixtures/camera-dataset';
+import { cameraFixture, fixtureZip } from './fixtures/camera-dataset';
 import { dropDatasetFiles } from './fixtures/load-test-data';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { unzipSync } from 'fflate';
 import { parseImagesBinary } from '../src/parsers/images';
 import { parseCamerasBinary } from '../src/parsers/cameras';
+import { parsePoints3DBinary } from '../src/parsers/points3d';
+
+for (const sourceKind of ['folder', 'zip', 'url'] as const) {
+  test(`imports and exports untracked companion XYZ points from a NeRF ${sourceKind}`, async ({ page }) => {
+    await page.goto('/');
+    const files = await cameraFixture(page, 'nerf-blender');
+    files.push({ relativePath: 'scene/points_gt.ply', name: 'points_gt.ply', base64: Buffer.from(
+      'ply\nformat ascii 1.0\nelement vertex 2\nproperty float x\nproperty float y\nproperty float z\nend_header\n1 2 3\n-1 0 0.5\n',
+    ).toString('base64') });
+    if (sourceKind === 'url') {
+      const base = 'https://points.example.test/scene/';
+      const metadata = files.find(file => file.name === 'transforms_train.json')!;
+      const value = JSON.parse(Buffer.from(metadata.base64, 'base64').toString());
+      value.ply_file_path = 'points_gt.ply';
+      value.frames.forEach((frame: { file_path: string }) => { frame.file_path += '.png'; });
+      metadata.base64 = Buffer.from(JSON.stringify(value)).toString('base64');
+      await page.route(base + '**', route => {
+        const file = files.find(file => base + file.relativePath.slice('scene/'.length) === route.request().url());
+        return route.fulfill(file ? { status: 200, body: Buffer.from(file.base64, 'base64') } : { status: 404 });
+      });
+      await page.goto('/?url=' + encodeURIComponent(base + 'transforms_train.json'));
+    } else if (sourceKind === 'zip') {
+      await dropDatasetFiles(page, [{ relativePath: 'scene.zip', name: 'scene.zip', base64: fixtureZip(files).toString('base64') }]);
+    } else await dropDatasetFiles(page, files);
+    await expect(page.locator('text=Source:')).toBeVisible({ timeout: 45000 });
+    const state = await page.evaluate(async () => {
+      const path = '/src/store/stores/pointCloudStore.ts';
+      const { usePointCloudStore } = await import(path) as typeof import('../src/store/stores/pointCloudStore');
+      const { minTrackLength, showPointCloud } = usePointCloudStore.getState();
+      return { minTrackLength, showPointCloud };
+    });
+    expect(state).toEqual({ minTrackLength: 0, showPointCloud: true });
+    await page.locator('button[aria-label*="Export" i], button[data-tooltip*="Export" i]').first().hover();
+    await page.locator('select').first().selectOption('zip');
+    const pending = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download COLMAP', exact: true }).click();
+    const archive = unzipSync(readFileSync((await (await pending).path())!));
+    expect(parseImagesBinary(new Uint8Array(archive['sparse/0/images.bin']).buffer).size).toBe(2);
+    const points = parsePoints3DBinary(new Uint8Array(archive['sparse/0/points3D.bin']).buffer);
+    expect([...points.values()].map(point => ({ xyz: point.xyz, rgb: point.rgb, track: point.track })))
+      .toEqual([{ xyz: [1, 2, 3], rgb: [255, 255, 255], track: [] }, { xyz: [-1, 0, 0.5], rgb: [255, 255, 255], track: [] }]);
+  });
+}
 
 type DirectSaveTestWindow = Window & {
   directSaveTest: { handle: FileSystemFileHandle; activated: boolean; pickerCalls: number; stagingCalls: number };

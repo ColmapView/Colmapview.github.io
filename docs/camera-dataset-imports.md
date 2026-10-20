@@ -1,6 +1,6 @@
 # Camera datasets
 
-ColmapView can import the following open camera metadata formats together with their photos. Imported models contain posed cameras and images, with zero sparse points and zero feature observations.
+ColmapView can import the following open camera metadata formats together with their photos. Imported models contain posed cameras and images. NeRF-style metadata can also import an associated XYZ PLY cloud; other camera-only imports contain zero sparse points. Feature observations are not synthesized.
 
 | Format | Metadata | Supported cameras |
 | --- | --- | --- |
@@ -32,7 +32,11 @@ An explicit `camera_model` requires `fl_x`, `fl_y`, `cx`, `cy`, `w` and `h`, eit
 
 Later photo or mask failures are reported for that media item without discarding the committed scene. Bounded URL media reads use the existing request scheduler and retry policy. Results from a previous scene cannot populate the current scene. Oversized or unreadable optional `colmapview.yaml` settings are skipped with a warning.
 
-Explicit `mask_path` / `mask_file_path` references bind their exact files. NeRF PNG alpha produces an on-demand grayscale foreground mask, including partial alpha; fully opaque images have no derived mask. Industrial Part's `train/good` and `train/masks/*_mask.png` layout can display its masks, but their role remains unverified and they cannot be exported as feature masks. Depth images and arbitrary attached point clouds or splats are not imported with camera JSON.
+Explicit `mask_path` / `mask_file_path` references bind their exact files. NeRF PNG alpha produces an on-demand grayscale foreground mask, including partial alpha; fully opaque images have no derived mask. Industrial Part's `train/good` and `train/masks/*_mask.png` layout can display its masks, but their role remains unverified and they cannot be exported as feature masks. Depth images, meshes and Gaussian splats are not imported with camera JSON.
+
+NeRF, Nerfstudio and Instant-NGP metadata can declare `ply_file_path`. Without that declaration, a folder, archive or complete HF listing can identify one cloud beside the selected metadata named `points_gt.ply`, `points3D.ply`, `points.ply`, `point_cloud.ply` or `sparse_pc.ply` (case-insensitive). Multiple candidates produce a warning and require `ply_file_path`; the loader does not guess HTTP filenames or borrow another scene's cloud. A selected cloud must be nonempty XYZ PLY without mesh faces or Gaussian properties, within a 64 MiB read budget. An unreadable or invalid selected cloud fails the import and preserves the previously loaded scene.
+
+Companion XYZ stays in the metadata's saved world coordinates: camera-basis conversion does not transform the world, and `applied_transform` / `applied_scale` are not applied again. XYZ-only points display in white and export as native COLMAP points with empty tracks and zero error. The import sets Min Track to zero and enables point display before restoring any saved viewer settings. These points do not imply feature correspondences or a sparse SfM reconstruction. This follows Nerfstudio's [saved-world PLY convention](https://docs.nerf.studio/_modules/nerfstudio/data/dataparsers/nerfstudio_dataparser.html).
 
 The Export panel has three package options:
 

@@ -81,6 +81,7 @@ interface PointCloudPlySource extends SplatFileSource {
 }
 
 export interface FileDropzoneWorkflowDeps {
+  showUntrackedPointCloud?: () => void;
   addNotification: (type: 'info' | 'warning', message: string, duration?: number) => void;
   buildReconstruction?: BuildColmapReconstruction;
   clearSplatPsnr?: () => void;
@@ -664,10 +665,14 @@ export async function processFileDropzoneFiles(
 
     deps.setReconstruction(reconstruction);
     deps.resetView();
+    if (cameraImport?.pointCloud) deps.showUntrackedPointCloud?.();
     if (cameraImport) {
       const omitted = cameraImport.metadataFrameCount - cameraImport.bindings.size;
       const skippedSettings=cameraImport.diagnostics.some(diagnostic=>diagnostic.code==='UNAVAILABLE_SETTINGS');
       deps.addNotification(omitted || skippedSettings ? 'warning' : 'info', `Imported ${cameraImport.bindings.size} posed photos (${cameraImport.selection.schema})${omitted ? `; ${omitted} missing or unregistered views omitted` : ''}${skippedSettings ? '; optional view settings skipped' : ''}.`, 7000);
+      for (const diagnostic of cameraImport.diagnostics) {
+        if (diagnostic.code === 'AMBIGUOUS_POINT_CLOUD') deps.addNotification('warning', diagnostic.message, 7000);
+      }
     }
     if (nativeMedia?.diagnostics.length) {
       const ambiguous = nativeMedia.diagnostics.filter(item => item.code.startsWith('AMBIGUOUS')).length;
