@@ -101,7 +101,13 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       // Avoid scanning HTML fixtures in SDKs and nested scratch checkouts.
       entries: ['index.html'],
-      include: ['react', 'react-dom', 'three'],
+      // Archive workers use deep imports outside the initial scan. Pre-bundle
+      // them so first archive use cannot invalidate a concurrent ZIP export.
+      include: [
+        'react', 'react-dom', 'three', '@zip.js/zip.js/lib/zip-core-native.js',
+        'libarchive.js/src/webworker/wasm-gen/libarchive.js',
+        'libarchive.js/src/webworker/wasm-module.js',
+      ],
     },
 
     // Include WASM files as assets

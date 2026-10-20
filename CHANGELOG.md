@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Pre-bundle archive worker dependencies on the development server so the first archive import cannot invalidate a concurrent ZIP export.
+
 ## [0.19.9] - 2026-10-20
 
 ### Changed
