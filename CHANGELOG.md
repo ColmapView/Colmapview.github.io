@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-20
+
 ### Added
 
 - Add a compact **Share on Hub** dialog for loaded public dataset URLs and completed public uploads, with optional license metadata, explicit discovery consent, server source verification and Turnstile protection. Sources needing manual review remain unpublished until approved.
@@ -974,7 +976,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.17.2...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/ColmapView/colmapview.github.io/compare/v0.19.11...v0.20.0
 [0.17.2]: https://github.com/ColmapView/colmapview.github.io/compare/v0.17.1...v0.17.2
 [0.16.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.3...v0.16.4
 [0.16.3]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.1...v0.16.3
