@@ -23,6 +23,12 @@ for (const transport of ['folder','zip','url'] as const) {
     }else if(transport==='zip')await dropDatasetFiles(page,[{relativePath:'tracked.zip',name:'tracked.zip',base64:fixtureZip(files).toString('base64')}]);
     else await dropDatasetFiles(page,files);
     await expect(page.locator('text=Source:')).toBeVisible({timeout:45000});
+    await expect.poll(async()=>page.evaluate(async()=>{
+      const path='/src/store/reconstructionStore.ts';
+      const {useReconstructionStore}=await import(path) as typeof import('../src/store/reconstructionStore');
+      const s=useReconstructionStore.getState();
+      return !s.loading&&!s.urlLoading&&s.reconstruction?{images:s.reconstruction.images.size,points:s.reconstruction.globalStats.totalPoints}:null;
+    }),{timeout:45000}).toEqual({images:2,points:1});
     await page.keyboard.press('Tab');await page.getByRole('button',{name:'Export',exact:true}).hover();await page.getByRole('combobox',{name:'Format',exact:true}).selectOption('zip-images');
     const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download COLMAP',exact:true}).click();
     const archive=unzipSync(readFileSync((await(await pending).path())!)),points=parsePoints3DBinary(new Uint8Array(archive['sparse/0/points3D.bin']).buffer),images=parseImagesBinary(new Uint8Array(archive['sparse/0/images.bin']).buffer);

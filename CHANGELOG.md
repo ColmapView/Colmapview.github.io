@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.9] - 2026-10-20
+
+### Changed
+
+- Validate splat rendering from a fixed view and wait for exposed canvas targets and complete imports in browser regression checks. This release includes the dataset loading fixes from the unreleased 0.19.6–0.19.8 candidates.
+
 ## [0.19.8] - 2026-10-20
 
 ### Fixed

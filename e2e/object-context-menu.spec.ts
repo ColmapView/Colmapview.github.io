@@ -65,7 +65,8 @@ async function waitForSceneObjectTarget(
         target &&
         target.displayMode === expectedMode &&
         target.x > 0 &&
-        target.y > 0
+        target.y > 0 &&
+        document.elementFromPoint(target.x, target.y)?.tagName === 'CANVAS'
       );
     },
     { targetName: name, expectedMode: mode },
@@ -88,6 +89,9 @@ test.describe('Object-targeted canvas context menus', () => {
     if (await closeButton.isVisible({ timeout: 2_000 })) {
       await closeButton.click();
     }
+    // Dismissing the panel can leave the pointer over a toolbar control. Its
+    // hover panel must not cover the camera hit target used below.
+    await page.mouse.move(0, 0);
 
     await loadTestDataset(page);
     await expect(page.locator('text=Source:')).toBeVisible({ timeout: 45_000 });

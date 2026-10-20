@@ -131,6 +131,18 @@ export async function loadAndCaptureSplat(page: Page, splat: TestDatasetFileEntr
   await setPointCloudMode(page, 'Splats');
   const state = await waitForSplatBackend(page, backend);
   await waitForSplatLoaded(page);
+  // The tiny torus is centred between the two fixture cameras. Keep visual
+  // comparisons independent of the reconstruction's automatic framing policy.
+  await page.evaluate(async () => {
+    const path = '/src/store/stores/cameraStore.ts';
+    const { useCameraStore } = await import(path) as typeof import('../../src/store/stores/cameraStore');
+    useCameraStore.getState().setFlyTransitionDuration(0);
+    useCameraStore.getState().flyToState({
+      position: [0.15, 0, -0.34], quaternion: [0, 1, 0, 0],
+      target: [0.15, 0, 0], distance: 0.34,
+    });
+    await (window as ProbeWindow).__COLMAP_WEBVIEW_E2E__!.waitForRenderFrames(3);
+  });
   await setPointCloudMode(page, 'Off');
   await waitForFrames(page);
   const off = await captureSceneCenter(page);
