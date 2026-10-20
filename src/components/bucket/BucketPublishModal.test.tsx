@@ -174,7 +174,7 @@ describe('bucket publisher', () => {
     expect(screen.getByLabelText('Share link')).toHaveValue(publication.state.viewerUrl);
     expect(screen.getByText('Access follows your bucket permissions. Viewers need bucket access for private files.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open link' })).toHaveAttribute('href', publication.state.viewerUrl);
+    expect(screen.queryByRole('link', { name: 'Open link' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Upload another dataset' })).toBeNull();
     props.rerender(<BucketPublishModal isOpen={false} onClose={props.onClose} />);
     props.rerender(<BucketPublishModal isOpen onClose={props.onClose} />);
