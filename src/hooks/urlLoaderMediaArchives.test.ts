@@ -8,6 +8,8 @@ import { readCameraSourceFile } from '../dataset/importers/sourceAccess';
 import { imageResourceUrl } from '../dataset/importers/sourcePaths';
 import { validateColmapManifest } from '../utils/manifestValidation';
 import { CameraModelId } from '../types/cameraModelId';
+import { NativeMediaPathIndex } from '../dataset/nativeMediaPaths';
+import type { Image } from '../types/colmap';
 
 beforeEach(() => vi.stubGlobal('File', NodeFile));
 afterEach(() => vi.unstubAllGlobals());
@@ -55,7 +57,7 @@ it('mounts a capture TAR without flattening paths and reads the exact native pho
 });
 
 it('closes every opened archive on duplicate mount paths or a later open failure', async () => {
-  const first = reader(['capture/a.png']), second = reader(['capture/A.png']);
+  const first = reader(['capture/a.png']), second = reader(['capture/a.png']);
   const two = { ...manifest, mediaArchives: [...manifest.mediaArchives!, ...manifest.mediaArchives!] };
   await expect(openManifestMediaArchives(two, { openReader: vi.fn().mockResolvedValueOnce(first.result).mockResolvedValueOnce(second.result) }))
     .rejects.toThrow(/collide/);
@@ -65,6 +67,40 @@ it('closes every opened archive on duplicate mount paths or a later open failure
   await expect(openManifestMediaArchives(two, { openReader: vi.fn().mockResolvedValueOnce(third.result).mockRejectedValueOnce(new Error('range rejected')) }))
     .rejects.toThrow('range rejected');
   expect(third.result.close).toHaveBeenCalledOnce();
+});
+
+it('preserves case-distinct photos and binds each exact native name to its original bytes', async () => {
+  const names = ['Palacio_Bolívar.JPG', 'Palacio_Bolívar.jpg'];
+  const archive = reader(names.map(name => 'capture/' + name));
+  for (const name of names) archive.extracts.get('capture/' + name)!.mockResolvedValue(new File([name], name));
+  const resources = (await openManifestMediaArchives(manifest, { openReader: async () => archive.result }))!;
+  const paths = names.map(name => 'images/dslr_images_undistorted/' + name);
+  expect(resources.imagePaths).toEqual(paths);
+  const pathIndex = new NativeMediaPathIndex(paths, 'sparse/0');
+  expect(pathIndex.file('images/dslr_images_undistorted/Palacio_Bolívar.JpG').status).toBe('ambiguous');
+  const files = new Map<string, File>();
+  const source = { kind: 'url' as const, baseUrl: manifest.baseUrl, archiveEntries: resources.entries };
+  rememberNativeMediaSource(files, { source, modelDir: 'sparse/0', paths, imagePaths: paths });
+  const images = new Map<number, Image>();
+  for (const [index, name] of names.entries()) images.set(index + 1, { imageId: index + 1, cameraId: 1,
+    name: 'dslr_images_undistorted/' + name, qvec: [1, 0, 0, 0], tvec: [0, 0, 0], points2D: [] });
+  const context = (await prepareNativeMedia(files, new File([''], 'cameras.txt'),
+    new Map([[1, { cameraId: 1, modelId: CameraModelId.PINHOLE, width: 8, height: 4, params: [5, 5, 4, 2] }]]),
+    images))!;
+  for (const [index, name] of names.entries()) {
+    const binding = context.bindings.get('dslr_images_undistorted/' + name)!;
+    expect(binding.sourceImagePath).toBe(paths[index]);
+    expect(await (await readCameraSourceFile(source, binding.sourceImagePath))?.text()).toBe(name);
+    expect(archive.extracts.get('capture/' + name)).toHaveBeenCalledOnce();
+  }
+  await resources.reader.close();
+  expect(archive.result.close).toHaveBeenCalledOnce();
+});
+
+it('rejects a repeated member after stripping leading dot segments', async () => {
+  const archive = reader(['capture/a.png', './capture/a.png']);
+  await expect(openManifestMediaArchives(manifest, { openReader: async () => archive.result })).rejects.toThrow(/collide/);
+  expect(archive.result.close).toHaveBeenCalledOnce();
 });
 
 it.each(['../capture/a.png', '/capture/a.png', 'capture/../../a.png'])('rejects traversal instead of rebasing %s', async path => {

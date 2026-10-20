@@ -33,7 +33,7 @@ export async function openManifestMediaArchives(manifest: ColmapManifest, option
   if (manifest.skipImages || !manifest.mediaArchives?.length) return null;
   const readers: ArchiveReader[] = [];
   const index = new Map<string, ArchiveEntry>(), entries = new Map<string, ArchiveEntry>();
-  const foldedPaths = new Set<string>(), imagePaths: string[] = [], maskPaths: string[] = [];
+  const imagePaths: string[] = [], maskPaths: string[] = [];
   const close = async () => {
     const results = await Promise.allSettled(readers.map(closeZipArchive));
     const failed = results.find(result => result.status === 'rejected');
@@ -63,9 +63,9 @@ export async function openManifestMediaArchives(manifest: ColmapManifest, option
         if (archive.role !== 'masks' && (isAuxiliaryImagePath(path) || isDatasetMaskImagePath(path))) continue;
         const relative = archive.mountPath + '/' + path.slice(prefix.length);
         if (!safeMember(relative)) throw new Error('Unsafe companion archive mount.');
-        const folded = relative.toLowerCase();
-        if (foldedPaths.has(folded)) throw new Error('Companion archive members collide at their mounted paths.');
-        foldedPaths.add(folded);
+        // Archive paths are case-sensitive; native media lookup resolves exact names
+        // first and leaves ambiguous case-insensitive aliases unresolved.
+        if (index.has(relative)) throw new Error('Companion archive members collide at their mounted paths.');
         index.set(relative, item.file);
         entries.set(imageResourceUrl(manifest.baseUrl, relative), item.file);
         (archive.role === 'masks' ? maskPaths : imagePaths).push(relative);
