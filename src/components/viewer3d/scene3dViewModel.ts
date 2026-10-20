@@ -14,6 +14,7 @@ export interface SceneBounds {
 export interface SceneWasmBoundsSource {
   hasPoints: () => boolean;
   getBoundingBox: () => BoundingBox | null;
+  getPositions?: () => Float32Array | null;
 }
 
 export interface ScenePointerPosition {
@@ -75,7 +76,8 @@ export function buildSceneBounds(
   const images = Array.from(reconstruction.images.values());
 
   const cameras = images.length ? buildCameraPositionBounds(images.map(getImageWorldPosition)) : null;
-  const points = buildWasmPointBounds(wasmReconstruction) ?? buildPointMapBounds(reconstruction);
+  const points = (cameras ? buildRobustPointBounds(reconstruction, wasmReconstruction) : null)
+    ?? buildWasmPointBounds(wasmReconstruction) ?? buildPointMapBounds(reconstruction);
   if (!cameras) return points ?? DEFAULT_SCENE_BOUNDS;
   if (!points) return cameras;
   // Enclose both spheres: camera trajectories can be far from the subject they see.
@@ -86,6 +88,31 @@ export function buildSceneBounds(
   const radius = (distance + cameras.radius + points.radius) / 2;
   const shift = distance ? (radius - cameras.radius) / distance : 0;
   return {center: cameras.center.map((value, axis) => value + shift * delta[axis]) as [number, number, number], radius};
+}
+
+/** Bound work and memory even for very large clouds; source geometry remains untouched. */
+function buildRobustPointBounds(reconstruction: Reconstruction, source?: SceneWasmBoundsSource | null): SceneBounds | null {
+  const positions = source?.hasPoints() ? source.getPositions?.() : null;
+  const count = positions ? Math.floor(positions.length / 3) : reconstruction.points3D?.size ?? 0;
+  if (count < 100) return null;
+  const coordinates: [number[], number[], number[]] = [[], [], []];
+  const stride = Math.max(1, Math.ceil(count / 8192));
+  const sample = (point: readonly number[]) => {
+    if (point.length === 3 && point.every(Number.isFinite)) point.forEach((value, axis) => coordinates[axis].push(value));
+  };
+  if (positions) {
+    for (let index = 0; index < count; index += stride) sample([positions[index * 3], positions[index * 3 + 1], positions[index * 3 + 2]]);
+  } else {
+    let index = 0;
+    for (const point of reconstruction.points3D?.values() ?? []) if (index++ % stride === 0) sample(point.xyz);
+  }
+  if (!coordinates[0].length) return null;
+  const ranges = coordinates.map(values => {
+    values.sort((a, b) => a - b);
+    return [percentile(values, 1), percentile(values, 99)];
+  });
+  return {center: ranges.map(([min, max]) => (min + max) / 2) as [number, number, number],
+    radius: Math.max(Math.hypot(...ranges.map(([min, max]) => max - min)) / 2, .001)};
 }
 
 export function getInitialSceneCameraPosition(

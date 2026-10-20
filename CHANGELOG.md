@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.7] - 2026-10-20
+
+### Fixed
+
+- Use a bounded sample of central point extents when framing clouds with cameras, keeping distant outliers from shrinking the subject. Point-only scenes retain their full bounds.
+
 ## [0.19.6] - 2026-10-20
 
 ### Added

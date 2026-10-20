@@ -85,6 +85,21 @@ describe('scene 3d view-model helpers', () => {
     expect(buildSceneBounds(reconstruction,buildWasmBounds({minX:NaN,maxX:1,minY:0,maxY:1,minZ:0,maxZ:1}))).toEqual({center:[0,0,0],radius:.001});
   });
 
+  it('uses bounded central cloud extents with cameras so distant outliers cannot hide the subject',()=>{
+    const positions=new Float32Array(1001*3);
+    for(let index=0;index<1000;index++){positions[index*3]=index%10;positions[index*3+1]=10;positions[index*3+2]=30;}
+    positions.set([1e6,1e6,1e6],3000);
+    const reconstruction=buildReconstruction({images:[buildImage({imageId:1,tvec:[0,0,0]})],points3D:[]});
+    const source={...buildWasmBounds({minX:0,maxX:1e6,minY:10,maxY:1e6,minZ:30,maxZ:1e6}),getPositions:()=>positions};
+    const bounds=buildSceneBounds(reconstruction,source);
+    expect(bounds.radius).toBeLessThan(30);
+    for(const point of [[0,0,0],[4.5,10,30]])expect(Math.hypot(...point.map((value,axis)=>value-bounds.center[axis]))).toBeLessThanOrEqual(bounds.radius+1e-8);
+    const pointsOnly=buildSceneBounds(buildReconstruction({images:[]}),source);
+    expect(pointsOnly.radius).toBeGreaterThan(1e5);
+    const map=buildReconstruction({images:[buildImage({imageId:1})],points3D:Array.from({length:1001},(_,index)=>buildPoint3D({point3DId:BigInt(index+1),xyz:index===1000?[1e6,1e6,1e6]:[index%10,10,30]}))});
+    expect(buildSceneBounds(map).radius).toBeLessThan(30);
+  });
+
   it('uses JS point-map bounds when WASM bounds are unavailable', () => {
     const reconstruction = buildReconstruction({
       images: [],
