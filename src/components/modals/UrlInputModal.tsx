@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { inputStyles, getButtonClass, modalStyles, floatingPanelStyles, panelStyles } from '../../theme';
 import { ChevronDownIcon, ChevronRightIcon, CloseIcon } from '../../icons';
 import { ModalDialogShell } from '../ui/ModalDialogShell';
-import { isGoogleDriveEnabled } from '../../features/googleDrive/config';
+import { GOOGLE_DRIVE_HANDOFF_TOOLTIP, isGoogleDriveEnabled } from '../../features/googleDrive/config';
 import {
   getUrlInputHelpItemClassName,
   getUrlInputHelpItemKey,
@@ -144,6 +144,7 @@ export function UrlInputModal({ isOpen, onClose, onLoad, loading = false }: UrlI
             Cancel
           </button>
           {driveHandoffUrl && !loading ? <a href={driveHandoffUrl} target="_blank" rel="noopener noreferrer" onClick={onClose}
+            data-tooltip={GOOGLE_DRIVE_HANDOFF_TOOLTIP}
             className={getButtonClass('primary', 'lg')}>
             Use Google Drive
           </a> : <button

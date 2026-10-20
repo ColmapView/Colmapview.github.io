@@ -1,7 +1,7 @@
 /** Drive credentials are public browser configuration; this is a deployment capability boundary. */
 export const GOOGLE_DRIVE_ENABLED_ORIGIN = 'https://colmapview.opsiclear.com';
 export const GOOGLE_DRIVE_DISABLED_MESSAGE = `Google Drive is available at ${GOOGLE_DRIVE_ENABLED_ORIGIN}. Open this dataset there to use Google Drive.`;
-export const GOOGLE_DRIVE_HANDOFF_TOOLTIP = 'Google Drive access requires a registered domain.\nOpen colmapview.opsiclear.com in a new tab.';
+export const GOOGLE_DRIVE_HANDOFF_TOOLTIP = 'Opens colmapview.opsiclear.com in a new tab to use Google Drive.';
 
 interface GoogleDriveEnv {
   VITE_GOOGLE_DRIVE_ENABLED?: string;
