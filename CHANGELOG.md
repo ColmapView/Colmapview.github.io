@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.11] - 2026-10-20
+
+### Fixed
+
+- Label camera views without a bound source photo as unavailable instead of leaving a loading placeholder. Available photos continue loading lazily, and all camera geometry is retained.
+- Report ambiguous mask paths separately from photo-mapping problems.
+
 ## [0.19.10] - 2026-10-20
 
 ### Added
