@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.8] - 2026-10-20
+
+### Fixed
+
+- Preserve the camera manifest URL when sharing an explicit cloud or temporal frame selection, so reopening the link retains the same data.
+
 ## [0.19.7] - 2026-10-20
 
 ### Fixed

@@ -7,7 +7,7 @@ import type { CameraDatasetManifest } from '../types/cameraDatasetManifest';
 
 export async function loadCameraUrlSource(url: string, deps: Pick<LoadZipUrlSourceDeps,
   'signal' | 'assertCurrent' | 'processFiles' | 'setSourceInfo' | 'setUrlProgress' | 'beforeSceneCommit'>,
-  metadataFile?: File, manifest?: CameraDatasetManifest): Promise<boolean> {
+  metadataFile?: File, manifest?: CameraDatasetManifest, sourceUrl = url): Promise<boolean> {
   const originalUrl = new URL(url);
   deps.setUrlProgress({ percent: 10, message: 'Importing posed photos...' });
   const source={kind:'url' as const,baseUrl:new URL('.',originalUrl).href};
@@ -22,7 +22,7 @@ export async function loadCameraUrlSource(url: string, deps: Pick<LoadZipUrlSour
   if (!prepared) throw new Error('Unsupported camera dataset.');
   const result = await deps.processFiles(prepared.files, { start: 20, end: 100 }, {
     throwOnError: true, signal: deps.signal, beforeSceneCommit: deps.beforeSceneCommit,
-    onSceneReplaced: () => { deps.signal?.throwIfAborted(); deps.assertCurrent?.(); deps.setSourceInfo('url', url); },
+    onSceneReplaced: () => { deps.signal?.throwIfAborted(); deps.assertCurrent?.(); deps.setSourceInfo('url', sourceUrl); },
   });
   deps.signal?.throwIfAborted(); deps.assertCurrent?.();
   return result !== false;

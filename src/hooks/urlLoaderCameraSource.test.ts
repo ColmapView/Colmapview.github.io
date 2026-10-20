@@ -22,3 +22,10 @@ it('reuses already fetched JSON metadata without another body request',async()=>
   expect(readCameraSourceFile).not.toHaveBeenCalled();
   expect(prepareCameraDataset).toHaveBeenCalledWith(expect.anything(),expect.objectContaining({metadataFile:metadata}));
 });
+it('retains a wrapper manifest as the source used for subsequent sharing',async()=>{
+  const metadata=new NodeFile(['{}'],'transforms.json') as unknown as File;
+  const dependencies={...deps(),processFiles:vi.fn(async (_files:Map<string,File>,_range?:{start:number;end:number},options?:{onSceneReplaced?:()=>void})=>{options?.onSceneReplaced?.();return true;})};
+  const manifestUrl='https://catalog.test/selected.manifest.json';
+  await loadCameraUrlSource('https://camera.test/transforms.json',dependencies,metadata,undefined,manifestUrl);
+  expect(dependencies.setSourceInfo).toHaveBeenCalledWith('url',manifestUrl);
+});

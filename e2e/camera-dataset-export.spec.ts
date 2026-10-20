@@ -51,12 +51,17 @@ for (const kind of ['ply','npz'] as const) {
     await page.route('https://catalog.example.test/scene.json',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(manifest)}));
     await page.goto('/?url='+encodeURIComponent('https://catalog.example.test/scene.json'));
     await expect(page.locator('text=Source:')).toBeVisible({timeout:45000});
+    const retainedSource=await page.evaluate(async()=>{const path='/src/store/reconstructionStore.ts';const {useReconstructionStore}=await import(path) as typeof import('../src/store/reconstructionStore');return useReconstructionStore.getState().sourceUrl;});
+    expect(retainedSource).toBe('https://catalog.example.test/scene.json');
     await page.keyboard.press('Tab');await page.getByRole('button',{name:'Export',exact:true}).hover();await page.getByRole('combobox',{name:'Format',exact:true}).selectOption('zip-images');
     const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download COLMAP',exact:true}).click();
     const archive=unzipSync(readFileSync((await(await pending).path())!)),points=parsePoints3DBinary(new Uint8Array(archive['sparse/0/points3D.bin']).buffer);
     expect([...points.values()].map(p=>p.xyz)).toEqual(kind==='ply'?[[2,1,-3],[5,4,-6]]:[[10,11,12],[13,14,15]]);
     expect(parseImagesBinary(new Uint8Array(archive['sparse/0/images.bin']).buffer).size).toBe(kind==='npz'?1:2);
     expect(Boolean(archive['images/a.png'])).toBe(kind==='ply');expect(Buffer.from(archive['images/b.png'])).toEqual(Buffer.from(files.find(f=>f.name==='b.png')!.base64,'base64'));
+    // Share uses the retained URL; reopening it must retain geometry and the temporal subset.
+    await page.goto('/?url='+encodeURIComponent(retainedSource!));
+    await expect.poll(async()=>page.evaluate(async()=>{const path='/src/store/reconstructionStore.ts';const {useReconstructionStore}=await import(path) as typeof import('../src/store/reconstructionStore');const s=useReconstructionStore.getState();return !s.urlLoading&&s.reconstruction?{images:s.reconstruction.images.size,points:s.reconstruction.globalStats.totalPoints}:null;})).toEqual({images:kind==='npz'?1:2,points:2});
   });
 }
 
