@@ -22,7 +22,7 @@ This removes server credential custody. Active browser code can still use tab cr
 
 ## Deployment and rollback
 
-The local revision has not been deployed. The Hub's `v4-remove-account-sessions` migration permanently deletes the former `AccountSession` namespace and all saved connections. Public Hub cards, catalog data, R2 objects and `LookupGuard` are outside that migration. Follow the Hub repository's retirement runbook and obtain approval for this permanent deletion before deployment.
+**Retirement completed — October 20, 2026:** viewer **0.19.3** (source `8f7ed97`) was deployed and verified on the custom site, GitHub `/latest/` and `/v0.19.3/`; the [release workflow](https://github.com/ColmapView/Colmapview.github.io/actions/runs/39370199310) passed. The approved Hub migration `v4-remove-account-sessions` permanently deleted the former `AccountSession` namespace and all saved connections. Cloudflare's namespace inventory confirmed that only `LookupGuard` remains. The three obsolete Worker auth secrets were removed. Hub **0.9.9** (source `c8170bb`) preserved public cards, catalog data and R2 objects.
 
 Deploy the prepared Hub retirement first, remove unused Worker auth secrets, then publish the browser-only viewer and revised policy. Older viewers already have browser authentication as a fallback when `/auth/session` reports disabled capabilities; an open tab using the retired service may need a reload. Verify the public HF client and browser callback, Google popup/Open with, private reads, uploads, cancellation and reconnect behavior. All deployment profiles force the obsolete `VITE_ACCOUNT_SESSIONS_ENABLED` flag off; it is no longer read by the viewer. Do not supply user tokens or provider client secrets to Vite.
 
@@ -31,6 +31,16 @@ After namespace deletion, rolling back application code cannot restore saved con
 ## Validation
 
 Focused tests exercise direct browser token use, PKCE callback checks, expiry, cancellation, bucket signing and credential-free snapshots. Drive launch tests preserve the selected file through sign-in. Compiled browser checks verify no server-auth traffic and reconnection after reload. Worker tests reject old credential endpoints without reading their bodies or opening old storage. Fixture checks do not establish production provider configuration; real-provider validation must be recorded for the released revision.
+
+### Live checks — 2026-10-20
+
+The three production manifests and HTML hashes match viewer `8f7ed97`. Privacy and terms are effective October 20, 2026. Both custom HF callback paths return `no-store, no-transform`; the callback's early referrer meta policy suppresses the script request's Referer header. The hosting response header itself is `strict-origin`.
+
+Private HF browser sign-in and ZIP loading passed. Reload discarded the tab connection and required sign-in; reconnecting through the existing provider login and retrying loaded the private archive again. The retained public HF app has no client secret and keeps the custom, GitHub latest and GitHub dev callbacks. Both obsolete confidential HF connection apps were deleted. Google server-secret revocation and removal of its old server callback are still pending Cloud Console verification; the Google browser client and Drive UI registration must be preserved.
+
+An actual NL3D load rendered 100,000 points and downloaded a model-only ZIP. Independent verification matched every point, all 50 camera poses and their calibrations to the pinned original source. Captured public-load traffic contained 60 requests and zero `/auth/` requests. All eight live Hub entries passed their counts, metadata and direct-open checks. A synthetic share passed creation, card, redirect, preview, manage and CSS checks and was deleted afterward.
+
+The release's full GitHub checks, compiled deployment checks and Chromium suite passed. The final Hub revision passed its full checks and 62 browser cases before deployment. Drive private reads/save/Open with, HF publishing and disposable bucket transfers have automated coverage but were not repeated against real providers for this release. The October 19 receipts below apply to the earlier server-backed implementation.
 
 ### Live checks — 2026-10-19
 
