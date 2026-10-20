@@ -338,6 +338,15 @@ describe('DatasetManager', () => {
   });
 
   describe('hasImages', () => {
+    it('does not treat an uncached remote photo as known missing', () => {
+      mockState.sourceType = 'url';
+      mockState.imageUrlBase = 'https://example.com/images/';
+
+      expect(manager.getImageSync('pending.jpg')).toBeUndefined();
+      expect(manager.isImageKnownMissing('pending.jpg')).toBe(false);
+      expect(fetchUrlImage).not.toHaveBeenCalled();
+    });
+
     it('returns false when no source', () => {
       expect(manager.hasImages()).toBe(false);
     });

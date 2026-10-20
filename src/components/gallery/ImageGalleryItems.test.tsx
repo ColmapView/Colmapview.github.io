@@ -90,6 +90,25 @@ afterEach(() => {
 });
 
 describe('ImageGallery grid item', () => {
+  it('distinguishes a missing source photo from a thumbnail waiting to load', () => {
+    renderItem(GalleryItem, createImage({ photoMissing: true }));
+
+    expect(screen.getByText('Photo unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(GALLERY_THUMBNAIL_PLACEHOLDER)).toBeNull();
+  });
+
+  it('can display a mask even when its original photo is absent', () => {
+    useThumbnailMock.mockImplementation((_file: File | undefined, key: string) =>
+      key === 'mask:frame.jpg' ? 'mask-url' : undefined
+    );
+    renderItem(GalleryItem, createImage({ photoMissing: true, maskFile: buildFile('frame.jpg.png') }), {
+      thumbnailDisplayMode: 'mask',
+    });
+
+    expect(screen.getByAltText('frame.jpg mask')).toHaveAttribute('src', 'mask-url');
+    expect(screen.queryByText('Photo unavailable')).toBeNull();
+  });
+
   it('shows the filename only once while the thumbnail is loading', () => {
     renderItem(GalleryItem, createImage());
 
@@ -112,6 +131,14 @@ describe('ImageGallery grid item', () => {
 });
 
 describe('ImageGallery list item', () => {
+  it('identifies missing photos while keeping their camera statistics', () => {
+    renderListItem(createImage({ photoMissing: true }));
+
+    expect(screen.getByText(/Photo unavailable/)).toHaveTextContent('#2:7 · 800×600 · Photo unavailable');
+    expect(screen.getByText('frame.jpg')).toBeInTheDocument();
+    expect(screen.getByText('3D/2D pts')).toBeInTheDocument();
+  });
+
   it('renders PSNR and SSIM as one list metric column', () => {
     renderListItem(createImage({ splatPsnr: 31.24, splatSsim: 0.9428 }));
 

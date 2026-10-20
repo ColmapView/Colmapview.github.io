@@ -50,6 +50,29 @@ afterEach(() => {
 });
 
 describe('useImageGalleryViewModel', () => {
+  it('exposes known photo gaps from the loaded source before any photo is cached', () => {
+    const camera = buildCamera();
+    const state = useReconstructionStore.getState();
+    state.setLoadedFiles({ ...buildLoadedFiles(), nativeMedia: {
+      source: { kind: 'url', baseUrl: 'https://photos.test/' },
+      selection: { metadataPath: 'colmap', sceneRoot: '', schema: 'colmap', split: null },
+      bindings: new Map([['present.jpg', { sourceImagePath: 'images/present.jpg',
+        width: camera.width, height: camera.height, frameIndex: 1 }]]),
+      diagnostics: [], metadataFrameCount: 2,
+    } });
+    state.setReconstruction(buildReconstruction({ cameras: [camera], images: [
+      buildImage({ imageId: 1, name: 'missing.jpg', cameraId: camera.cameraId }),
+      buildImage({ imageId: 2, name: 'present.jpg', cameraId: camera.cameraId }),
+    ] }));
+
+    const { result, unmount } = renderHook(() => useImageGalleryViewModel());
+    expect(result.current.images.map(({ name, photoMissing }) => ({ name, photoMissing }))).toEqual([
+      { name: 'missing.jpg', photoMissing: true },
+      { name: 'present.jpg', photoMissing: false },
+    ]);
+    unmount();
+  });
+
   function setWebGpuSplatMetricsReady() {
     useSplatBackendStore.getState().setRequestedBackend('webgpu');
     useSplatBackendStore.getState().setWebGpuBackendState('ready');

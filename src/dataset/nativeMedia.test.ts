@@ -195,6 +195,7 @@ it.each(['local', 'archive', 'url'] as const)('keeps an existing native mask acc
     loadedFiles: { nativeMedia: context, imageFiles: new Map(), hasMasks: true } });
   const manager = new DatasetManager(() => state);
   expect(manager.hasImages()).toBe(false);
+  expect(manager.isImageKnownMissing('cam/a.jpg')).toBe(true);
   expect(manager.hasMasks()).toBe(true);
   expect(await manager.getOriginalImage('cam/a.jpg')).toBeNull();
   expect(manager.getImageSync('cam/a.jpg')).toBeUndefined();
@@ -221,6 +222,7 @@ it.each(['local', 'archive'] as const)('keeps exact native photo and mask bindin
   const state = buildDatasetState({ sourceType: kind === 'local' ? 'local' : 'zip', loadedFiles: { nativeMedia: context, imageFiles: new Map(), hasMasks: true } });
   const stable = new DatasetManager(() => state);
   expect(stable.hasMasks()).toBe(true);
+  expect(stable.isImageKnownMissing('cam/a.jpg')).toBe(false);
   expect(await stable.getOriginalImage('cam/a.jpg')).toBe(input.get('scene/images/cam/a.jpg'));
   expect(await stable.getMask('cam/a.jpg')).toBe(input.get('scene/mask/cam/a.png'));
   if (kind === 'local') {

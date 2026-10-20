@@ -173,6 +173,13 @@ export class DatasetManager {
   // State Queries
   // ===========================================================================
 
+  /** A completed import found no photo binding; an uncached URL is not known missing. */
+  isImageKnownMissing(imageName: string): boolean {
+    const state = this.getState();
+    const media = state.loadedFiles?.cameraImport ?? state.loadedFiles?.nativeMedia;
+    return media !== undefined && !media.bindings.has(imageName);
+  }
+
   /** Check if the dataset has images available */
   hasImages(): boolean {
     const state = this.getState();

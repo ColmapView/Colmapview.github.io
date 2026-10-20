@@ -14,6 +14,23 @@ import {
 } from './imageGalleryDataViewModel';
 
 describe('image gallery data view-model', () => {
+  it('keeps every camera pose and distinguishes unbound photos from uncached photos', () => {
+    const camera = buildCamera();
+    const images = buildGalleryImages({
+      reconstruction: buildReconstruction({ cameras: [camera], images: [
+        buildImage({ imageId: 1, name: 'missing.jpg', cameraId: camera.cameraId }),
+        buildImage({ imageId: 2, name: 'available.jpg', cameraId: camera.cameraId }),
+      ] }),
+      imageSource: { getImageSync: () => undefined, isImageKnownMissing: name => name === 'missing.jpg' },
+      cameraFilter: 'all', sortField: 'name', sortDirection: 'asc',
+    });
+
+    expect(images.map(({ name, photoMissing, file }) => ({ name, photoMissing, file }))).toEqual([
+      { name: 'available.jpg', photoMissing: false, file: undefined },
+      { name: 'missing.jpg', photoMissing: true, file: undefined },
+    ]);
+  });
+
   it('builds grid and list rows for virtualized rendering', () => {
     expect(buildImageRows([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
     expect(buildImageRows([1, 2, 3], 4)).toEqual([[1, 2, 3]]);

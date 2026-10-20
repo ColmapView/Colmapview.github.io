@@ -27,6 +27,8 @@ export interface ImageData {
   name: string;
   file?: File;
   maskFile?: File;
+  /** No photo binding exists, rather than a photo waiting for lazy loading. */
+  photoMissing?: boolean;
   numPoints2D: number;
   numPoints3D: number;
   cameraId: number;
@@ -42,6 +44,7 @@ export interface ImageData {
 interface GalleryImageSource {
   getImageSync: (imageName: string) => File | undefined;
   getMaskSync?: (imageName: string) => File | undefined;
+  isImageKnownMissing?: (imageName: string) => boolean;
 }
 
 interface BuildGalleryImagesOptions {
@@ -96,6 +99,7 @@ export function buildGalleryImages({
         name: img.name,
         file: imageSource.getImageSync(img.name),
         maskFile: imageSource.getMaskSync?.(img.name),
+        photoMissing: imageSource.isImageKnownMissing?.(img.name) ?? false,
         numPoints2D: img.numPoints2D ?? img.points2D.length,
         numPoints3D: stats?.numPoints3D ?? 0,
         cameraId: img.cameraId,

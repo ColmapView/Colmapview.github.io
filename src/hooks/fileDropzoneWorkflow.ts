@@ -675,8 +675,10 @@ export async function processFileDropzoneFiles(
       }
     }
     if (nativeMedia?.diagnostics.length) {
-      const ambiguous = nativeMedia.diagnostics.filter(item => item.code.startsWith('AMBIGUOUS')).length;
-      if (ambiguous) deps.addNotification('warning', `${ambiguous} ambiguous photo or mask paths were left unbound. Provide an image_mapping.csv to identify the original photos.`, 7000);
+      const ambiguousPhotos = nativeMedia.diagnostics.filter(item => item.code.startsWith('AMBIGUOUS') && item.code !== 'AMBIGUOUS_MASK_PATH').length;
+      const ambiguousMasks = nativeMedia.diagnostics.filter(item => item.code === 'AMBIGUOUS_MASK_PATH').length;
+      if (ambiguousPhotos) deps.addNotification('warning', `${ambiguousPhotos} ambiguous photo paths were left unbound. Provide an image_mapping.csv to identify the original photos.`, 7000);
+      if (ambiguousMasks) deps.addNotification('warning', `${ambiguousMasks} ambiguous mask paths were left unbound.`, 7000);
       const missing = nativeMedia.diagnostics.filter(item => item.code === 'MISSING_IMAGE').length;
       if (missing) {
         const maskHint = hasMasks ? ' Masks are matched; choose Show: Mask in the gallery to view them.' : '';

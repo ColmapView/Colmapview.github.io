@@ -133,7 +133,7 @@ export const GalleryItem = memo(function GalleryItem({
             className={galleryStyles.placeholder}
             style={getDeletionPlaceholderStyle(isMarkedForDeletion)}
           >
-            {GALLERY_THUMBNAIL_PLACEHOLDER}
+            {img.photoMissing && thumbnailDisplayMode !== 'mask' ? 'Photo unavailable' : GALLERY_THUMBNAIL_PLACEHOLDER}
           </div>
         )}
         {showMaskOverlay && (
@@ -282,7 +282,10 @@ export const ListItem = memo(function ListItem({
       </div>
       <div className={listStyles.content}>
         <div className={listStyles.title}>{img.name}</div>
-        <div className={listStyles.subtitle}>{multiCamera ? `#${img.cameraId}:${img.imageId}` : `#${img.imageId}`} · {img.cameraWidth}×{img.cameraHeight}</div>
+        <div className={listStyles.subtitle}>
+          {multiCamera ? `#${img.cameraId}:${img.imageId}` : `#${img.imageId}`} · {img.cameraWidth}×{img.cameraHeight}
+          {img.photoMissing && ' · Photo unavailable'}
+        </div>
       </div>
       <div className="flex-shrink-0 text-right list-stats-compact">
         <div className="text-ds-primary text-xs whitespace-nowrap">{compactValues.join(' · ')}</div>

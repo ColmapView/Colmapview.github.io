@@ -256,10 +256,7 @@ export function useImageGalleryViewModel() {
     void hasMasks;
     return buildGalleryImages({
       reconstruction,
-      imageSource: {
-        getImageSync: (imageName) => dataset.getImageSync(imageName),
-        getMaskSync: (imageName) => dataset.getMaskSync(imageName),
-      },
+      imageSource: dataset,
       splatPsnrByImage: showSplatMetrics ? splatPsnrByImage : undefined,
       cameraFilter,
       sortField: effectiveSortField,
