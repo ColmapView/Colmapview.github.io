@@ -12,6 +12,7 @@ The inventory is the existing 2,012-repository HF search catalog and 88-row broa
 | --- | --- |
 | Co-located `cameras.bin/txt` and `images.bin/txt`, no points file | Load poses from folders, ZIP/TAR and discovered HF trees; explicit manifests may omit `files.points3D`. Export a valid empty points file and empty image observations. No 3D geometry is fabricated. |
 | A declared points file returns 404 or is corrupt | Fail with the original error. Only an absent/omitted file selects camera-only loading. |
+| NeRF camera metadata with a declared or uniquely named scene-local XYZ PLY | Import the associated cloud, preserve the saved world coordinates and export untracked COLMAP points. Set Min Track to zero before restoring saved settings. Meshes, splats and ambiguous companions require separate handling; see [camera datasets](camera-dataset-imports.md). |
 | Both complete and camera-only models are present | Prefer a complete co-located model; otherwise use one camera/image pair. A same-source raw PLY fallback remains available. Select a scene folder/URL to identify a particular reconstruction. |
 | Uppercase `.BIN` or `.TXT` | Detect the format consistently during discovery, parsing and optional rig/frame loading. |
 | Archive photos differ only by case, such as `photo.JPG` and `photo.jpg` | Preserve both physical paths and original bytes. Exact names take precedence; ambiguous case-insensitive aliases remain unresolved. An available qualified camera path takes precedence over a bare filename alias. |
