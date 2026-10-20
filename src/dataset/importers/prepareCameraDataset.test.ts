@@ -4,6 +4,7 @@ import { pngHeader,jpegExifHeader } from '../../test/imageHeaders';
 import { MAX_VIEWER_STATE_BYTES } from '../../utils/publishedViewerState';
 import { parseCamerasBinary } from '../../parsers/cameras';
 import { parseImagesBinary } from '../../parsers/images';
+import { parsePoints3DBinary } from '../../parsers/points3d';
 import { prepareLocalCameraDataset } from './prepareCameraDataset';
 import { CameraModelId } from '../../types/cameraModelId';
 import type { ArchiveEntry } from '../../archive/types';
@@ -69,6 +70,20 @@ describe('camera metadata preparation',() => {
     views:[{key:0,value:{ptr_wrapper:{data:{filename:'a.png',local_path:'',id_pose:42,id_intrinsic:9}}}}],
     intrinsics:[{key:9,value:{polymorphic_name:'pinhole',ptr_wrapper:{data:{width:800,height:800,focal_length:400,principal_point:[400,400]}}}}],
     extrinsics:[{key:42,value:{rotation:[[1,0,0],[0,1,0],[0,0,1]],center:[0,0,0]}}],
+  });
+  it.each(['local','archive','url'] as const)('writes OpenMVG points and reciprocal observations to COLMAP binaries from %s',async kind=>{
+    const metadata={...openMvgMetadata(''),structure:[{key:91,value:{X:[0,0,2],
+      observations:[{key:0,value:{id_feat:1_000_000_000,x:[400,400]}}]}}]};
+    const input=new Map<string,File>([['scene/sfm_data.json',file(JSON.stringify(metadata),'sfm_data.json')],
+      ['scene/a.png',file(pngHeader(800,800),'a.png')]]);
+    const prepared=(kind==='local' ? await prepareLocalCameraDataset(input) : kind==='url'
+      ? await prepareCameraDataset({kind:'url',baseUrl:'https://example.test/scene/'},{metadataPath:'sfm_data.json',metadataFile:input.get('scene/sfm_data.json')})
+      : await prepareCameraDataset({kind:'archive',entries:new Map([...input].map(([path,value])=>[path,
+        {name:value.name,size:value.size,lastModified:0,extract:async()=>value,extractPreview:async()=>value}]))}))!;
+    const points=parsePoints3DBinary(await prepared.files.get('sparse/0/points3D.bin')!.arrayBuffer());
+    const images=parseImagesBinary(await prepared.files.get('sparse/0/images.bin')!.arrayBuffer());
+    expect(points.get(91n)).toMatchObject({xyz:[0,0,2],track:[{imageId:1,point2DIdx:0}]});
+    expect(images.get(1)?.points2D).toEqual([{xy:[400,400],point3DId:91n}]);
   });
   it('honors the declared OpenMVG image root over same-named sibling files',async()=>{
     const input=new Map<string,File>([

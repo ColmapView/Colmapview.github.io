@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.4] - 2026-10-20
+
+### Fixed
+
+- Preserve OpenMVG sparse landmarks and image observations instead of exporting an empty point cloud. Map view IDs and compact sparse feature IDs into reciprocal COLMAP tracks, retain geometry when photos are missing, and derive reprojection errors from the imported cameras.
+
 ## [0.19.3] - 2026-10-20
 
 ### Changed

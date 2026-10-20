@@ -1,4 +1,4 @@
-import type { Camera, Image } from '../../types/colmap';
+import type { Camera, Image, Point3D, Point3DId } from '../../types/colmap';
 import type { ArchiveEntry } from '../../archive/types';
 
 export type CameraDatasetSchema = 'colmap' | 'nerf-blender' | 'nerfstudio' | 'instant-ngp'
@@ -76,6 +76,7 @@ export interface CameraDatasetImportContext {
 export interface NormalizedCameraDataset {
   cameras: Map<number, Camera>;
   images: Map<number, Image>;
+  points3D?: Map<Point3DId, Point3D>;
   bindings: Map<string, ImportedImageBinding>;
   diagnostics: ImportDiagnostic[];
   schema: CameraDatasetSchema;

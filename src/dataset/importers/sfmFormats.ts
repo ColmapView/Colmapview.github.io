@@ -4,6 +4,8 @@ import { dimension, finite, importError, object, positive, MAX_CAMERA_FRAMES,
   type NormalizedCameraDataset } from './types';
 import type { ResolveCameraFrame } from './nerfTransforms';
 import { emptyCameraDataset as empty, addCameraFrame as add, finishCameraDataset as finish } from './cameraDatasetBuilder';
+import { addOpenMvgStructure, openMvgId } from './openMvgStructure';
+import type { Image } from '../../types/colmap';
 
 export function isOpenSfm(value: unknown): boolean {
   const root = Array.isArray(value) ? value[0] : value;
@@ -48,8 +50,7 @@ function mvgRows(value: unknown, field: string): Array<Record<string,unknown>> {
 function mvgIndex(value: unknown, field: string, unwrap: boolean): Map<string,Record<string,unknown>> {
   const index=new Map<string,Record<string,unknown>>();
   for (const row of mvgRows(value,field)) {
-    if (typeof row.key !== 'number' || !Number.isSafeInteger(row.key) || row.key < 0) return importError('INVALID_METADATA',`OpenMVG ${field} IDs must be nonnegative integers.`);
-    const key=String(row.key);
+    const key=String(openMvgId(row.key,field));
     if (index.has(key)) return importError('INVALID_METADATA',`Duplicate OpenMVG ${field} ID: ${key}.`);
     index.set(key,unwrap ? mvgValue(row.value,field+'.value') : object(row.value,field+'.value'));
   }
@@ -62,9 +63,13 @@ export async function normalizeOpenMvg(value: unknown, resolve: ResolveCameraFra
   const poses=mvgIndex(root.extrinsics,'extrinsics',true);
   const intrinsics=mvgIndex(root.intrinsics,'intrinsics',false);
   const result=empty('openmvg',views.length);
+  const imagesByView=new Map<number,Image|undefined>();
   for (const [index,row] of views.entries()) {
     if (index > 0 && index % 256 === 0) await new Promise<void>(done => setTimeout(done,0));
     signal?.throwIfAborted();
+    const viewId=openMvgId(row.key,'view');
+    if (imagesByView.has(viewId)) return importError('INVALID_METADATA',`Duplicate OpenMVG view ID: ${viewId}.`);
+    imagesByView.set(viewId,undefined);
     const view=mvgValue(row.value,'view');
     const intrinsic=intrinsics.get(String(view.id_intrinsic)), pose=poses.get(String(view.id_pose));
     if (!intrinsic || !pose) {
@@ -87,7 +92,9 @@ export async function normalizeOpenMvg(value: unknown, resolve: ResolveCameraFra
     const resolved=await resolve(path,{ w:width,h:height },index);
     add(result,index,resolved,worldToCameraFromCenter(pose.rotation,pose.center,'pose'),
       { modelId:CameraModelId.FULL_OPENCV,width,height,params },path);
+    imagesByView.set(viewId,result.images.get(index+1));
   }
+  await addOpenMvgStructure(root.structure,result,imagesByView,signal);
   return finish(result);
 }
 

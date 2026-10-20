@@ -290,7 +290,7 @@ export async function prepareCameraDataset(source: CameraDatasetSource,options: 
     ['sparse/0/cameras.bin',new File([writeCamerasBinary(normalized.cameras)],'cameras.bin')],
     ['sparse/0/images.bin',new File([writeImagesBinary(normalized.images)],'images.bin')],
     pointCloud ? ['sparse/0/points3D.ply', pointCloud.file]
-      : ['sparse/0/points3D.bin',new File([writePoints3DBinary(new Map())],'points3D.bin')],
+      : ['sparse/0/points3D.bin',new File([writePoints3DBinary(normalized.points3D ?? new Map())],'points3D.bin')],
   ]);
   if (source.kind==='local') {
     for (const [name,binding] of normalized.bindings) {
