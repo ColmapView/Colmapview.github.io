@@ -96,7 +96,7 @@ export function GoogleDrivePublishModal({ isOpen, onClose }: { isOpen: boolean; 
           </section>}
           {publish.receipt && <UploadResult label="Published Drive dataset" title={publish.receipt.shared ? 'Published to Google Drive' : 'Saved privately to Google Drive'}
             notice={publish.receipt.shared ? 'Anyone with the link can view.' : 'Private. Viewers need permission to this file. ColmapView may ask them to sign in or choose the archive in Drive.'}
-            viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.driveUrl, label: 'Google Drive' }}
+            viewerUrl={publish.receipt.viewerUrl} providerLink={{ url: publish.receipt.driveUrl, label: 'Google Drive', icon: <GoogleDriveIcon className="w-4 h-4" /> }}
             hub={hub} />}
         </div>
       </UploadLayout>

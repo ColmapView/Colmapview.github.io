@@ -151,6 +151,10 @@ describe('Google Drive publishing dialog', () => {
     expect(screen.getByLabelText('Share link')).toHaveValue('https://viewer.example/?url=drive-link');
     expect(screen.getByText('Private. Viewers need permission to this file. ColmapView may ask them to sign in or choose the archive in Drive.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open link' })).not.toBeInTheDocument();
+    const driveLink = screen.getByRole('link', { name: 'Google Drive' });
+    expect(driveLink).toHaveAttribute('href', actions.publish.receipt!.driveUrl);
+    expect(driveLink.textContent).toBe('');
+    expect(driveLink.querySelector('svg')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Save private dataset' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Upload another dataset' })).toBeNull();
     rerender(<GoogleDrivePublishModal isOpen={false} onClose={onClose} />);

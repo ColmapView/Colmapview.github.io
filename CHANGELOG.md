@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Use the Hugging Face repository name as the dataset title and allow public uploads without a license selection.
-- Use a compact 🤗 dataset link in completed Hugging Face uploads and remove the duplicate Open link action from upload results.
+- Use compact provider icons in completed Hugging Face (🤗) and Google Drive uploads and remove the duplicate Open link action from upload results.
 
 ## [0.19.11] - 2026-10-20
 
