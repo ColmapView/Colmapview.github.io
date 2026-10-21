@@ -1,5 +1,6 @@
 import type { Image, Point3D, ImageStats, ConnectedImagesIndex, GlobalStats, Point3DId, ImageId } from '../types/colmap';
 import type { WasmReconstructionWrapper } from '../wasm/reconstruction';
+import { denseTrackConnections } from './denseTrackConnections';
 
 interface InternalImageStats {
   numPoints3D: number;
@@ -43,6 +44,7 @@ function computeStatsFromTracks(
   tracks: Iterable<TrackEntry>,
   totalPoints: number,
   includePointMembership = true,
+  precomputedConnections?: ConnectedImagesIndex,
 ): ImageStatsResult {
   // Initialize stats for all images
   const internalStats = new Map<number, InternalImageStats>();
@@ -56,10 +58,8 @@ function computeStatsFromTracks(
   }
 
   // Initialize connected images index
-  const connectedImagesIndex: ConnectedImagesIndex = new Map();
-  for (const imageId of images.keys()) {
-    connectedImagesIndex.set(imageId, new Map());
-  }
+  const connectedImagesIndex: ConnectedImagesIndex = precomputedConnections ?? new Map();
+  if (!precomputedConnections) for (const imageId of images.keys()) connectedImagesIndex.set(imageId, new Map());
 
   // Initialize image to point3D IDs mapping (for highlighting without points2D)
   const imageToPoint3DIds: ImageToPoint3DIdsMap = new Map();
@@ -104,7 +104,7 @@ function computeStatsFromTracks(
           stat.errorCount++;
         }
         // Add all other images in this track as covisible
-        for (const otherId of trackImageIds) {
+        if (!precomputedConnections) for (const otherId of trackImageIds) {
           if (otherId !== trackImageId) {
             stat.covisibleSet.add(otherId);
           }
@@ -118,7 +118,7 @@ function computeStatsFromTracks(
     }
 
     // Build connected images index (pairwise connections)
-    for (let i = 0; i < trackImageIds.length; i++) {
+    if (!precomputedConnections) for (let i = 0; i < trackImageIds.length; i++) {
       for (let j = i + 1; j < trackImageIds.length; j++) {
         const id1 = trackImageIds[i];
         const id2 = trackImageIds[j];
@@ -143,7 +143,7 @@ function computeStatsFromTracks(
     imageStats.set(imageId, {
       numPoints3D: stat.numPoints3D,
       avgError: stat.errorCount > 0 ? stat.totalError / stat.errorCount : 0,
-      covisibleCount: stat.covisibleSet.size,
+      covisibleCount: precomputedConnections ? connectedImagesIndex.get(imageId)!.size : stat.covisibleSet.size,
     });
   }
 
@@ -226,5 +226,7 @@ export function computeImageStatsFromWasm(
     }
   }
 
-  return computeStatsFromTracks(images, iterateTracks(), pointCount, includePointMembership);
+  const connections = !includePointMembership && trackOffsets && trackImageIdsArr
+    ? denseTrackConnections(images.keys(), pointCount, trackOffsets, trackImageIdsArr) : null;
+  return computeStatsFromTracks(images, iterateTracks(), pointCount, includePointMembership, connections ?? undefined);
 }
