@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.2] - 2026-10-20
+
+### Changed
+
+- Explain on hover that Google Drive links on GitHub Pages open colmapview.opsiclear.com in a new tab, including the URL dialog handoff.
+
 ## [0.20.1] - 2026-10-20
 
 ### Added
