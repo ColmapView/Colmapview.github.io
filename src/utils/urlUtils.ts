@@ -247,6 +247,21 @@ export async function readResponseToBlob(
     return response.blob();
   }
   const total = parseSafeIntegerString(response.headers.get('content-length') ?? '') ?? 0;
+  if (total >= 1024 ** 3) {
+    // Let the browser stream large responses into its Blob store. Registering
+    // accumulated renderer byte payloads can exceed Chromium's Blob quota.
+    let loaded = 0;
+    try {
+      onProgress(0, total);
+      const tracked = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+        transform(bytes, controller) { loaded += bytes.length; onProgress(loaded, total); controller.enqueue(bytes); },
+      }));
+      return await new Response(tracked).blob();
+    } catch (error) {
+      if (!response.body.locked) void response.body.cancel().catch(() => {});
+      throw error;
+    }
+  }
   return readResponseStreamToBlob(response.body, total, onProgress);
 }
 

@@ -10,7 +10,35 @@ import {
   fetchRemoteSplatBytes,
   toArrayBuffer,
   getFilenameFromUrl,
+  readResponseToBlob,
 } from './urlUtils';
+
+describe('large response Blob storage', () => {
+  it('keeps native Blob streaming byte-exact and reports progress without preallocating the declared size', async () => {
+    const progress = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new Uint8Array([1, 2, 3])); controller.enqueue(new Uint8Array([4])); controller.close();
+    } });
+    const blob = await readResponseToBlob(new Response(body, { headers: { 'content-length': String(1024 ** 3) } }), progress);
+    const bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(blob);
+    });
+    expect([...new Uint8Array(bytes)]).toEqual([1, 2, 3, 4]);
+    expect(progress.mock.calls).toEqual([[0, 1024 ** 3], [3, 1024 ** 3], [4, 1024 ** 3]]);
+  });
+
+  it('cancels a large source stream if a progress consumer fails', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ pull(controller) { controller.enqueue(new Uint8Array([1])); }, cancel });
+    await expect(readResponseToBlob(new Response(body, { headers: { 'content-length': String(1024 ** 3) } }), loaded => {
+      if (loaded) throw new Error('progress failed');
+    })).rejects.toThrow('progress failed');
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+});
 
 describe('detectCloudProvider', () => {
   describe('S3 URLs', () => {

@@ -5,7 +5,10 @@ export interface ObservationRange { offset: number; count: number }
 
 /** Keep original observations in the Blob; only pose headers enter WASM memory. */
 export async function indexImageFile(file: Blob) {
-  const countBytes = await file.slice(0, 8).arrayBuffer();
+  const read = (start: number, end: number) => file.slice(start, end).arrayBuffer().catch(error => {
+    throw new Error(`Could not read binary pose metadata at byte ${start}: ${error instanceof Error ? error.message : String(error)}`);
+  });
+  const countBytes = await read(0, 8);
   if (countBytes.byteLength !== 8) throw new Error('Truncated binary image count');
   const count = Number(new DataView(countBytes).getBigUint64(0, true));
   if (!Number.isSafeInteger(count) || count < 1 || count * 73 + 8 > file.size) throw new Error('Invalid binary image count');
@@ -13,10 +16,10 @@ export async function indexImageFile(file: Blob) {
   const ranges = new Map<number, ObservationRange>();
   let offset = 8, metadataBytes = 8;
   for (let index = 0; index < count; index++) {
-    let bytes = new Uint8Array(await file.slice(offset, offset + 4096).arrayBuffer());
+    let bytes = new Uint8Array(await read(offset, offset + 4096));
     let end = bytes.indexOf(0, 64);
     if (end < 0 || end + 9 > bytes.length) {
-      bytes = new Uint8Array(await file.slice(offset, offset + 1024 * 1024).arrayBuffer());
+      bytes = new Uint8Array(await read(offset, offset + 1024 * 1024));
       end = bytes.indexOf(0, 64);
     }
     if (end < 65 || end + 9 > bytes.length) throw new Error('Truncated or oversized binary image name');

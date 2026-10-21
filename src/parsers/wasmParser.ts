@@ -53,10 +53,13 @@ export async function parseWithWasm(
 
     // Parse all files with WASM
     const largeImages = imagesFile.size >= 1024 * 1024 * 1024;
+    const read = (file: File) => file.arrayBuffer().catch(error => {
+      throw new Error(`Could not read ${file.name} (${file.size} bytes): ${error instanceof Error ? error.message : String(error)}`);
+    });
     const [camerasBuffer, imagesBuffer, points3DBuffer] = await Promise.all([
-      camerasFile.arrayBuffer(),
+      read(camerasFile),
       largeImages ? Promise.resolve(null) : imagesFile.arrayBuffer(),
-      points3DFile.arrayBuffer(),
+      read(points3DFile),
     ]);
 
     const camerasOk = wasm.parseCameras(camerasBuffer);
