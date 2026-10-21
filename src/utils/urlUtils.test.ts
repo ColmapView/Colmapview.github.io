@@ -20,7 +20,7 @@ describe('large response Blob storage', () => {
       controller.enqueue(new Uint8Array([1, 2, 3])); controller.enqueue(new Uint8Array([4])); controller.close();
     } });
     const blob = await readResponseToBlob(new Response(body, { headers: { 'content-length': String(1024 ** 3) } }), progress);
-    const bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
+    const bytes = typeof blob.arrayBuffer === 'function' ? await blob.arrayBuffer() : await new Promise<ArrayBuffer>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as ArrayBuffer);
       reader.onerror = () => reject(reader.error);
