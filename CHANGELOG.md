@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.4] - 2026-10-21
+
+### Fixed
+
+- Validate streamed download bytes with both native Node 22 Blobs and JSDOM Blobs so the large-file release passes the deployment gate. Includes the large-pose and dense-statistics fixes documented in 0.20.3.
+
 ## [0.20.3] - 2026-10-21
 
 ### Fixed
