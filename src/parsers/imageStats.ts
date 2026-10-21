@@ -226,7 +226,7 @@ export function computeImageStatsFromWasm(
     }
   }
 
-  const connections = !includePointMembership && trackOffsets && trackImageIdsArr
+  const connections = !includePointMembership && errors && errors.length >= pointCount && trackOffsets && trackImageIdsArr
     ? denseTrackConnections(images.keys(), pointCount, trackOffsets, trackImageIdsArr) : null;
   return computeStatsFromTracks(images, iterateTracks(), pointCount, includePointMembership, connections ?? undefined);
 }
