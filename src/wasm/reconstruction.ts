@@ -6,6 +6,7 @@
 
 import { loadColmapWasm } from './init';
 import { appLogger } from '../utils/logger';
+import { indexImageFile, readImageObservations, type ObservationRange } from '../parsers/lazyImageFile';
 import type {
   ColmapWasmModule,
   WasmReconstruction,
@@ -38,6 +39,29 @@ export class WasmReconstructionWrapper {
 
   // Lazy loading: store original images.bin buffer for on-demand 2D point loading
   private imagesBuffer: ArrayBuffer | null = null;
+  private imagesFile: Blob | null = null;
+  private observationRanges: Map<number, ObservationRange> | null = null;
+  private readObservationBlob: ((blob: Blob) => ArrayBuffer) | null = null;
+
+  get retainedImageBufferBytes(): number { return this.imagesBuffer?.byteLength ?? 0; }
+
+  async parseLargeImageFile(file: Blob) {
+    const Reader = (globalThis as unknown as { FileReaderSync?: new () => { readAsArrayBuffer(blob: Blob): ArrayBuffer } }).FileReaderSync;
+    if (!Reader) throw new Error('Large binary pose files require a reconstruction worker with synchronous Blob reads.');
+    const indexed = await indexImageFile(file);
+    if (!this.parseImagesLazy(indexed.buffer)) throw new Error('Failed to parse indexed binary poses');
+    this.imagesFile = file;
+    this.observationRanges = indexed.ranges;
+    const reader = new Reader();
+    this.readObservationBlob = blob => reader.readAsArrayBuffer(blob);
+    return indexed.images;
+  }
+
+  private readFileImagePoints(imageId: number): Point2D[] | null {
+    if (!this.imagesFile || !this.observationRanges || !this.readObservationBlob) return null;
+    const range = this.observationRanges.get(imageId);
+    return range ? readImageObservations(this.imagesFile, range, this.readObservationBlob) : [];
+  }
 
   /**
    * Initialize the WASM module and create a Reconstruction instance
@@ -100,6 +124,9 @@ export class WasmReconstructionWrapper {
       throw new Error('WASM module not initialized');
     }
     this.invalidateCaches();
+    this.imagesFile = null;
+    this.observationRanges = null;
+    this.readObservationBlob = null;
     return this.reconstruction.parseImages(buffer);
   }
 
@@ -113,6 +140,9 @@ export class WasmReconstructionWrapper {
     }
     this.invalidateCaches();
     this.imagesBuffer = null;  // No lazy loading in lite mode
+    this.imagesFile = null;
+    this.observationRanges = null;
+    this.readObservationBlob = null;
     return this.reconstruction.parseImagesLite(buffer);
   }
 
@@ -128,6 +158,9 @@ export class WasmReconstructionWrapper {
       throw new Error('WASM module not initialized');
     }
     this.invalidateCaches();
+    this.imagesFile = null;
+    this.observationRanges = null;
+    this.readObservationBlob = null;
     // Store buffer reference for lazy loading
     this.imagesBuffer = buffer;
     // Fall back to regular parseImages if parseImagesLazy not available (older WASM)
@@ -155,6 +188,7 @@ export class WasmReconstructionWrapper {
    * Returns a copy of the data (not a view), safe to store.
    */
   loadImagePoints2D(imageId: number): ImagePoints2DData | null {
+    if (this.imagesFile) return this.getImagePoints2D(imageId);
     if (!this.reconstruction || !this.imagesBuffer) {
       return null;
     }
@@ -204,6 +238,9 @@ export class WasmReconstructionWrapper {
       this.invalidateCaches();
     }
     this.imagesBuffer = null;
+    this.imagesFile = null;
+    this.observationRanges = null;
+    this.readObservationBlob = null;
   }
 
   /**
@@ -389,6 +426,7 @@ export class WasmReconstructionWrapper {
    * Get number of 2D points per image (always available, even in lite mode)
    */
   getNumPoints2DPerImage(): Uint32Array | null {
+    if (this.observationRanges) return Uint32Array.from(this.getAllImageInfos(), image => this.observationRanges!.get(image.imageId)!.count);
     return this.reconstruction?.getNumPoints2DPerImage() ?? null;
   }
 
@@ -478,6 +516,12 @@ export class WasmReconstructionWrapper {
    */
   getImagePoints2D(imageId: number): ImagePoints2DData | null {
     if (!this.reconstruction) return null;
+    const points = this.readFileImagePoints(imageId);
+    if (points) {
+      const xy = new Float32Array(points.length * 2);
+      for (let index = 0; index < points.length; index++) xy.set(points[index].xy, index * 2);
+      return { count: points.length, xy, point3dIds: BigInt64Array.from(points, point => point.point3DId) };
+    }
     const result = this.reconstruction.getImagePoints2D(imageId);
     if (!result) return null;
     return {
@@ -496,6 +540,8 @@ export class WasmReconstructionWrapper {
    * Works in both full mode (getImagePoints2D) and lazy mode (loadImagePoints2D).
    */
   getImagePoints2DArray(imageId: number): Point2D[] {
+    const original = this.readFileImagePoints(imageId);
+    if (original) return original;
     // Try lazy loading first if in lazy mode
     let data: ImagePoints2DData | null = null;
     if (this.isLazyMode()) {
@@ -593,6 +639,9 @@ export class WasmReconstructionWrapper {
     }
     this.module = null;
     this.imagesBuffer = null;
+    this.imagesFile = null;
+    this.observationRanges = null;
+    this.readObservationBlob = null;
   }
 }
 

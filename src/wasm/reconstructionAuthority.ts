@@ -98,7 +98,7 @@ export class ReconstructionAuthority {
     if (parsed) {
       this.wasm = parsed.wasmWrapper;
       this.parser = 'wasm';
-      this.retainedImageBufferBytes = files.imagesFile.size;
+      this.retainedImageBufferBytes = files.imagesFile.size >= 1024 ** 3 ? parsed.wasmWrapper.retainedImageBufferBytes : files.imagesFile.size;
       cameras = parsed.cameras;
       images = parsed.images;
     } else {

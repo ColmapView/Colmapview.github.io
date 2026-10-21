@@ -52,9 +52,10 @@ export async function parseWithWasm(
     const startTime = performance.now();
 
     // Parse all files with WASM
+    const largeImages = imagesFile.size >= 1024 * 1024 * 1024;
     const [camerasBuffer, imagesBuffer, points3DBuffer] = await Promise.all([
       camerasFile.arrayBuffer(),
-      imagesFile.arrayBuffer(),
+      largeImages ? Promise.resolve(null) : imagesFile.arrayBuffer(),
       points3DFile.arrayBuffer(),
     ]);
 
@@ -62,7 +63,8 @@ export async function parseWithWasm(
     // Use lazy parsing - 2D points are NOT cached in WASM memory
     // Instead, only file offsets are stored (~50KB), and 2D points are loaded on-demand
     // This enables loading 1.9GB+ images.bin files without running out of memory
-    const imagesOk = wasm.parseImagesLazy(imagesBuffer);
+    const indexedImages = largeImages ? await wasm.parseLargeImageFile(imagesFile) : undefined;
+    const imagesOk = indexedImages !== undefined || wasm.parseImagesLazy(imagesBuffer!);
     const points3DOk = wasm.parsePoints3D(points3DBuffer);
 
     if (!camerasOk || !imagesOk || !points3DOk) {
@@ -93,7 +95,7 @@ export async function parseWithWasm(
     const numPoints2DPerImage = wasm.getNumPoints2DPerImage();
     // WASM render arrays are float32. Preserve original double-precision poses for
     // edits and native export while still leaving observations lazy in WASM.
-    const originalImages = imagesBuffer.byteLength >= 8 ? parseImagesBinary(imagesBuffer, true) : undefined;
+    const originalImages = indexedImages ?? (imagesBuffer && imagesBuffer.byteLength >= 8 ? parseImagesBinary(imagesBuffer, true) : undefined);
 
     const images = originalImages ?? new Map<number, ColmapImage>();
     const allImages = originalImages ? [] : wasm.getAllImageInfos();
@@ -210,6 +212,9 @@ export async function parseWithWasm(
     return { cameras, images, rigData, wasmWrapper: wasm };
   } catch (err) {
     wasm?.dispose();
+    // Materializing a failed multi-GB observation file in the JS fallback would
+    // repeat the allocation failure or exhaust the heap. Keep the original error.
+    if (imagesFile.size >= 1024 ** 3) throw err;
     appLogger.warn('[WASM] Error during parsing, falling back to JS:', err);
     return null;
   }
