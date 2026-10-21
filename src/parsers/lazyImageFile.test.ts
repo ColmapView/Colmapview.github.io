@@ -3,7 +3,12 @@ import { indexImageFile, readImageObservations } from './lazyImageFile';
 
 /** Sparse test data exercises >2 GiB offsets without allocating that payload. */
 class SparseBlob {
-  constructor(readonly size: number, readonly parts: Array<[number, Uint8Array]>, readonly offset = 0) {}
+  readonly size: number;
+  readonly parts: Array<[number, Uint8Array]>;
+  readonly offset: number;
+  constructor(size: number, parts: Array<[number, Uint8Array]>, offset = 0) {
+    this.size = size; this.parts = parts; this.offset = offset;
+  }
   slice(start: number, end = this.size) {
     if (end - start > 1024 * 1024 * 2) throw new Error('Unbounded read');
     return new SparseBlob(Math.max(0, Math.min(end, this.size) - start), this.parts, this.offset + start) as unknown as Blob;

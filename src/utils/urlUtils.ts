@@ -251,9 +251,9 @@ export async function readResponseToBlob(
 }
 
 /**
- * Read a fetch response body to a Blob, reporting bytes as they arrive. Builds
- * the Blob directly from the chunk array (no intermediate full-buffer copy) to
- * keep peak memory near one copy of the file.
+ * Commit small byte batches to Blobs while downloading. Composing those Blob
+ * references avoids registering a multi-GB raw byte payload at the end and
+ * allows the browser to move completed batches out of renderer memory.
  */
 async function readResponseStreamToBlob(
   body: ReadableStream<Uint8Array>,
@@ -261,7 +261,12 @@ async function readResponseStreamToBlob(
   onProgress: DownloadProgressCallback
 ): Promise<Blob> {
   const reader = body.getReader();
-  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  const blobs: Blob[] = [];
+  let chunks: Uint8Array<ArrayBuffer>[] = [], buffered = 0;
+  const flush = () => {
+    if (buffered) blobs.push(new Blob(chunks));
+    chunks = []; buffered = 0;
+  };
   let loaded = 0;
   try {
     onProgress(0, total);
@@ -271,6 +276,8 @@ async function readResponseStreamToBlob(
       // Copy into an ArrayBuffer-backed view: detaches from the stream buffer and
       // satisfies the BlobPart type (the raw chunk is Uint8Array<ArrayBufferLike>).
       chunks.push(new Uint8Array(value));
+      buffered += value.length;
+      if (buffered >= 16 * 1024 * 1024) flush();
       loaded += value.length;
       onProgress(loaded, total);
     }
@@ -280,7 +287,8 @@ async function readResponseStreamToBlob(
     // A no-op once the stream is fully drained or already errored.
     reader.cancel().catch(() => {});
   }
-  return new Blob(chunks);
+  flush();
+  return new Blob(blobs);
 }
 
 /**
