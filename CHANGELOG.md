@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.3] - 2026-10-21
+
+### Fixed
+
+- Load large binary pose files through a bounded header index in the browser worker, retaining original observation bytes for on-demand reads instead of allocating one multi-GB buffer.
+- Stream large downloads into the browser's Blob store and commit smaller downloads in batches to reduce temporary renderer memory.
+- Compute exact dense-track connection weights using bounded bitsets when that requires less work. Preserve the existing sparse/duplicate-reference path, camera poses, point IDs, observations and statistics.
+
+### Validation
+
+- The AstroVision Itokawa segment imports its original 1 camera model, 560 poses and 396,245 points from 2.9 GB of native files in a temporary regular Chromium profile. Full photos, masks and large-model exports retain separate coverage.
+- A real-worker regression reads original observations beyond a 2 GiB file offset, including full-precision coordinates and sparse bigint point IDs.
+
 ## [0.20.2] - 2026-10-20
 
 ### Changed
