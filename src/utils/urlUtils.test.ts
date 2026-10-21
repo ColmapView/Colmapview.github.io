@@ -421,6 +421,19 @@ describe('fetchRemoteSplatFile', () => {
     expect(loaded).toEqual([...loaded].sort((a, b) => a - b));
   });
 
+  it('preserves byte boundaries across multiple browser-backed Blob batches', async () => {
+    const first = new Uint8Array(9 * 1024 * 1024).fill(17), second = new Uint8Array(first.length).fill(29);
+    vi.stubGlobal('fetch', vi.fn(async () => streamingResponse([first, second, new Uint8Array([41])], first.length * 2 + 1)));
+    const file = await fetchRemoteSplatFile('https://host/large.ply', () => {});
+    const bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error); reader.readAsArrayBuffer(file);
+    });
+    const data = new Uint8Array(bytes);
+    expect(data.length).toBe(first.length * 2 + 1);
+    expect([data[0], data[first.length - 1], data[first.length], data.at(-2), data.at(-1)]).toEqual([17, 17, 29, 29, 41]);
+  });
+
   it('falls back to blob() (no streaming) when no progress callback is given', async () => {
     // jsdom's Response.blob() is not byte-faithful, so assert the branch returns a
     // correctly-named File rather than an env-dependent size. The byte-accurate
