@@ -213,6 +213,16 @@ describe('camera frustum view-model helpers', () => {
     })).toBe(false);
   });
 
+  it.each([[-200, 400], [200, -400], [-200, -400]])('frames signed focal axes %s,%s using their extents', (fx, fy) => {
+    const options = { cameraScale: 2, viewportWidth: 1000, viewportHeight: 500, currentFov: 60 };
+    const calibration = [fx, fy, 410, 190];
+    const camera = buildCamera({ width: 800, height: 400, params: calibration });
+    const positive = buildCamera({ width: 800, height: 400, params: [Math.abs(fx), Math.abs(fy), 410, 190] });
+    expect(getAutoAdjustedFov({ ...options, camera })).toBe(getAutoAdjustedFov({ ...options, camera: positive }));
+    expect(getAutoAdjustedFov({ ...options, camera })).not.toBeNull();
+    expect(camera.params).toEqual(calibration);
+  });
+
   it('returns null for spherical cameras — auto-fov never re-frames them (FOV is manual via the lens)', () => {
     // Spherical cameras have no pinhole FOV. They are framed by the fly-to DISTANCE
     // (SPHERICAL_FLYTO_DISTANCE_FACTOR) plus the user's manual panorama-lens zoom, so

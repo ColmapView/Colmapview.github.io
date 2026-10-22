@@ -28,7 +28,8 @@ export function getPlaneHitTargetScale({
   if (isSelected) return [0, 0, 0];
 
   const hitScale = touchMode ? touchHitTargetScale : 1;
-  return [planeSize.width * hitScale, planeSize.height * hitScale, 1];
+  // Hit bounds have no UV direction; avoid reflected instance transforms.
+  return [Math.abs(planeSize.width) * hitScale, Math.abs(planeSize.height) * hitScale, 1];
 }
 
 export function composePlaneHitTargetMatrix({

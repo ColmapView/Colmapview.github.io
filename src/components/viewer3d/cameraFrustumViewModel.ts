@@ -118,16 +118,16 @@ export function getAutoAdjustedFov({
   if (
     camera.width <= 0 ||
     camera.height <= 0 ||
-    fx <= 0 ||
-    fy <= 0 ||
+    fx === 0 ||
+    fy === 0 ||
     !Number.isFinite(fx) ||
     !Number.isFinite(fy)
   ) {
     return null;
   }
 
-  const planeWidth = cameraScale * camera.width / fx;
-  const planeHeight = cameraScale * camera.height / fy;
+  const planeWidth = cameraScale * camera.width / Math.abs(fx);
+  const planeHeight = cameraScale * camera.height / Math.abs(fy);
   const planeDistance = cameraScale;
   const currentVisibleHeight = 2 * planeDistance * Math.tan(currentFovRad / 2);
   const currentVisibleWidth = currentVisibleHeight * viewportAspect;

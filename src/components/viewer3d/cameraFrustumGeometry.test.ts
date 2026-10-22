@@ -282,6 +282,13 @@ describe('camera frustum geometry helpers', () => {
     { name: 'centered pinhole', modelId: CameraModelId.PINHOLE,
       width: 640, height: 480, fx: 500, fy: 500, cx: 320, cy: 240,
       params: [500, 500, 320, 240] },
+    ...[[-200, 400], [200, -400], [-200, -400]].map(([fx, fy]) => ({
+      name: `signed pinhole ${fx},${fy}`, modelId: CameraModelId.PINHOLE,
+      width: 800, height: 400, fx, fy, cx: 410, cy: 190, params: [fx, fy, 410, 190],
+    })),
+    { name: 'original AstroVision Bennu calibration', modelId: CameraModelId.PINHOLE,
+      width: 1024, height: 1024, fx: 14727.867989003502, fy: -14726.490932658,
+      cx: 512, cy: 512, params: [14727.867989003502, -14726.490932658, 512, 512] },
     { name: 'Cam43 calibration', modelId: CameraModelId.SIMPLE_RADIAL,
       width: 2048, height: 2448, fx: 2354.8411128, fy: 2354.8411128,
       cx: 1008.7641493, cy: 1252.6265913,
@@ -307,6 +314,13 @@ describe('camera frustum geometry helpers', () => {
     } finally {
       geometry.dispose();
       (mesh.material as THREE.Material).dispose();
+    }
+  });
+
+  it.each([0, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])('rejects an invalid focal axis: %s', (focal) => {
+    for (const params of [[focal, 500, 320, 240], [500, focal, 320, 240]]) {
+      const camera = buildCamera({ width: 640, height: 480, params });
+      expect(getFrustumPlaneSize(camera, 1)).toMatchObject({ width: 0, height: 0 });
     }
   });
 });

@@ -35,6 +35,8 @@ export interface CameraFrustumItem {
 }
 
 export interface FrustumPlaneSize {
+  // Signed extents preserve the source pixel directions when a focal axis is
+  // negative. Bounds/framing consumers use their magnitudes.
   width: number;
   height: number;
   depth: number;
@@ -164,8 +166,8 @@ export function getFrustumPlaneSize(camera: Camera, scale: number): FrustumPlane
 
   const { fx, fy, cx, cy } = getCameraIntrinsics(camera);
   if (
-    fx <= 0 ||
-    fy <= 0 ||
+    fx === 0 ||
+    fy === 0 ||
     !Number.isFinite(fx) ||
     !Number.isFinite(fy) ||
     !Number.isFinite(cx) ||
@@ -174,8 +176,8 @@ export function getFrustumPlaneSize(camera: Camera, scale: number): FrustumPlane
     return invalidPlaneSize;
   }
 
-  // The frustum retains COLMAP's +Y-down camera frame. PlaneGeometry's UV
-  // y=0 is at -height/2 and samples the unflipped ImageBitmap's top row.
+  // Keep signed extents: each UV still projects to its original COLMAP pixel.
+  // PlaneGeometry's UV y=0 samples the unflipped ImageBitmap's top row.
   return {
     width: scale * camera.width / fx,
     height: scale * camera.height / fy,

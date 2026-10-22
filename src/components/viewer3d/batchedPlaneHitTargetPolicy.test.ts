@@ -52,6 +52,29 @@ describe('batched plane hit-target policy', () => {
     expect(scale.toArray()).toEqual([2, 3, 1]);
   });
 
+  it.each([[-2, 3], [2, -3], [-2, -3]])('keeps signed planes %s,%s selectable without a negative instance scale', (width, height) => {
+    const matrix = composePlaneHitTargetMatrix({
+      matrix: new THREE.Matrix4(), targetPosition: new THREE.Vector3(),
+      targetForward: new THREE.Vector3(), targetScale: new THREE.Vector3(),
+      frustumPosition: new THREE.Vector3(), frustumQuaternion: new THREE.Quaternion(),
+      planeSize: { width, height, depth: 4, offsetX: -0.25, offsetY: 0.5 },
+      isSelected: false, touchMode: false,
+    });
+    const geometry = new THREE.PlaneGeometry(1, 1);
+    const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+    const mesh = new THREE.InstancedMesh(geometry, material, 1);
+    try {
+      mesh.setMatrixAt(0, matrix);
+      mesh.updateMatrixWorld();
+      const raycaster = new THREE.Raycaster(new THREE.Vector3(-0.25, 0.5, 0), new THREE.Vector3(0, 0, 1));
+      expect(matrix.determinant()).toBeGreaterThan(0);
+      const hits = raycaster.intersectObject(mesh);
+      expect(hits.some(hit => hit.instanceId === 0 && Math.abs(hit.distance - 4) < 1e-6)).toBe(true);
+    } finally {
+      geometry.dispose(); material.dispose(); mesh.dispose();
+    }
+  });
+
   it('uses frustum orientation for the depth offset', () => {
     const quaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
     const matrix = composePlaneHitTargetMatrix({
