@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.6] - 2026-10-22
+
+### Fixed
+
+- Preserve signed camera intrinsics in image planes, framing and selection targets, keeping source calibration and photograph orientation intact.
+- Validate native feature and point-track relationships before enabling matching or COLMAP export. Inconsistent sources retain camera/point viewing and PLY export; binary/text/ZIP downloads and upload preparation report the source problem.
+- Keep one integrity warning for the committed scene, clear it when a valid scene replaces it, and suppress stale image-match selections on untrusted graphs.
+
 ## [0.20.5] - 2026-10-22
 
 ### Added
