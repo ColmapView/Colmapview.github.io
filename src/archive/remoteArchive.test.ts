@@ -13,6 +13,18 @@ function server() {
   });
 }
 describe('remote archive ranges', () => {
+  it('bounds reads to a selected prefix while checking the original object size', async () => {
+    const request = server();
+    const read = createRemoteArchiveRead('https://example.test/frames.tar', size, request, 1024);
+    expect(Array.from(new Uint8Array(await read(500, 20, signal())))).toEqual(Array.from({ length: 20 }, (_, index) => (index + 500) % 251));
+    expect(new Headers(request.mock.calls[0][2]?.headers).get('Range')).toBe('bytes=0-1023');
+    await expect(read(1020, 8, signal())).rejects.toThrow();
+    expect(request).toHaveBeenCalledOnce();
+    const changed = createRemoteArchiveRead('https://example.test/frames.tar', size,
+      async () => new Response(new Uint8Array(1024), { status: 206, headers: { 'Content-Range': 'bytes 0-1023/1024' } }), 1024);
+    await expect(changed(0, 20, signal())).rejects.toMatchObject({ name: 'ArchiveChangedError' });
+  });
+
   it('cancels the body when storage access fails before range validation',async()=>{
     const cancel=vi.fn();
     const read=createRemoteArchiveRead('https://huggingface.co/datasets/owner/private/resolve/main/scene.zip',size,

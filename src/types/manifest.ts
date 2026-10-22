@@ -9,6 +9,8 @@ export interface ManifestMediaArchive {
   /** Pinned HTTP(S) ZIP or plain TAR; its actual range size must match bytes. */
   url: string;
   bytes: number;
+  /** Plain TAR only: index this complete, block-aligned prefix (for example one temporal frame). */
+  indexBytes?: number;
   /** Scene-owned logical directory in which to expose members. */
   mountPath: string;
   /** Remove this exact member-directory prefix, without flattening subfolders. */
@@ -129,10 +131,13 @@ export const ColmapManifestSchema = z.object({
   mediaArchives: z.array(z.object({
     url: z.string().url().refine(value => archiveUrlMatches(value, ['zip', 'tar'])),
     bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    indexBytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
     mountPath: z.string().min(1).refine(safeArchivePath),
     stripPrefix: z.string().refine(value => value === '' || safeArchivePath(value.replace(/\/$/, ''))).optional(),
     role: z.enum(['images', 'masks']).optional(),
-  })).min(1).max(8).optional(),
+  }).refine(value => value.indexBytes === undefined || archiveUrlMatches(value.url, ['tar'])
+    && value.indexBytes % 512 === 0 && value.indexBytes <= value.bytes,
+  { message: 'A TAR index prefix must end on a complete 512-byte block within the original archive.' })).min(1).max(8).optional(),
   geometryFiles: z.array(z.object({
     url: z.string().url().refine(value => /^https?:\/\//i.test(value)),
     bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),

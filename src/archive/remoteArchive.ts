@@ -11,7 +11,9 @@ const RANGE_CACHE_BYTES = 4 * DATA_BLOCK_SIZE;
 const REQUEST_TIMEOUT_MS = 120000;
 
 /** Credentials stay on the main thread, under the same provider policy as full downloads. */
-export function createRemoteArchiveRead(url: string, size: number, fetchImpl: ZipDownloadOptions['fetchImpl'] = fetchDatasetResource) {
+export function createRemoteArchiveRead(url: string, size: number, fetchImpl: ZipDownloadOptions['fetchImpl'] = fetchDatasetResource,
+  readLimit = size) {
+  validateByteRange(size, 0, readLimit);
   const blocks = new Map<number, Uint8Array<ArrayBuffer>>();
   let validator: string | null | undefined;
   const fetchRange = async (offset: number, length: number, signal: AbortSignal) => {
@@ -61,7 +63,7 @@ export function createRemoteArchiveRead(url: string, size: number, fetchImpl: Zi
     }
   };
   return async (offset: number, length: number, inputSignal: AbortSignal): Promise<ArrayBuffer> => {
-    validateByteRange(size, offset, length);
+    validateByteRange(readLimit, offset, length);
     const signal = anySignal([inputSignal, timeoutSignal(REQUEST_TIMEOUT_MS)]);
     signal.throwIfAborted();
     const result = new Uint8Array(length);
@@ -72,7 +74,7 @@ export function createRemoteArchiveRead(url: string, size: number, fetchImpl: Zi
       const blockOffset = Math.floor(position / blockSize) * blockSize;
       let block = blocks.get(blockOffset);
       if (!block || position >= blockOffset + block.length) {
-        block = await fetchRange(blockOffset, Math.min(blockSize, size - blockOffset), signal);
+        block = await fetchRange(blockOffset, Math.min(blockSize, readLimit - blockOffset), signal);
         blocks.set(blockOffset, block);
         while ([...blocks.values()].reduce((total, value) => total + value.length, 0) > RANGE_CACHE_BYTES) {
           blocks.delete(blocks.keys().next().value!);

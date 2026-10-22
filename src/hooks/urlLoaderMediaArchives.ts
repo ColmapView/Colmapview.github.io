@@ -47,8 +47,8 @@ export async function openManifestMediaArchives(manifest: ColmapManifest, option
       if (!Number.isSafeInteger(bytes)) throw new Error('Combined archive size exceeds the supported range.');
       const name = new URL(archive.url).pathname.split('/').at(-1)!;
       const read = createRemoteArchiveRead(archive.url, archive.bytes,
-        options.fetchImpl ? (url, _timeout, init) => options.fetchImpl!(url, init) : undefined);
-      const reader = await (options.openReader ?? openArchiveReader)({ kind: 'remote', name, size: archive.bytes }, { read, signal: options.signal });
+        options.fetchImpl ? (url, _timeout, init) => options.fetchImpl!(url, init) : undefined, archive.indexBytes);
+      const reader = await (options.openReader ?? openArchiveReader)({ kind: 'remote', name, size: archive.indexBytes ?? archive.bytes }, { read, signal: options.signal });
       readers.push(reader);
       const previousCount = index.size;
       const prefix = archive.stripPrefix ? archive.stripPrefix.replace(/\/$/, '') + '/' : '';

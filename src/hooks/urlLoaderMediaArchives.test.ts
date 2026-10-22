@@ -1,4 +1,4 @@
-import { File as NodeFile } from 'node:buffer';
+import { Blob as NodeBlob, File as NodeFile } from 'node:buffer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ColmapManifest } from '../types/manifest';
 import type { ArchiveEntry, ArchiveReader } from '../archive/types';
@@ -10,6 +10,7 @@ import { validateColmapManifest } from '../utils/manifestValidation';
 import { CameraModelId } from '../types/cameraModelId';
 import { NativeMediaPathIndex } from '../dataset/nativeMediaPaths';
 import type { Image } from '../types/colmap';
+import { IndexedTarBackend } from '../archive/indexedTar';
 
 beforeEach(() => vi.stubGlobal('File', NodeFile));
 afterEach(() => vi.unstubAllGlobals());
@@ -54,6 +55,40 @@ it('mounts a capture TAR without flattening paths and reads the exact native pho
   expect(await readCameraSourceFile(source, absolute)).not.toBeNull();
   await resources.reader.close();
   expect(archive.result.close).toHaveBeenCalledOnce();
+});
+
+it('indexes a complete first-frame TAR prefix and leaves later frame headers unread', async () => {
+  vi.stubGlobal('Blob', NodeBlob);
+  const original = new Uint8Array(65536).fill(255), header = new Uint8Array(512);
+  const text = (value: string, offset: number) => header.set(new TextEncoder().encode(value), offset);
+  text('capture/frame0/a.png', 0); text('00000000006\0', 124); text('00000000000\0', 136);
+  header.fill(32, 148, 156); header[156] = 48;
+  text(header.reduce((sum, value) => sum + value, 0).toString(8).padStart(6, '0') + '\0 ', 148);
+  original.set(header); original.set(new TextEncoder().encode('source'), 512);
+  const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+    const [from, to] = new Headers(init?.headers).get('Range')!.match(/\d+/g)!.map(Number);
+    return new Response(original.slice(from, to + 1), { status: 206,
+      headers: { 'Content-Range': `bytes ${from}-${to}/${original.length}` } });
+  });
+  const selected: ColmapManifest = { ...manifest, mediaArchives: [{ ...manifest.mediaArchives![0],
+    bytes: original.length, indexBytes: 1024, stripPrefix: 'capture/frame0' }] };
+  const resources = (await openManifestMediaArchives(selected, { fetchImpl, openReader: async (source, options) => {
+    const signal = new AbortController().signal;
+    const backend = new IndexedTarBackend({ name: source.name, size: source.size,
+      read: async (offset, length) => new Uint8Array(await options.read!(offset, length, signal)) });
+    const indexed = await backend.list(signal);
+    return { close: () => backend.close(), getFilesArray: async () => indexed.map(entry => ({
+      path: entry.path.slice(0, entry.path.lastIndexOf('/')),
+      file: { name: entry.path.split('/').at(-1)!, size: entry.size, lastModified: entry.lastModified,
+        extract: async () => backend.extract(entry.path, signal),
+        extractPreview: async () => backend.extract(entry.path, signal) },
+    })) };
+  } }))!;
+  expect(resources.imagePaths).toEqual(['images/dslr_images_undistorted/a.png']);
+  expect(await (await resources.index.values().next().value!.extract()).text()).toBe('source');
+  expect(new Headers(fetchImpl.mock.calls[0][1]?.headers).get('Range')).toBe('bytes=0-1023');
+  expect(fetchImpl).toHaveBeenCalledOnce();
+  await resources.reader.close();
 });
 
 it('closes every opened archive on duplicate mount paths or a later open failure', async () => {
@@ -123,7 +158,9 @@ it('requires version 2 and rejects unsafe prefixes, unbounded sizes and unsuppor
   expect(validateColmapManifest(manifest).success).toBe(true);
   expect(validateColmapManifest({ ...manifest, version: 1 }).success).toBe(false);
   for (const changes of [{ mountPath: '../images' }, { stripPrefix: '../capture' }, { bytes: 0 },
-    { bytes: Number.MAX_SAFE_INTEGER + 1 }, { url: 'https://example.com/photos.tar.gz' }, { url: 'file:///photos.zip' }]) {
+    { bytes: Number.MAX_SAFE_INTEGER + 1 }, { url: 'https://example.com/photos.tar.gz' }, { url: 'file:///photos.zip' },
+    { indexBytes: 0 }, { indexBytes: 513 }, { indexBytes: 123904 }, { indexBytes: 1024, url: 'https://example.com/photos.zip' }]) {
     expect(validateColmapManifest({ ...manifest, mediaArchives: [{ ...manifest.mediaArchives![0], ...changes }] }).success).toBe(false);
   }
+  expect(validateColmapManifest({ ...manifest, mediaArchives: [{ ...manifest.mediaArchives![0], indexBytes: 1024 }] }).success).toBe(true);
 });

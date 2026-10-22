@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.5] - 2026-10-22
+
+### Added
+
+- Index a checked, complete prefix of a plain TAR photo archive. A selected capture frame can load without scanning later frames, while byte ranges still validate the original archive size.
+
 ### Fixed
 
 - Preserve dataset queries and view fragments when the GitHub Pages root forwards to `/latest/`.

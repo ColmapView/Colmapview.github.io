@@ -99,6 +99,37 @@ the published state's `viewState` as well. The automatic camera overview may cro
 most of the cloud even after the points become visible. Point-filter warnings are
 reported after saved and shared settings apply, so they describe the final filter.
 
+## Selected photograph frames in TAR archives
+
+Version 2 manifests can attach a ZIP or plain TAR through `mediaArchives`. A plain
+TAR can set `indexBytes` to the end of a complete, 512-byte-aligned prefix, such as
+the first frame of a multi-frame capture. Only members in that prefix are indexed
+and made available; their image bodies remain lazy reads.
+
+```json
+{
+  "version": 2,
+  "baseUrl": "https://data.example/pinned/scene/",
+  "files": { "cameras": "cameras.bin", "images": "images.bin" },
+  "mediaArchives": [{
+    "url": "https://data.example/pinned/capture.tar",
+    "bytes": 25348495360,
+    "indexBytes": 100589056,
+    "stripPrefix": "capture/frame000000/images",
+    "mountPath": "images",
+    "role": "images"
+  }]
+}
+```
+
+Replace the illustrated size, boundary and paths with checked source values. The
+prefix must contain complete TAR members and their padding; a boundary cutting
+through a member is rejected. The original archive's total size and validators
+are still checked on HTTP range responses. This option does not alter camera
+poses, merge temporal frames or assert that photos in other frames are registered.
+ZIP archives require their normal complete central directory and cannot use this
+prefix option. Omit `indexBytes` to index an ordinary archive in full.
+
 ## Selected geometry inside archives
 
 Viewer 0.19.10 adds version 3 manifests with `geometryFiles`. Versions 1 (loose
