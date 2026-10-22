@@ -6,6 +6,7 @@ import { getPoints3DForExport } from './reconstructionExportData';
 import { writeCamerasBinary, writeImagesBinary, writePoints3DBinary, writeRigsBinary, writeFramesBinary } from './colmapBinaryWriters';
 import { awaitWithAbort } from '../utils/awaitWithAbort';
 import { renameImagesBinary } from './renameImagesBinary';
+import { assertReconstructionObservationIntegrity } from './observationIntegrity';
 
 /** Serialize the current model without scheduling browser downloads. */
 export async function prepareReconstructionFiles(
@@ -24,6 +25,7 @@ export async function prepareReconstructionFiles(
       name === 'images.bin' && imageNames ? renameImagesBinary(new Uint8Array(data), imageNames) : new Blob([new Uint8Array(data)])]));
   }
   const model = baked ? transformReconstruction(createSim3dFromEuler(transform), reconstruction, source) : reconstruction;
+  assertReconstructionObservationIntegrity(model, source);
   const files: Record<string, Blob> = {
     'cameras.bin': new Blob([writeCamerasBinary(model.cameras)]),
     'images.bin': imageNames ? renameImagesBinary(new Uint8Array(writeImagesBinary(model.images, source)), imageNames)

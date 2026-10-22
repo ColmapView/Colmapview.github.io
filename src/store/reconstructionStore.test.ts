@@ -8,6 +8,7 @@ import { useSplatBackendStore } from './stores/splatBackendStore';
 import { useTransformStore } from './stores/transformStore';
 import { useUIStore } from './stores/uiStore';
 import { useNotificationStore } from './stores/notificationStore';
+import { unavailableObservationIntegrity } from '../parsers/observationIntegrity';
 import { useDeletionStore } from './stores/deletionStore';
 import { isSplatColorMode } from './types';
 import {
@@ -81,6 +82,30 @@ describe('reconstruction store URL load lifecycle', () => {
     usePointCloudStore.setState(usePointCloudStore.getInitialState(), true);
     useTransformStore.setState(useTransformStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
+  });
+
+  it('keeps one integrity warning for the committed scene, respects dismissal on edits, and clears it on valid replacement', () => {
+    const notifications = useNotificationStore.getState();
+    notifications.clearAll();
+    const source = { ...buildReconstruction(), observationIntegrity: unavailableObservationIntegrity('Unreadable observations.') };
+    const store = useReconstructionStore.getState();
+    store.setReconstruction(source);
+    const first = useNotificationStore.getState().notifications[0];
+    expect(first.message).toContain('Source feature links could not be verified');
+    store.setError('A later load failed');
+    expect(useNotificationStore.getState().notifications).toEqual([first]);
+    store.setReconstruction({ ...source });
+    expect(useNotificationStore.getState().notifications).toHaveLength(1);
+    notifications.removeNotification(useNotificationStore.getState().notifications[0].id);
+    store.setReconstruction({ ...source }, { edited: true });
+    expect(useNotificationStore.getState().notifications).toEqual([]);
+    store.setReconstruction(source);
+    expect(useNotificationStore.getState().notifications).toHaveLength(1);
+    store.setReconstruction(buildReconstruction());
+    expect(useNotificationStore.getState().notifications).toEqual([]);
+    store.setReconstruction(source);
+    store.clear();
+    expect(useNotificationStore.getState().notifications).toEqual([]);
   });
 
   it('serializes URL loads independently from the visible loading indicator', () => {

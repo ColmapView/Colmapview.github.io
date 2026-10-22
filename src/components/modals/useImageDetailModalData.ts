@@ -34,6 +34,7 @@ export function useImageDetailModalData({
   lazyPoints2D,
 }: UseImageDetailModalDataOptions) {
   const image = imageDetailId !== null ? reconstruction?.images.get(imageDetailId) ?? null : null;
+  const trustedMatches = !reconstruction?.observationIntegrity || reconstruction.observationIntegrity.status === 'valid';
   const camera = image ? reconstruction?.cameras.get(image.cameraId) : null;
   const matchedImage = matchedImageId !== null ? reconstruction?.images.get(matchedImageId) ?? null : null;
   const matchedCamera = matchedImage ? reconstruction?.cameras.get(matchedImage.cameraId) : null;
@@ -71,11 +72,12 @@ export function useImageDetailModalData({
   );
 
   const matchLines = useMemo(() => buildMatchLines(
-    showMatchesInModal && matchedImageId !== null && !!reconstruction && !!image && !!matchedImage,
+    trustedMatches && showMatchesInModal && matchedImageId !== null && !!reconstruction && !!image && !!matchedImage,
     effectivePoints2D,
     effectiveMatchedPoints2D
   ), [
     showMatchesInModal,
+    trustedMatches,
     matchedImageId,
     reconstruction,
     image,
@@ -84,7 +86,7 @@ export function useImageDetailModalData({
     effectiveMatchedPoints2D,
   ]);
 
-  const isMatchViewMode = Boolean(showMatchesInModal && matchedImageId !== null && matchedImage && matchedCamera);
+  const isMatchViewMode = Boolean(trustedMatches && showMatchesInModal && matchedImageId !== null && matchedImage && matchedCamera);
   const matchViewGap = GAP.matchView;
 
   const singleImageLayout = useMemo(

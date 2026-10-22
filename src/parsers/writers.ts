@@ -24,6 +24,7 @@ import {
   exportReconstructionTextFiles,
 } from './reconstructionFileExport';
 import { getPoints3DForExport } from './reconstructionExportData';
+import { assertReconstructionObservationIntegrity } from './observationIntegrity';
 import type {
   ReconstructionZipFileWriters,
   ZipExportOptions,
@@ -108,6 +109,7 @@ export function exportReconstructionText(
 ): void | Promise<void> {
   signal?.throwIfAborted();
   if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'text', undefined, undefined, signal);
+  assertReconstructionObservationIntegrity(reconstruction, wasmReconstruction);
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
   const { rigs, frames } = reconstruction.rigData ?? {};
 
@@ -134,6 +136,7 @@ export function exportReconstructionBinary(
 ): void | Promise<void> {
   signal?.throwIfAborted();
   if (isReconstructionSnapshot(wasmReconstruction)) return exportReconstructionSnapshot(wasmReconstruction, 'binary', undefined, undefined, signal);
+  assertReconstructionObservationIntegrity(reconstruction, wasmReconstruction);
   const points3D = getPoints3DForExport(reconstruction, wasmReconstruction);
   const { rigs, frames } = reconstruction.rigData ?? {};
 
@@ -168,6 +171,8 @@ function createReconstructionZipFileWriters(
   options: ZipExportOptions,
   wasmReconstruction?: WasmReconstructionWrapper | null
 ): ReconstructionZipFileWriters {
+  options.signal?.throwIfAborted();
+  assertReconstructionObservationIntegrity(reconstruction, wasmReconstruction);
   let points3D: Map<Point3DId, Point3D> | null = null;
   const getPoints3D = () => {
     points3D ??= getPoints3DForExport(reconstruction, wasmReconstruction);

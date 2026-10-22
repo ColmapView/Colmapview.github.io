@@ -15,6 +15,7 @@ import type { RigData } from '../types/rig';
 import { ReconstructionService, type ReconstructionSnapshot, type ReconstructionSource } from '../wasm/reconstructionService';
 import type { ReconstructionPhase } from '../wasm/reconstructionProtocol';
 import { detachUntrackedCloudObservations } from '../parsers/untrackedCloudObservations';
+import { observationIntegrityWarning } from '../parsers/observationIntegrity';
 
 export interface ColmapParserFiles {
   camerasFile: File;
@@ -71,7 +72,10 @@ export async function parseColmapFiles({
     const service = new ReconstructionService({ camerasFile, imagesFile, points3DFile, rigsFile, framesFile, cameraOnly }, { signal, onProgress });
     const snapshot = await service.load();
     addNotification('info', `Loaded ${snapshot.pointCount.toLocaleString()} points`, 5000);
-    for (const warning of snapshot.data.warnings) addNotification('warning', warning);
+    const integrityWarning = snapshot.reconstruction.observationIntegrity
+      ? observationIntegrityWarning(snapshot.reconstruction.observationIntegrity) : null;
+    // The scene store owns this warning, so failed/cancelled loads cannot replace it.
+    for (const warning of snapshot.data.warnings) if (warning !== integrityWarning) addNotification('warning', warning);
     log(`[Reconstruction] ${service.mode}, ${snapshot.data.diagnostics.parser}: ${JSON.stringify(snapshot.data.diagnostics)}`);
     return {
       cameras: snapshot.reconstruction.cameras, images: snapshot.reconstruction.images,

@@ -1,5 +1,6 @@
 import type { RigData } from './rig';
 import type { CameraDatasetImportContext } from '../dataset/importers/types';
+import type { ObservationIntegrity } from '../parsers/observationIntegrity';
 
 // Type aliases for COLMAP IDs
 // These add semantic meaning and make code more self-documenting
@@ -89,6 +90,8 @@ export interface GlobalStats {
 }
 
 export interface Reconstruction {
+  /** Complete native feature/track check; absent on older in-memory reconstructions. */
+  observationIntegrity?: ObservationIntegrity;
   cameras: Map<CameraId, Camera>;
   images: Map<ImageId, Image>;
   /**

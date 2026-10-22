@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { indexImageFile, readImageObservations } from './lazyImageFile';
+import { indexImageFile, indexImageBuffer, readImageObservations, visitImageObservations, visitObservationBuffer } from './lazyImageFile';
 
 /** Sparse test data exercises >2 GiB offsets without allocating that payload. */
 class SparseBlob {
@@ -44,6 +44,21 @@ function fixture(observations = 100_000_000) {
 }
 
 describe('file-backed image observations', () => {
+  it('visits original float64 records at the same indices through retained buffers and bounded Blob reads', async () => {
+    const file = fixture(65537), buffer = file.read();
+    const indexed = await indexImageFile(file as unknown as Blob);
+    expect(indexImageBuffer(buffer)).toEqual(indexed.ranges);
+    const fromBuffer: unknown[] = [], fromBlob: unknown[] = [];
+    visitObservationBuffer(buffer, indexed.ranges.get(9)!, (...point) => fromBuffer.push(point));
+    visitImageObservations(file as unknown as Blob, indexed.ranges.get(9)!, part => (part as unknown as SparseBlob).read(), (...point) => fromBlob.push(point));
+    expect(fromBuffer).toEqual([[0, 2n ** 53n + 7n, 123.123456789, 456.987654321]]);
+    expect(fromBlob).toEqual(fromBuffer);
+    const indices: number[] = [];
+    visitImageObservations(file as unknown as Blob, indexed.ranges.get(5)!, part => (part as unknown as SparseBlob).read(), index => indices.push(index));
+    expect(indices.length).toBe(65537);
+    expect(indices.at(-1)).toBe(65536);
+    expect(() => indexImageBuffer(buffer.slice(0, -1))).toThrow();
+  });
   it('indexes original poses and counts beyond 2 GiB without reading observation payloads', async () => {
     const file = fixture();
     const indexed = await indexImageFile(file as unknown as Blob);

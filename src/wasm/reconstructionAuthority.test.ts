@@ -71,6 +71,28 @@ async function execute<K extends ReconstructionOperation>(authority: Reconstruct
 }
 
 describe.each(['text', 'binary'] as const)('reconstruction authority %s parity', format => {
+  it('warns on inconsistent source links, suppresses matches, blocks native exports, and preserves point viewing/PLY', async () => {
+    const input = files(format), authority = owner();
+    const changed = new Map([...original.points3D!].map(([id, point]) => [id + 1n, { ...point, point3DId: id + 1n }]));
+    input.points3DFile = new File([format === 'binary' ? writePoints3DBinary(changed) : writePoints3DText(changed)], `points3D.${format === 'binary' ? 'bin' : 'txt'}`);
+    const snapshot = await execute(authority, 'load', input);
+    expect(snapshot.reconstruction.observationIntegrity).toMatchObject({ status: 'invalid', checkedTracks: 4, checkedObservations: 6, issues: { conflictingPoint: 4 } });
+    expect(snapshot.point3DIds.length).toBe(2);
+    expect(snapshot.reconstruction.images.size).toBe(2);
+    expect(snapshot.reconstruction.connectedImagesIndex.size).toBe(0);
+    expect(snapshot.pointMembership!.pointIds.length).toBe(0);
+    expect(snapshot.warnings.join(' ')).toContain('Source feature links are inconsistent');
+    for (const format of ['binary', 'text'] as const) await expect(execute(authority, 'export', { format })).rejects.toThrow('COLMAP export');
+    expect(Object.keys(await execute(authority, 'export', { format: 'ply' }))).toEqual(['points.ply']);
+    const transformed = await execute(authority, 'transform', { transform: { ...createIdentityEuler(), scale: 2 } });
+    expect(transformed.reconstruction.observationIntegrity?.status).toBe('invalid');
+    await expect(execute(authority, 'export', { format: 'binary' })).rejects.toThrow('COLMAP export');
+    // Reusing the owner for a valid source clears the earlier warning and guard.
+    const valid = await execute(authority, 'load', files(format));
+    expect(valid.reconstruction.observationIntegrity?.status).toBe('valid');
+    expect(valid.warnings).toEqual([]);
+    expect(Object.keys(await execute(authority, 'export', { format: 'binary' }))).toContain('points3D.bin');
+  });
   it('detects uppercase native extensions consistently with path discovery', async () => {
     const input=files(format);
     const uppercase=Object.fromEntries(Object.entries(input).map(([key,file])=>[key,new File([file],file.name.toUpperCase())])) as unknown as ReconstructionLoadFiles;

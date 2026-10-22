@@ -6,7 +6,8 @@
 
 import { loadColmapWasm } from './init';
 import { appLogger } from '../utils/logger';
-import { indexImageFile, readImageObservations, type ObservationRange } from '../parsers/lazyImageFile';
+import { indexImageFile, indexImageBuffer, readImageObservations, visitImageObservations, visitObservationBuffer, type ObservationRange } from '../parsers/lazyImageFile';
+import type { ObservationVisitor } from '../parsers/observationIntegrity';
 import type {
   ColmapWasmModule,
   WasmReconstruction,
@@ -61,6 +62,27 @@ export class WasmReconstructionWrapper {
     if (!this.imagesFile || !this.observationRanges || !this.readObservationBlob) return null;
     const range = this.observationRanges.get(imageId);
     return range ? readImageObservations(this.imagesFile, range, this.readObservationBlob) : [];
+  }
+
+  /** Validate original float64 observations without realizing lazy WASM arrays. */
+  visitImageObservations(imageId: number, visit: ObservationVisitor): void {
+    if (this._disposed) throw new Error('Reconstruction was disposed.');
+    if (this.imagesFile && this.observationRanges && this.readObservationBlob) {
+      const range = this.observationRanges.get(imageId);
+      if (!range) throw new Error(`Original observations are unavailable for image ${imageId}.`);
+      visitImageObservations(this.imagesFile, range, this.readObservationBlob, visit);
+    } else if (this.imagesBuffer) {
+      this.observationRanges ??= indexImageBuffer(this.imagesBuffer);
+      const range = this.observationRanges.get(imageId);
+      if (!range) throw new Error(`Original observations are unavailable for image ${imageId}.`);
+      visitObservationBuffer(this.imagesBuffer, range, visit);
+    } else {
+      const data = this.getImagePoints2D(imageId);
+      // Empty vectors may be null in Embind. The checker compares the visited
+      // count with native metadata, so missing nonempty data still fails closed.
+      if (!data) return;
+      for (let i = 0; i < data.count; i++) visit(i, data.point3dIds[i], data.xy[i * 2], data.xy[i * 2 + 1]);
+    }
   }
 
   /**
@@ -124,6 +146,7 @@ export class WasmReconstructionWrapper {
       throw new Error('WASM module not initialized');
     }
     this.invalidateCaches();
+    this.imagesBuffer = null;
     this.imagesFile = null;
     this.observationRanges = null;
     this.readObservationBlob = null;

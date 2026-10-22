@@ -264,7 +264,7 @@ describe('runReconstructionExport', () => {
     await runReconstructionExport({ exportFormat: 'binary' }, deps);
 
     expect(deps.logError).toHaveBeenCalledWith('Export failed:', error);
-    expect(deps.addNotification).toHaveBeenCalledWith('warning', 'Export failed');
+    expect(deps.addNotification).toHaveBeenCalledWith('warning', `Export failed: ${error.message}`);
   });
 
   it.each(['deletions', 'transform'] as const)('ignores a late %s confirmation after cancellation', async stage => {
@@ -300,7 +300,7 @@ describe('runReconstructionExport', () => {
     await runReconstructionExport({ exportFormat: 'binary' }, deps);
     expect(deps.writers.exportBinary).not.toHaveBeenCalled();
     expect(deps.logError).toHaveBeenCalledWith('Export failed:', error);
-    expect(deps.addNotification).toHaveBeenCalledWith('warning', 'Export failed');
+    expect(deps.addNotification).toHaveBeenCalledWith('warning', `Export failed: ${error.message}`);
   });
 
   it('forwards cancellation and progress to the ZIP writer', async () => {

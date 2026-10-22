@@ -5,6 +5,7 @@ import { isPhotometricImagesText, PHOTOMETRIC_COLMAP_WARNING } from '../parsers/
 import { parsePoints3DBinary, parsePoints3DText } from '../parsers/points3d';
 import { parsePointCloudPlyBuffer } from '../parsers/plyPointCloud';
 import { detachUntrackedCloudObservations } from '../parsers/untrackedCloudObservations';
+import { assertObservationIntegrity, checkReconstructionObservations, observationIntegrityWarning, unavailableObservationIntegrity, type ObservationIntegrity } from '../parsers/observationIntegrity';
 import { parseRigsBinary, parseRigsText } from '../parsers/rigs';
 import { parseFramesBinary, parseFramesText } from '../parsers/frames';
 import { computeImageStats, computeImageStatsFromWasm } from '../parsers/imageStats';
@@ -34,6 +35,7 @@ export class ReconstructionAuthority {
   private parseMs = 0;
   private retainedImageBufferBytes = 0;
   private warnings: string[] = [];
+  private observationIntegrity: ObservationIntegrity | null = null;
 
   async execute(request: ReconstructionRequest, progress: (phase: ReconstructionPhase) => void): Promise<ReconstructionOperationResults[keyof ReconstructionOperationResults]> {
     switch (request.operation) {
@@ -57,6 +59,7 @@ export class ReconstructionAuthority {
         progress('editing');
         this.materialize();
         this.data = filterReconstructionByImageIds(this.requireData(), new Set(request.payload.imageIds)) ?? this.data;
+        this.observationIntegrity = null;
         return this.snapshot(progress);
       }
       case 'updateCameras': {
@@ -165,11 +168,21 @@ export class ReconstructionAuthority {
   private snapshot(progress: (phase: ReconstructionPhase) => void): ReconstructionSnapshotData {
     const data = this.requireData();
     progress('statistics');
+    if (!this.observationIntegrity) {
+      try { this.observationIntegrity = checkReconstructionObservations(data, this.wasm); }
+      catch (error) { this.observationIntegrity = unavailableObservationIntegrity(error instanceof Error ? error.message : String(error)); }
+    }
+    const integrityWarning = observationIntegrityWarning(this.observationIntegrity);
     const statsStart = performance.now();
     performance.mark('colmap-statistics-start');
     const stats = this.wasm
       ? computeImageStatsFromWasm(data.images, this.wasm, { includePointMembership: false })
       : computeImageStats(data.images, data.points3D!);
+    if (integrityWarning) {
+      stats.connectedImagesIndex = new Map();
+      stats.imageToPoint3DIds = new Map();
+      for (const stat of stats.imageStats.values()) stat.covisibleCount = 0;
+    }
     const statisticsMs = performance.now() - statsStart;
     performance.mark('colmap-statistics-end');
     performance.measure('colmap-statistics', 'colmap-statistics-start', 'colmap-statistics-end');
@@ -208,18 +221,19 @@ export class ReconstructionAuthority {
     // Transfer packed membership instead of structured-cloning millions of boxed
     // bigint Set entries. The UI creates read-only views without expanding them.
     const membershipStarted = performance.now();
-    const pointMembership = this.wasm
+    const pointMembership = integrityWarning ? packPointMembership(new Map()) : this.wasm
       ? buildPointMembershipFromWasm(data.images, this.wasm)
       : packPointMembership(stats.imageToPoint3DIds);
     const membershipPackMs = performance.now() - membershipStarted;
     const reconstruction: Reconstruction = {
       cameras: data.cameras, images, rigData: data.rigData, ...stats, imageToPoint3DIds: new Map(),
+      observationIntegrity: this.observationIntegrity,
     };
     performance.mark('colmap-snapshot-end');
     performance.measure('colmap-snapshot', 'colmap-snapshot-start', 'colmap-snapshot-end');
     return {
       revision: ++this.revision, reconstruction, pointMembership, positions, colors, errors, trackLengths, point3DIds, boundingBox,
-      warnings: this.warnings,
+      warnings: integrityWarning ? [...this.warnings, integrityWarning] : this.warnings,
       diagnostics: {
         parser: this.parser, parseMs: this.parseMs, statisticsMs, snapshotMs: performance.now() - snapshotStart,
         membershipPackMs,
@@ -247,6 +261,7 @@ export class ReconstructionAuthority {
 
   private exportFiles(payload: ReconstructionExportPayload): ReconstructionExportFiles {
     let data = this.requireData();
+    if (payload.format !== 'ply') assertObservationIntegrity(this.observationIntegrity ?? unavailableObservationIntegrity('No integrity check has completed.'));
     // Export realization is temporary. Loaded datasets remain in WASM lazy mode until edited.
     if (payload.transform) data = transformReconstruction(createSim3dFromEuler(payload.transform), data, this.wasm);
     const points = data.points3D ?? this.wasm!.buildPoints3DMap();
@@ -270,6 +285,7 @@ export class ReconstructionAuthority {
     this.wasm = null;
     releaseColmapWasmModuleCache();
     this.data = null;
+    this.observationIntegrity = null;
     this.retainedImageBufferBytes = 0;
   }
 }

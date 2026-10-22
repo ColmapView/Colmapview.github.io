@@ -33,6 +33,7 @@ import { getSplatDownloadProgress, getSplatPhaseProgress, isSplatLoadingProgress
 import { canUseByteLessSplatLoader, TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES } from '../splat/loadingPolicy';
 import { detectTouchDevice } from '../hooks/useIsTouchDevice';
 import { dismissDatasetTimeoutWarnings } from '../hooks/datasetTimeoutWarnings';
+import { updateObservationIntegrityNotification } from './observationIntegrityNotification';
 
 const SPLAT_POINT_CLOUD_DEFAULT_SIZE = 1;
 const SPLAT_POINT_CLOUD_DEFAULT_OPACITY = 0.2;
@@ -385,6 +386,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
       progress: 100,
       error: null
     });
+    updateObservationIntegrityNotification(reconstruction.observationIntegrity, !options?.edited);
     // A loaded scene replaces the one whose images the pending deletion marks name, and starts at
     // identity: its own saved alignment is applied right after this commit, in the same task.
     if (!options?.edited) {
@@ -721,6 +723,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     clearActiveZipArchive();
     // The warnings describe the scene being cleared.
     dismissDatasetTimeoutWarnings();
+    updateObservationIntegrityNotification();
     // Dispose WASM wrapper on clear
     const oldWasm = get().wasmReconstruction;
     if (oldWasm) {

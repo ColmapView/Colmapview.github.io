@@ -161,6 +161,6 @@ export async function runReconstructionExport(
     }
     deps.logError('Export failed:', err);
     const message = (err as { message?: unknown } | null)?.message;
-    deps.addNotification('warning', (exportFormat === 'zip-images' || exportFormat === 'zip-masks') && typeof message === 'string' ? `Export failed: ${message}` : 'Export failed');
+    deps.addNotification('warning', typeof message === 'string' && message ? `Export failed: ${message}` : 'Export failed');
   }
 }
