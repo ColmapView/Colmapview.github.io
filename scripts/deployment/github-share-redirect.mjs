@@ -1,4 +1,8 @@
-/** GitHub Pages' root 404 handler recognizes only share IDs, never an arbitrary redirect URL. */
+/** Root dataset queries stay on Pages; recognized share IDs use the fixed Hub host. */
+export function githubRootTarget({ pathname, search = '', hash = '' }) {
+  return pathname === '/' ? `/latest/${search}${hash}` : null;
+}
+
 export function githubShareTarget(pathname) {
   const match = /^\/s\/([^/]+)\/?$/.exec(pathname);
   if (!match) return null;
@@ -9,6 +13,6 @@ export function githubShareTarget(pathname) {
 }
 
 if (typeof window !== 'undefined') {
-  const target = githubShareTarget(window.location.pathname);
+  const target = githubRootTarget(window.location) ?? githubShareTarget(window.location.pathname);
   if (target) window.location.replace(target);
 }

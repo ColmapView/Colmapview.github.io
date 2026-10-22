@@ -9,7 +9,18 @@ import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, WRANGLER_VERSION, previewAliasUrl
 import { fetchVerifiedArtifact, htmlSha256, verifyPolicyHtml } from './artifact-verification.mjs';
 import { cloudflareStaticHeaders } from './headers.mjs';
 import { startArtifactServer } from './static-server.mjs';
-import { githubShareTarget } from './github-share-redirect.mjs';
+import { githubRootTarget, githubShareTarget } from './github-share-redirect.mjs';
+
+test('GitHub root forwarding retains dataset queries and fragments at the fixed latest path', () => {
+  for (const suffix of ['', '?url=https%3A%2F%2Fexample.org%2Fscene%3Fa%3D1%26b%3D2#view', '?next=https://evil.example#//evil.example']) {
+    const location = new URL('https://colmapview.github.io/' + suffix);
+    assert.equal(githubRootTarget(location), '/latest/' + location.search + location.hash);
+    assert.equal(new URL(githubRootTarget(location), location).origin, location.origin);
+  }
+  for (const pathname of ['/latest/', '/s/HappyTree', '/unknown', '//evil.example']) {
+    assert.equal(githubRootTarget({ pathname, search: '?url=x', hash: '#frame' }), null);
+  }
+});
 
 test('GitHub short links forward only recognized IDs to the fixed Hub host', () => {
   for (const id of ['HappyTree', 'happytree', 'HAPPYTREE', 'CalmRiver-AAAAAAAAAAAAAAAA', 'CalmRiver-LAAAAAAAAAAAAAAAA']) {
@@ -31,7 +42,9 @@ test('GitHub root routing is built before smoke checks and publishes the tested 
   const output = '.tmp/deployment-root-test';
   const result = spawnSync(process.execPath, ['scripts/deployment/build-github-root.mjs', `--out=${output}`]);
   assert.equal(result.status, 0, result.stderr.toString());
-  assert.match(readFileSync(`${output}/index.html`, 'utf8'), /url=\/latest\//);
+  const index = readFileSync(`${output}/index.html`, 'utf8');
+  assert.match(index, /<noscript><meta http-equiv="refresh" content="0; url=\/latest\/">/);
+  assert.match(index, /src="\/share-redirect.js\?v=[a-f0-9]{12}"/);
   assert.match(readFileSync(`${output}/404.html`, 'utf8'), /src="\/share-redirect.js"/);
   assert.equal(readFileSync(`${output}/share-redirect.js`, 'utf8'), readFileSync('scripts/deployment/github-share-redirect.mjs', 'utf8'));
   assert.equal(steps.find(step => step.name === 'Deploy root').with.publish_dir, './.tmp/deployment/root');

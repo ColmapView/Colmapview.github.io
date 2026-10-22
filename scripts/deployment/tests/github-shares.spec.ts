@@ -9,6 +9,16 @@ let server: Awaited<ReturnType<typeof startArtifactServer>>;
 test.beforeAll(async () => { server = await startArtifactServer(directory, '/', { githubPages404: true }); });
 test.afterAll(async () => { await server?.close(); });
 
+test('retains an encoded dataset query and view fragment when opening the Pages root', async ({ page }) => {
+  const query = '?url=' + encodeURIComponent('https://datasets.example/scene.manifest.json?a=1&b=two words') + '&layer=rgb#frame=7';
+  await page.route(`${server.origin}/latest/**`, route => route.fulfill({
+    contentType: 'text/html', body: '<h1>Latest viewer</h1>',
+  }));
+  await page.goto(`${server.origin}/${query}`);
+  await expect(page).toHaveURL(`${server.origin}/latest/${query}`);
+  await expect(page.getByRole('heading', { name: 'Latest viewer' })).toBeVisible();
+});
+
 for (const id of ['RoughhewnBiplane', 'roughhewnbiplane', 'CalmRiver-AAAAAAAAAAAAAAAA']) {
   test(`opens a GitHub Pages share address for ${id}`, async ({ page }) => {
     const target = `https://colmapview.opsiclear.com/s/${id}`;
