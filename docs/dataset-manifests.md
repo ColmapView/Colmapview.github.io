@@ -49,8 +49,33 @@ keyframe group. Errors leave the model usable and report that frame's failure.
 
 Image export writes lossless PNGs of the decoded video frames. These are derived
 from the encoded recordings; video compression and optional publisher color LUTs
-are not reversed. This is a static, matched frame selection; other recording times
-remain in the source videos.
+are not reversed. The matched frame remains the image used by the reconstruction
+and export.
+
+### Individual camera playback
+
+Open a camera's image details and choose **Video** to play that recording from
+its matched timestamp. Playback has play/pause, seeking and a return-to-matched-frame
+button. One visible player shares the decoder queue with still-frame reads.
+Gallery thumbnails and 3D camera planes retain their matched stills. During
+playback the image detail hides static masks, keypoints and match lines; the 3D
+geometry remains at its reconstructed time, shown below the player. This player
+shows the camera's video track; it does not synchronize cameras or play audio.
+
+Playback uses validated HTTP byte ranges and one 4 MiB range cache; the redundant
+demux byte cache is disabled. Container metadata is retained only for the session.
+Native decoding draws samples directly to a canvas and closes
+them; Mediabunny also keeps a small internal decode queue. Software decoding
+reuses one worker across windows of at most eight frames and 32 MiB of raw RGBA,
+with a maximum display edge of 1280 pixels. The same 64 MiB/512-packet encoded
+group limits apply. Worker/codec working memory is additional to these payload
+budgets. Slow software decoding can buffer between windows.
+
+Pause, seek, camera changes, scene disposal, panel close and a hidden tab abort
+the active session. Pause preserves the displayed canvas and position; resume
+opens a fresh session. Playback does not write frames or videos into the still
+cache, IndexedDB, Cache Storage or the Hub. Normal browser HTTP caching is
+browser-managed. No complete recording is fetched as a Blob for playback.
 
 ## Camera metadata and explicit companions
 

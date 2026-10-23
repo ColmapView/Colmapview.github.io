@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { lazy, Suspense, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { HOTKEYS } from '../../config/hotkeys';
@@ -12,6 +12,10 @@ import { useImageDetailNavigationHandlers } from './useImageDetailNavigationHand
 import { useImageDetailStoreFacade } from './useImageDetailStoreFacade';
 import { useLazyImagePoints2D } from './useLazyImagePoints2D';
 import { MediaLoadError } from '../MediaLoadError';
+import { useResetKeyedState } from '../../hooks/useResetKeyedState';
+import { buttonStyles } from '../../theme';
+
+const CameraVideoPlayer = lazy(() => import('./CameraVideoPlayer'));
 
 export function ImageDetailModal() {
   const {
@@ -110,6 +114,9 @@ export function ImageDetailModal() {
     lazyPoints2D,
   });
 
+  const videoSource = image ? dataset.getVideoSource(image.name) : undefined;
+  const [videoActive, setVideoActive] = useResetKeyedState(videoSource && !isMatchViewMode ? videoSource : undefined, false);
+
   const {
     imageSrc,
     maskFile,
@@ -157,6 +164,7 @@ export function ImageDetailModal() {
     handleTouchMove,
     handleTouchStart,
   } = useImageDetailNavigationHandlers({
+    disabled: videoActive,
     imageContainerRef,
     showMatchesInModal,
     connectedImages,
@@ -194,6 +202,15 @@ export function ImageDetailModal() {
 
   if (imageDetailId === null || !image || !camera) return null;
 
+  const videoPlayer = videoActive && videoSource ? <Suspense fallback={<span className="text-ds-muted text-sm p-3">Loading video…</span>}>
+    <CameraVideoPlayer source={videoSource} name={image.name} onClose={() => setVideoActive(false)} />
+  </Suspense> : undefined;
+  const mediaActions = videoSource && !videoActive && !isMatchViewMode ? <button
+    className={`absolute top-2 right-2 z-10 ${buttonStyles.base} ${buttonStyles.sizes.sm} ${buttonStyles.variants.secondary}`}
+    aria-label="Play camera video" title="Play this camera’s recording" onClick={() => setVideoActive(true)}>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m7 3 15 9-15 9z" /></svg>Video
+  </button> : undefined;
+
   const loadErrors = <>
     {imageFailed && <MediaLoadError message="Image could not be loaded." retryLabel="Retry image" onRetry={retryImage} />}
     {maskFailed && <MediaLoadError message="Mask could not be loaded." retryLabel="Retry mask" onRetry={retryMask} />}
@@ -203,6 +220,8 @@ export function ImageDetailModal() {
   if (touchMode) {
     return createPortal(
       <TouchImageDetailFrame
+        videoPlayer={videoPlayer}
+        mediaActions={mediaActions}
         loadErrors={loadErrors}
         camera={camera}
         closeImageDetail={closeImageDetail}
@@ -252,6 +271,8 @@ export function ImageDetailModal() {
 
   return createPortal(
     <DesktopImageDetailFrame
+      videoPlayer={videoPlayer}
+      mediaActions={mediaActions}
       loadErrors={loadErrors}
       camera={camera}
       cameraAllMarked={cameraAllMarked}

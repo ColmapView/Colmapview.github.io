@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Play individual camera videos from image details with seeking, pause and return to the matched still. Load one video on demand through bounded range reads and reuse one software decoder across small windows when needed.
+- Release playback resources on pause, seek, camera or scene changes, panel close and a hidden tab. Keep playback out of the matched-frame cache, and hide static image overlays while the recording plays.
+
+### Fixed
+
+- Update Mediabunny to 1.62.1 so disposing an input during its first read settles cancellation and suppresses obsolete background failures.
+
 ## [0.21.1] - 2026-10-23
 
 ### Fixed

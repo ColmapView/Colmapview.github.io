@@ -21,6 +21,7 @@ import {
 const DEFAULT_WHEEL_THROTTLE_MS = 100;
 
 interface UseImageDetailNavigationHandlersOptions {
+  disabled?: boolean;
   imageContainerRef: RefObject<HTMLDivElement | null>;
   showMatchesInModal: boolean;
   connectedImages: ConnectedImageOption[];
@@ -55,6 +56,7 @@ interface ImageTouchEndEvent {
 }
 
 export function useImageDetailNavigationHandlers({
+  disabled = false,
   imageContainerRef,
   showMatchesInModal,
   connectedImages,
@@ -150,7 +152,7 @@ export function useImageDetailNavigationHandlers({
 
   useEffect(() => {
     const container = imageContainerRef.current;
-    if (!container) return;
+    if (!container || disabled) return;
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -170,6 +172,7 @@ export function useImageDetailNavigationHandlers({
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
   }, [
+    disabled,
     connectedImages.length,
     imageContainerRef,
     now,

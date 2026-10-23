@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject, TouchEventHandler } from 'react';
 import type { Camera, Image, ImageId, Point2D } from '../../types/colmap';
 import { TouchImageControls } from './ImageDetailControls';
+import { ImageDetailNavigationControls } from './ImageDetailNavigationControls';
 import { TouchImageDetailHeader } from './ImageDetailModalHeader';
 import { MatchImagePair, SingleImageView } from './ImageDetailViews';
 import { isImageDetailMaskInteractionEnabled, TOUCH_IMAGE_DETAIL_FRAME_CLASS } from './imageDetailFrameViewModel';
@@ -12,6 +13,8 @@ import type {
 } from './imageDetailViewModel';
 
 interface TouchImageDetailFrameProps {
+  videoPlayer?: ReactNode;
+  mediaActions?: ReactNode;
   loadErrors?: ReactNode;
   camera: Camera;
   closeImageDetail: () => void;
@@ -57,6 +60,8 @@ interface TouchImageDetailFrameProps {
 }
 
 export function TouchImageDetailFrame({
+  videoPlayer,
+  mediaActions,
   loadErrors,
   camera,
   closeImageDetail,
@@ -115,11 +120,12 @@ export function TouchImageDetailFrame({
       <div
         ref={imageContainerRef}
         className="flex-1 min-h-0 bg-ds-secondary relative overflow-hidden"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onTouchStart={videoPlayer ? undefined : handleTouchStart}
+        onTouchMove={videoPlayer ? undefined : handleTouchMove}
+        onTouchEnd={videoPlayer ? undefined : handleTouchEnd}
       >
-        {isMatchViewMode ? (
+        {mediaActions}
+        {videoPlayer ?? (isMatchViewMode ? (
           <MatchImagePair
             image={image}
             camera={camera}
@@ -148,10 +154,11 @@ export function TouchImageDetailFrame({
             splitX={splitX}
             maskEnabled={isImageDetailMaskInteractionEnabled({ hasMask: Boolean(maskSrc), showMatchesInModal })}
           />
-        )}
+        ))}
       </div>
 
-      {showModalControls && (
+      {videoPlayer ? <ImageDetailNavigationControls variant="touch" hasPrev={hasPrev} hasNext={hasNext}
+        imageCount={imageIds.length} currentIndex={currentIndex} onPrev={onPrev} onNext={onNext} /> : showModalControls && (
         <TouchImageControls
           isMarkedForDeletion={isMarkedForDeletion}
           showPoints2D={showPoints2D}

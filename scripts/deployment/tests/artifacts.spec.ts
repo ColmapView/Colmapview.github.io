@@ -117,7 +117,7 @@ for (const directory of profiles) {
   const hosts = profile === 'custom' ? [CUSTOM_ORIGIN, 'https://artifact-check.pages.dev', GITHUB_ORIGIN]
     : profile === 'github' ? [GITHUB_ORIGIN] : ['https://artifact-check.pages.dev'];
 
-  test(`${directory}: video frames use the lazy software decoder without cross-origin isolation`, async ({ page, context }) => {
+  test(`${directory}: video frames and playback use the lazy software decoder without cross-origin isolation`, async ({ page, context }) => {
     const origin = hosts[0], server = await startArtifactServer(output, metadata.base);
     const traffic = await routeArtifact(context, origin, server.origin, false);
     const source = 'https://video.example.test/';
@@ -146,6 +146,12 @@ for (const directory of profiles) {
       await expect(page.getByRole('img', { name: 'a.png', exact: true })).toBeVisible({ timeout: 45000 });
       await expect(page.getByRole('img', { name: 'b.png', exact: true })).toBeVisible({ timeout: 45000 });
       expect(await page.evaluate(() => crossOriginIsolated)).toBe(false);
+      await page.getByRole('img', { name: 'a.png', exact: true }).dblclick();
+      await page.getByRole('button', { name: 'Play camera video' }).click();
+      const frame = page.getByLabel('Video frame a.png', { exact: true });
+      await expect.poll(() => frame.evaluate(element => (element as HTMLCanvasElement).getContext('2d')!.getImageData(0, 0, 1, 1).data[1]), { timeout: 45000 }).toBeGreaterThan(90);
+      await page.getByRole('button', { name: 'Back to matched frame' }).click();
+      await expect(frame).toHaveCount(0);
       expect(traffic.assetRequests.some(url => /ffmpeg-core\.wasm-.*\.gz$/.test(url))).toBe(true);
       expect(traffic.externalRequests).toEqual([]);
       expect(errors).toEqual([]);

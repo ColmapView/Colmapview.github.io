@@ -9,6 +9,20 @@ const deferred = <T>() => { let resolve!: (value: T) => void; const promise = ne
 const frame = (name = 'a.png') => new File(['12345678'], name, { type: 'image/png' });
 
 describe('camera video frame ownership', () => {
+  it('exposes stable immutable playback metadata without decoding and aborts it with the scene', () => {
+    const decode = vi.fn<DecodeVideoFrame>();
+    const media = createVideoFrameMedia(bindings, true, decode);
+    const source = media.getSource('a.png')!;
+    expect(source).toBe(media.getSource('a.png'));
+    expect(Object.isFrozen(source)).toBe(true);
+    expect(source.signal.aborted).toBe(false);
+    expect(decode).not.toHaveBeenCalled();
+    media.clear();
+    expect(source.signal.aborted).toBe(false);
+    media.dispose();
+    expect(source.signal.aborted).toBe(true);
+    expect(media.getSource('a.png')).toBeUndefined();
+  });
   it('loads only on demand, coalesces consumers and keeps a shared decode when one consumer cancels', async () => {
     const pending = deferred<File>(), decode = vi.fn<DecodeVideoFrame>(() => pending.promise);
     const media = createVideoFrameMedia(bindings, true, decode);

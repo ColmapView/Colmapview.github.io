@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DatasetManager } from './DatasetManager';
 import type { DatasetState } from './types';
+import { createVideoFrameMedia } from './video/videoFrameMedia';
 
 vi.mock('../utils/imageFileUtils', () => ({
   getImageFile: vi.fn(),
@@ -90,6 +91,18 @@ describe('DatasetManager', () => {
       mockState.sourceType = 'local';
       expect(manager.isLoaded()).toBe(true);
     });
+  });
+
+  it('exposes camera video metadata without reads and prevents stale managers from opening it', () => {
+    const media = createVideoFrameMedia(new Map([['a.png', { url: 'https://data.test/a.mp4', bytes: 1000, timestamp: 0, width: 10, height: 10 }]]), true);
+    mockState.sourceType = 'manifest';
+    mockState.loadedFiles = { imageFiles: new Map(), hasMasks: false, videoFrames: media };
+    let current = mockState;
+    const bound = new DatasetManager(() => mockState, () => current);
+    expect(bound.getVideoSource('a.png')).toBe(media.getSource('a.png'));
+    current = { ...mockState, loadedFiles: null };
+    expect(bound.getVideoSource('a.png')).toBeUndefined();
+    media.dispose();
   });
 
   describe('getImage (local source)', () => {

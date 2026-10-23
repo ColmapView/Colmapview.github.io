@@ -1,8 +1,8 @@
-import { CanvasSink, CustomSource, Input, MP4, WEBM } from 'mediabunny';
-import { createRemoteArchiveRead } from '../../archive/remoteArchive';
+import { CanvasSink } from 'mediabunny';
 import { anySignal, timeoutSignal } from '../../utils/abortSignals';
 import { readImageDimensions } from '../../utils/imageDimensions';
 import type { VideoImageBinding } from './types';
+import { createVideoInput, readVideoTrack } from './videoInput';
 
 export const VIDEO_DECODE_TIMEOUT_MS = 90_000;
 export const MAX_VIDEO_FRAME_BYTES = 64 * 1024 * 1024;
@@ -11,21 +11,9 @@ export const MAX_VIDEO_FRAME_BYTES = 64 * 1024 * 1024;
 export async function decodeVideoFrame(name: string, binding: VideoImageBinding, signal: AbortSignal): Promise<File> {
   const active = anySignal([signal, timeoutSignal(VIDEO_DECODE_TIMEOUT_MS)]);
   active.throwIfAborted();
-  const read = createRemoteArchiveRead(binding.url, binding.bytes);
-  const input = new Input({ formats: [MP4, WEBM], source: new CustomSource({
-    getSize: () => binding.bytes,
-    read: async (start, end) => new Uint8Array(await read(start, end - start, active)),
-    maxCacheSize: 4 * 1024 * 1024,
-  }) });
-  const cancel = () => input.dispose();
-  active.addEventListener('abort', cancel, { once: true });
+  const source = createVideoInput(binding, active);
   try {
-    const track = await input.getPrimaryVideoTrack();
-    if (!track) throw new Error('The video has no video track.');
-    const width = await track.getDisplayWidth(), height = await track.getDisplayHeight();
-    if (width * height > 16_000_000) throw new Error('Video dimensions exceed the 16 million pixel decode budget.');
-    const duration = await track.computeDuration();
-    if (binding.timestamp >= duration) throw new Error(`The requested frame is outside the video (${binding.timestamp}s).`);
+    const { track } = await readVideoTrack(source.input, binding, active);
     let blob: Blob;
     if (await track.canDecode()) {
       const result = await new CanvasSink(track, { poolSize: 1 }).getCanvas(binding.timestamp);
@@ -47,7 +35,6 @@ export async function decodeVideoFrame(name: string, binding: VideoImageBinding,
     }
     return new File([blob], name, { type: 'image/png' });
   } finally {
-    active.removeEventListener('abort', cancel);
-    input.dispose();
+    source.dispose();
   }
 }

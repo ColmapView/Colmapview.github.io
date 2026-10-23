@@ -20,10 +20,13 @@ export function createVideoFrameMedia(bindings: ReadonlyMap<string, VideoImageBi
   budgetBytes = VIDEO_FRAME_CACHE_BYTES): VideoFrameMedia {
   const cache = createUrlFileCache(budgetBytes).scope('videoFrames');
   const state = createImageFileRequestState(cache);
+  const lifetime = new AbortController();
+  const sources = new Map([...bindings].map(([name, binding]) => [name, Object.freeze({ ...binding, signal: lifetime.signal })]));
   let disposed = false;
   return {
     size: bindings.size, exclusive,
     has: name => bindings.has(name),
+    getSource: name => disposed ? undefined : sources.get(name),
     async getImage(name: string, options?: DatasetAccessOptions) {
       const binding = bindings.get(name);
       if (!binding || disposed || options?.signal?.aborted) return null;
@@ -41,7 +44,7 @@ export function createVideoFrameMedia(bindings: ReadonlyMap<string, VideoImageBi
     getImageSync: name => disposed ? undefined : state.peekCached(name),
     getStats: cache.getStats,
     clear: state.clear,
-    dispose() { disposed = true; state.clear(); },
+    dispose() { disposed = true; lifetime.abort(); state.clear(); sources.clear(); },
   };
 }
 

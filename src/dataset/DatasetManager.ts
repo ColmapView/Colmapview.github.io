@@ -17,6 +17,7 @@ import type {
 } from './types';
 import { getDatasetSourceAdapter } from './datasetSourceAdapters';
 import { importedSourceAdapter } from './importers/importedMedia';
+import type { CameraVideoSource } from './video/types';
 
 export class DatasetManager {
   private readonly getState: DatasetStateReader;
@@ -117,6 +118,12 @@ export class DatasetManager {
     if (!this.isCurrent(state)) return undefined;
     return state.loadedFiles?.videoFrames?.has(imageName) ? state.loadedFiles.videoFrames.getImageSync(imageName)
       : this.getSourceAdapter(state)?.getImageSync(state, imageName);
+  }
+
+  /** Metadata only: opening camera details does not start video playback or download. */
+  getVideoSource(imageName: string): CameraVideoSource | undefined {
+    const state = this.getState();
+    return this.isCurrent(state) ? state.loadedFiles?.videoFrames?.getSource(imageName) : undefined;
   }
 
   // ===========================================================================

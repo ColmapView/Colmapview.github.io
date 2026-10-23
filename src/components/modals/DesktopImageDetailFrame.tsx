@@ -26,8 +26,11 @@ import type {
   MatchLine,
 } from './imageDetailViewModel';
 import { ModalErrorBoundary } from './ModalErrorBoundary';
+import { ImageDetailNavigationControls } from './ImageDetailNavigationControls';
 
 interface DesktopImageDetailFrameProps {
+  videoPlayer?: ReactNode;
+  mediaActions?: ReactNode;
   loadErrors?: ReactNode;
   camera: Camera;
   cameraAllMarked: boolean;
@@ -96,6 +99,8 @@ interface DesktopImageDetailFrameProps {
 }
 
 export function DesktopImageDetailFrame({
+  videoPlayer,
+  mediaActions,
   loadErrors,
   camera,
   cameraAllMarked,
@@ -210,7 +215,7 @@ export function DesktopImageDetailFrame({
 
             <div className="flex-1 min-h-0 flex flex-col">
               <div ref={imageContainerRef} className="group/scroll relative flex-1 min-h-0 bg-ds-secondary rounded overflow-hidden">
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-2 py-1 bg-ds-void/70 text-ds-secondary text-xs rounded opacity-0 group-hover/scroll:opacity-100 transition-opacity pointer-events-none whitespace-nowrap flex gap-3">
+                {!videoPlayer && <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-2 py-1 bg-ds-void/70 text-ds-secondary text-xs rounded opacity-0 group-hover/scroll:opacity-100 transition-opacity pointer-events-none whitespace-nowrap flex gap-3">
                   <span>
                     Scroll: iterate through {frameHintState.scrollTargetLabel}
                   </span>
@@ -219,8 +224,9 @@ export function DesktopImageDetailFrame({
                       Click: <span className="text-ds-primary">{frameHintState.maskCycleHint.currentMode}</span> → {frameHintState.maskCycleHint.nextMode}
                     </span>
                   )}
-                </div>
-                {isMatchViewMode ? (
+                </div>}
+                {mediaActions}
+                {videoPlayer ?? (isMatchViewMode ? (
                   <MatchImagePair
                     image={image}
                     camera={camera}
@@ -252,10 +258,11 @@ export function DesktopImageDetailFrame({
                     onMaskMouseMove={handleMaskMouseMove}
                     onMaskMouseLeave={handleMaskMouseLeave}
                   />
-                )}
+                ))}
               </div>
 
-              <DesktopImageControls
+              {videoPlayer ? <ImageDetailNavigationControls variant="desktop" hasPrev={hasPrev} hasNext={hasNext}
+                imageCount={imageCount} imageDetailId={imageDetailId} onOpenImageId={onOpenImageId} imageExists={imageExists} onPrev={onPrev} onNext={onNext} /> : <DesktopImageControls
                 isMarkedForDeletion={isMarkedForDeletion}
                 showPoints2D={showPoints2D}
                 showPoints3D={showPoints3D}
@@ -287,7 +294,7 @@ export function DesktopImageDetailFrame({
                 onOpacityKeyDown={handleOpacityKeyDown}
                 onOpenImageId={onOpenImageId}
                 imageExists={imageExists}
-              />
+              />}
             </div>
           </div>
         </ModalErrorBoundary>

@@ -1,7 +1,9 @@
 import { MEDIA_PRIORITY_ORDER, type FileRequestContext } from '../../utils/imageFileRequestState';
 
+type VideoDecodeContext = Pick<FileRequestContext, 'signal' | 'getPriority'>;
+
 interface Job {
-  context: FileRequestContext;
+  context: VideoDecodeContext;
   run(): Promise<File | null>;
   resolve(value: File | null): void;
   reject(error: unknown): void;
@@ -26,7 +28,7 @@ export function createVideoFrameQueue() {
     running = true;
     void job.run().then(job.resolve, job.reject).finally(() => { running = false; drain(); });
   };
-  return (context: FileRequestContext, run: Job['run']): Promise<File | null> => new Promise((resolve, reject) => {
+  return (context: VideoDecodeContext, run: Job['run']): Promise<File | null> => new Promise((resolve, reject) => {
     const job: Job = { context, run, resolve, reject, cancel() {
       const index = jobs.indexOf(job);
       if (index >= 0) jobs.splice(index, 1);
