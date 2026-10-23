@@ -3,7 +3,7 @@ import workerURL from '@ffmpeg/ffmpeg/worker?worker&url';
 import coreURL from '@ffmpeg/core?url';
 import compressedWasmURL from 'virtual:video-decoder-wasm';
 
-/** The optional worker receives bounded encoded data only, never source URLs or credentials. */
+/** The optional worker receives encoded data only, never source URLs or credentials. */
 export async function createSoftwareVideoDecoder(signal: AbortSignal) {
   signal.throwIfAborted();
   const ffmpeg = new FFmpeg();

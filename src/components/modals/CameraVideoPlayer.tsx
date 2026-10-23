@@ -1,16 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CameraVideoSource } from '../../dataset/video/types';
-import { playCameraVideo } from '../../dataset/video/videoPlayback';
-import { buttonStyles, TOUCH } from '../../theme';
+import { loadCachedCameraVideo, type CameraVideoProgress } from '../../dataset/video/cachedCameraVideo';
+import { buttonStyles, controlPanelStyles, TOUCH } from '../../theme';
+import type { SingleImageLayout } from './imageDetailLayoutViewModel';
 
-const iconButton = `${buttonStyles.base} button-standard ${buttonStyles.sizes.iconLg} ${buttonStyles.variants.ghost}`;
+const iconButton = `${buttonStyles.base} button-standard ${buttonStyles.sizes.iconMd} ${buttonStyles.variants.ghost}`;
 const iconStyle = { minWidth: TOUCH.minTapTarget };
-function VideoPlaybackIcon({ playing }: { playing: boolean }) {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    {playing ? <path d="M6 4h4v16H6zm8 0h4v16h-4z" /> : <path d="m7 3 15 9-15 9z" />}
-  </svg>;
-}
-
 function formatTime(seconds: number) {
   const value = Math.max(0, Math.floor(seconds));
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
@@ -19,132 +14,84 @@ function formatTime(seconds: number) {
 interface CameraVideoPlayerProps {
   source: CameraVideoSource;
   name: string;
+  poster: string | null;
+  layout: SingleImageLayout;
   onClose(): void;
 }
 
-/** Mounted only after an explicit Play action, keyed by camera and dataset by its parent. */
-export default function CameraVideoPlayer({ source, name, onClose }: CameraVideoPlayerProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+/** Same image placement, one cached video, and controls which never affect layout. */
+export default function CameraVideoPlayer({ source, name, poster, layout, onClose }: CameraVideoPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const controllerRef = useRef<AbortController | null>(null);
-  const seekTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const positionRef = useRef(source.timestamp);
-  const clockRef = useRef<(() => number) | null>(null);
-  const durationRef = useRef<number | null>(null);
   const [time, setTime] = useState(source.timestamp);
   const [duration, setDuration] = useState<number | null>(null);
-  const [playing, setPlaying] = useState(!document.hidden);
-  const [preview, setPreview] = useState(false);
-  const [revision, setRevision] = useState(0);
-  const [status, setStatus] = useState<'loading' | 'playing' | 'paused' | 'ended' | 'error'>('loading');
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState<CameraVideoProgress | null>({ phase: 'download', percent: 0 });
   const [error, setError] = useState('');
-
-  const cancelSession = useCallback(() => {
-    clearTimeout(seekTimerRef.current); seekTimerRef.current = undefined;
-    positionRef.current = clockRef.current?.() ?? positionRef.current;
-    clockRef.current = null;
-    controllerRef.current?.abort();
-  }, []);
+  const [revision, setRevision] = useState(0);
+  const wantsPlay = useRef(!document.hidden);
 
   useEffect(() => {
-    const stop = () => {
-      cancelSession(); setPlaying(false); setPreview(false); setStatus('paused'); setTime(positionRef.current);
-    };
-    const hide = () => {
-      if (document.hidden) stop();
-    };
-    document.addEventListener('visibilitychange', hide);
-    source.signal.addEventListener('abort', stop, { once: true });
-    return () => { document.removeEventListener('visibilitychange', hide); source.signal.removeEventListener('abort', stop); cancelSession(); };
-  }, [source, cancelSession]);
-
-  useEffect(() => {
-    if ((!playing && !preview) || !canvasRef.current) return;
+    const video = videoRef.current!;
     const controller = new AbortController();
     controllerRef.current = controller;
-    let lastUpdate = -Infinity;
-    let bufferingTimer: ReturnType<typeof setTimeout>;
-    const buffer = (waiting: boolean) => {
-      clearTimeout(bufferingTimer);
-      if (waiting) bufferingTimer = setTimeout(() => { if (!controller.signal.aborted) setStatus('loading'); }, 250);
-    };
-    buffer(true);
-    void playCameraVideo(source, canvasRef.current, {
-      timestamp: positionRef.current,
-      singleFrame: !playing,
-      signal: controller.signal,
-      onReady(value) { if (!controller.signal.aborted) { durationRef.current = value; setDuration(value); } },
-      onBuffering: buffer,
-      onClock(position) { if (!controller.signal.aborted) clockRef.current = position; },
-      onInterrupted() {
-        if (controller.signal.aborted) return;
-        cancelSession(); setPlaying(false); setPreview(false); setStatus('paused'); setTime(positionRef.current);
-      },
-      onFrame(value) {
-        if (controller.signal.aborted) return;
-        clearTimeout(bufferingTimer);
-        positionRef.current = clockRef.current?.() ?? value;
-        setStatus(playing ? 'playing' : 'paused');
-        if (performance.now() - lastUpdate > 200) { setTime(positionRef.current); lastUpdate = performance.now(); }
-      },
-    }).then(() => {
-      if (!controller.signal.aborted) {
-        setStatus(playing ? 'ended' : 'paused'); setPlaying(false); setPreview(false);
-        setTime(playing ? durationRef.current ?? positionRef.current : positionRef.current);
-      }
-    }, failure => {
+    let cached: Awaited<ReturnType<typeof loadCachedCameraVideo>> | undefined;
+    const stop = () => { wantsPlay.current = false; video.pause(); setPlaying(false); };
+    const disposeSource = () => { controller.abort(); stop(); void cached?.dispose().catch(() => {}); };
+    const hide = () => { if (document.hidden) stop(); };
+    document.addEventListener('visibilitychange', hide); source.signal.addEventListener('abort', disposeSource, { once: true });
+    void loadCachedCameraVideo(source, video, { signal: controller.signal,
+      onProgress(value) { if (!controller.signal.aborted) setProgress(value); },
+    }).then(async resource => {
+      cached = resource;
+      if (controller.signal.aborted || source.signal.aborted) { await resource.dispose(); return; }
+      setDuration(resource.duration); setProgress(null); setTime(video.currentTime);
+      if (wantsPlay.current && !document.hidden) await video.play();
+    }).catch(failure => {
       if (!controller.signal.aborted && !source.signal.aborted) {
-        setError(failure instanceof Error ? failure.message : 'Video could not be played.');
-        setStatus('error'); setPlaying(false); setPreview(false);
+        setError(failure instanceof Error ? failure.message : 'Video could not be played.'); setProgress(null); setPlaying(false);
       }
-    }).finally(() => clearTimeout(bufferingTimer));
+    });
     return () => {
-      if (controllerRef.current === controller) cancelSession();
-      else controller.abort();
-      clearTimeout(bufferingTimer);
+      controller.abort(); video.pause();
+      void cached?.dispose().catch(() => {});
+      document.removeEventListener('visibilitychange', hide); source.signal.removeEventListener('abort', disposeSource);
     };
-  }, [source, playing, preview, revision, cancelSession]);
+  }, [source, revision]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    return () => { if (canvas) { canvas.width = 0; canvas.height = 0; } };
-  }, []);
-
-  const pause = () => {
-    const pendingSeek = seekTimerRef.current !== undefined;
-    cancelSession(); setPlaying(false); setPreview(pendingSeek); setStatus(pendingSeek ? 'loading' : 'paused'); setTime(positionRef.current);
-    if (pendingSeek) setRevision(value => value + 1);
+  const toggle = () => {
+    const video = videoRef.current!;
+    if (error) { wantsPlay.current = true; setError(''); setDuration(null); setProgress({ phase: 'download', percent: 0 }); setRevision(value => value + 1); return; }
+    if (!video.paused) { wantsPlay.current = false; video.pause(); }
+    else {
+      wantsPlay.current = true;
+      if (video.ended) video.currentTime = 0;
+      const signal = controllerRef.current?.signal;
+      void video.play().catch(failure => {
+        if (!signal?.aborted && !source.signal.aborted) setError(failure instanceof Error ? failure.message : 'Video could not be played.');
+      });
+    }
   };
-  const resume = () => {
-    cancelSession(); setPreview(false);
-    if (status === 'ended') { positionRef.current = 0; setTime(0); }
-    setError(''); setPlaying(true); setStatus('loading');
-  };
-  const seek = (value: number) => {
-    cancelSession();
-    positionRef.current = value;
-    setTime(value); setError(''); setStatus('loading');
-    seekTimerRef.current = setTimeout(() => { seekTimerRef.current = undefined; setPreview(!playing); setRevision(value => value + 1); }, 150);
-  };
-
-  return <div className="absolute inset-0 flex flex-col bg-ds-secondary" role="group" aria-label={`Camera video ${name}`}
-    onWheel={event => event.stopPropagation()} onTouchStart={event => event.stopPropagation()}
-    onTouchMove={event => event.stopPropagation()} onTouchEnd={event => event.stopPropagation()}>
-    <div className="relative flex-1 min-h-0">
-      <canvas ref={canvasRef} className="w-full h-full object-contain" aria-label={`Video frame ${name}`} />
-      {status === 'loading' && <span className="absolute top-2 left-2 rounded bg-ds-void/70 px-2 py-1 text-xs text-ds-secondary" role="status">Buffering…</span>}
-      {error && <div className="absolute inset-0 flex items-center justify-center p-4 bg-ds-void/70 text-sm text-ds-primary" role="alert">{error}</div>}
+  return <div className="absolute" style={{ left: layout.offsetX, top: layout.offsetY, width: layout.renderedImageWidth, height: layout.renderedImageHeight }}
+    role="group" aria-label={`Camera video ${name}`} onWheel={event => event.stopPropagation()}
+    onTouchStart={event => event.stopPropagation()} onTouchMove={event => event.stopPropagation()} onTouchEnd={event => event.stopPropagation()}>
+    {poster && <img src={poster} alt="" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />}
+    <video ref={videoRef} className="absolute inset-0 w-full h-full object-contain" style={{ opacity: duration === null ? 0 : 1 }} aria-label={`Video frame ${name}`} poster={poster ?? undefined}
+      muted playsInline preload="auto" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+      onTimeUpdate={event => { if (duration !== null) setTime(event.currentTarget.currentTime); }} onSeeked={event => { if (duration !== null) setTime(event.currentTarget.currentTime); }}
+      onError={() => { if (duration !== null && !controllerRef.current?.signal.aborted) { setError('Video could not be played.'); setPlaying(false); } }} />
+    <div className="absolute bottom-2 left-2 right-2 rounded bg-ds-void/70 text-ds-secondary flex items-center gap-1 px-1" aria-label="Video controls">
+        <button className={iconButton} style={iconStyle} disabled={progress !== null} aria-label={playing ? 'Pause video' : error ? 'Retry video' : 'Play video'} onClick={toggle}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">{playing ? <path d="M6 4h4v16H6zm8 0h4v16h-4z" /> : <path d="m7 3 15 9-15 9z" />}</svg>
+        </button>
+        {progress || error ? <span className="flex-1 min-w-0 text-xs truncate" role={error ? 'alert' : 'status'} title={error || undefined}>
+          {error || `${progress!.phase === 'download' ? 'Loading video' : 'Preparing video'} ${progress!.percent}%`}
+        </span> : <input type="range" className={`${controlPanelStyles.slider} button-standard`} aria-label="Video time" min={0} max={duration ?? source.timestamp + 1} step="0.01"
+          title={`${formatTime(time)} / ${duration === null ? '—' : formatTime(duration)}`} aria-valuetext={`${formatTime(time)} / ${duration === null ? '—' : formatTime(duration)}`}
+          value={time} disabled={duration === null} onChange={event => { const value = Number(event.target.value); videoRef.current!.currentTime = value; setTime(value); }} />}
+        <button className={iconButton} style={iconStyle} aria-label="Back to matched frame" title={`Back to matched frame (${formatTime(source.timestamp)})`} onClick={onClose}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 10h11a6 6 0 0 1 0 12M3 10l6-6M3 10l6 6" /></svg>
+        </button>
     </div>
-    <div className="flex items-center gap-2 px-2 py-1 bg-ds-tertiary text-ds-primary flex-shrink-0">
-      <button className={iconButton} style={iconStyle} aria-label={playing ? 'Pause video' : status === 'error' ? 'Retry video' : 'Play video'} onClick={playing ? pause : resume}>
-        <VideoPlaybackIcon playing={playing} />
-      </button>
-      <input type="range" className="button-standard min-w-0 flex-1 accent-ds-accent" aria-label="Video time" min={0} max={duration ?? source.timestamp + 1} step="0.01"
-        value={time} disabled={duration === null} onChange={event => seek(Number(event.target.value))} />
-      <span className="text-xs font-mono tabular-nums whitespace-nowrap">{formatTime(time)} / {duration === null ? '—' : formatTime(duration)}</span>
-      <button className={iconButton} style={iconStyle} aria-label="Back to matched frame" title={`Back to matched frame (${formatTime(source.timestamp)})`} onClick={onClose}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 10h11a6 6 0 0 1 0 12M3 10l6-6M3 10l6 6" /></svg>
-      </button>
-    </div>
-    <div className="px-3 pb-1 bg-ds-tertiary text-xs text-ds-muted">Reconstruction at {formatTime(source.timestamp)}</div>
   </div>;
 }

@@ -2,7 +2,7 @@ import type { InputVideoTrack } from 'mediabunny';
 import { readEncodedVideoWindow } from './encodedVideoWindow';
 import { createSoftwareVideoDecoder } from './softwareVideoDecoder';
 
-/** Still/export reads own their worker; playback reuses its worker across bounded windows. */
+/** Each matched still/export read owns and releases its bounded decoder. */
 export async function decodeSoftwareVideoFrame(track: InputVideoTrack, timestamp: number, signal: AbortSignal): Promise<Blob> {
   const window = await readEncodedVideoWindow(track, timestamp, 1, signal);
   const decoder = await createSoftwareVideoDecoder(signal);

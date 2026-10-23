@@ -1,7 +1,6 @@
 import type { ReactNode, RefObject, TouchEventHandler } from 'react';
 import type { Camera, Image, ImageId, Point2D } from '../../types/colmap';
 import { TouchImageControls } from './ImageDetailControls';
-import { ImageDetailNavigationControls } from './ImageDetailNavigationControls';
 import { TouchImageDetailHeader } from './ImageDetailModalHeader';
 import { MatchImagePair, SingleImageView } from './ImageDetailViews';
 import { isImageDetailMaskInteractionEnabled, TOUCH_IMAGE_DETAIL_FRAME_CLASS } from './imageDetailFrameViewModel';
@@ -157,9 +156,9 @@ export function TouchImageDetailFrame({
         ))}
       </div>
 
-      {videoPlayer ? <ImageDetailNavigationControls variant="touch" hasPrev={hasPrev} hasNext={hasNext}
-        imageCount={imageIds.length} currentIndex={currentIndex} onPrev={onPrev} onNext={onNext} /> : showModalControls && (
+      {showModalControls && (
         <TouchImageControls
+          mediaActive={Boolean(videoPlayer)}
           isMarkedForDeletion={isMarkedForDeletion}
           showPoints2D={showPoints2D}
           showPoints3D={showPoints3D}

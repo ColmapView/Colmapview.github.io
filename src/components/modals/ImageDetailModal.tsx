@@ -202,8 +202,9 @@ export function ImageDetailModal() {
 
   if (imageDetailId === null || !image || !camera) return null;
 
-  const videoPlayer = videoActive && videoSource ? <Suspense fallback={<span className="text-ds-muted text-sm p-3">Loading video…</span>}>
-    <CameraVideoPlayer source={videoSource} name={image.name} onClose={() => setVideoActive(false)} />
+  const videoPlayer = videoActive && videoSource ? <Suspense fallback={imageSrc ? <img src={imageSrc} alt="" className="absolute object-contain pointer-events-none"
+    style={{ left: singleImageLayout.offsetX, top: singleImageLayout.offsetY, width: singleImageLayout.renderedImageWidth, height: singleImageLayout.renderedImageHeight }} /> : null}>
+    <CameraVideoPlayer source={videoSource} name={image.name} poster={imageSrc} layout={singleImageLayout} onClose={() => setVideoActive(false)} />
   </Suspense> : undefined;
   const mediaActions = videoSource && !videoActive && !isMatchViewMode ? <button
     className={`absolute top-2 right-2 z-10 ${buttonStyles.base} ${buttonStyles.sizes.sm} ${buttonStyles.variants.secondary}`}

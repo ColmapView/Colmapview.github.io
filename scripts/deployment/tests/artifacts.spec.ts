@@ -6,6 +6,7 @@ import { startArtifactServer } from '../static-server.mjs';
 import { verifyIndexHtml } from '../artifact-verification.mjs';
 import { CUSTOM_ORIGIN, GITHUB_ORIGIN, PROFILES } from '../profiles.mjs';
 import { loadTestDataset } from '../../../e2e/fixtures/load-test-data';
+import { videoPixel } from '../../../e2e/fixtures/video-pixel';
 import { decodeShareData } from '../../../src/utils/shareDataCodec';
 
 interface DeploymentMetadata {
@@ -134,6 +135,7 @@ for (const directory of profiles) {
         return route.fulfill({ status: 206, headers: { 'Content-Type': 'video/mp4', 'Content-Range': `bytes ${start}-${end}/${video.length}`,
           'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range, Content-Length' }, body: video.subarray(start, end + 1) });
       }
+      if (name === 'colors.mp4') return route.fulfill({ status: 200, contentType: 'video/mp4', body: video });
       return route.fulfill(files[name] ? { status: 200, body: files[name] } : { status: 404 });
     });
     await page.addInitScript(() => { VideoDecoder.isConfigSupported = async config => ({ supported: false, config }); });
@@ -149,7 +151,7 @@ for (const directory of profiles) {
       await page.getByRole('img', { name: 'a.png', exact: true }).dblclick();
       await page.getByRole('button', { name: 'Play camera video' }).click();
       const frame = page.getByLabel('Video frame a.png', { exact: true });
-      await expect.poll(() => frame.evaluate(element => (element as HTMLCanvasElement).getContext('2d')!.getImageData(0, 0, 1, 1).data[1]), { timeout: 45000 }).toBeGreaterThan(90);
+      await expect.poll(async () => (await frame.evaluate(videoPixel))[1], { timeout: 45000 }).toBeGreaterThan(90);
       await page.getByRole('button', { name: 'Back to matched frame' }).click();
       await expect(frame).toHaveCount(0);
       expect(traffic.assetRequests.some(url => /ffmpeg-core\.wasm-.*\.gz$/.test(url))).toBe(true);

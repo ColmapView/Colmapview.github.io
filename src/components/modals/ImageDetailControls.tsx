@@ -13,6 +13,7 @@ import {
 } from './imageDetailControlsViewModel';
 
 interface SharedControlProps {
+  mediaActive?: boolean;
   isMarkedForDeletion: boolean;
   showPoints2D: boolean;
   showPoints3D: boolean;
@@ -39,6 +40,7 @@ interface TouchImageControlsProps extends SharedControlProps {
 }
 
 export function TouchImageControls({
+  mediaActive = false,
   isMarkedForDeletion,
   showPoints2D,
   showPoints3D,
@@ -70,7 +72,7 @@ export function TouchImageControls({
 
   return (
     <div className="flex-shrink-0 bg-ds-tertiary">
-      <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto">
+      <div className="flex gap-1.5 px-2 py-1.5 overflow-x-auto" style={{ visibility: mediaActive ? 'hidden' : undefined }} inert={mediaActive}>
         {visibility.showPointToggles && (
           <>
             {pointToggleDescriptors.map((descriptor) => (
@@ -147,6 +149,7 @@ interface DesktopImageControlsProps extends SharedControlProps {
 }
 
 export function DesktopImageControls({
+  mediaActive = false,
   isMarkedForDeletion,
   showPoints2D,
   showPoints3D,
@@ -189,7 +192,7 @@ export function DesktopImageControls({
 
   return (
     <div className="mt-2 flex items-center justify-between text-xs">
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap" style={{ visibility: mediaActive ? 'hidden' : undefined }} inert={mediaActive}>
         {visibility.showPointToggles && (
           <>
             {pointToggleDescriptors.map((descriptor) => (

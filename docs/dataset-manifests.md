@@ -54,32 +54,35 @@ and export.
 
 ### Individual camera playback
 
-Open a camera's image details and choose **Video** to play that recording from
-its matched timestamp. Playback has play/pause, seeking and a return-to-matched-frame
-button. One visible player shares the decoder queue with still-frame reads.
-An uncached selected-image, export or metric read pauses playback so required
-stills can finish; a cached still does not interrupt it. Resume is explicit.
-Gallery thumbnails and 3D camera planes retain their matched stills. During
-playback the image detail hides static masks, keypoints and match lines; the 3D
-geometry remains at its reconstructed time, shown below the player. This player
-shows the camera's video track; it does not synchronize cameras or play audio.
+Open a camera's image details and choose **Video**. The selected recording is
+downloaded once, with progress and exact byte-size validation, before playback
+starts at its matched timestamp. Its image placement and footer height stay
+unchanged. A translucent play/pause, seek and return-to-matched-frame bar floats
+over the image's bottom edge, using the viewer's existing icon and slider styles.
+Time appears on hover and through accessible slider text. The matched still
+stays visible during preparation.
 
-Playback uses validated HTTP byte ranges and one 4 MiB range cache; the redundant
-demux byte cache is disabled. Container metadata is retained only for the session.
-Native decoding draws samples directly to a canvas and closes
-them; Mediabunny also keeps a small internal decode queue. Software decoding
-reuses one worker across windows of at most eight frames and 32 MiB of raw RGBA,
-with a maximum display edge of 1280 pixels. The same 64 MiB/512-packet encoded
-group limits apply. Worker/codec working memory is additional to these payload
-budgets. Encoded group sizes are checked from packet metadata before reading
-the remaining payloads. Slow software decoding can buffer between windows.
+The browser plays the cached file directly. Pause, resume and seeking reuse that
+file without new source requests or frame-by-frame software extraction. If the
+browser cannot play the source codec, one on-demand FFmpeg worker converts the
+selected clip to a cached H.264 MP4 with a maximum display edge of 1280 pixels.
+The worker terminates before playback begins. It receives bytes, never source
+URLs or credentials. Cached input and converted output each have a 256 MiB limit;
+decoder and conversion working memory are additional. Required original/metric
+reads can interrupt compatibility conversion and remain independent of ordinary
+cached playback. Retry restarts interrupted preparation.
 
-Pause, seek, camera changes, scene disposal, panel close and a hidden tab abort
-the active session. Pause preserves the displayed canvas and presentation time,
-including positions between frames; resume
-opens a fresh session. Playback does not write frames or videos into the still
-cache, IndexedDB, Cache Storage or the Hub. Normal browser HTTP caching is
-browser-managed. No complete recording is fetched as a Blob for playback.
+Only the opened recording is cached. Large recordings use temporary browser
+storage when available, otherwise a bounded Blob in memory. Closing playback,
+changing camera or disposing the scene revokes its Blob URL and removes its
+temporary download. A hidden tab pauses without automatically resuming; its
+prepared clip remains available while the detail stays open. No videos go to
+IndexedDB, Cache Storage or the Hub. Browser HTTP caching remains browser-managed.
+
+Gallery thumbnails, camera planes, 3D geometry and image exports keep their
+registered still and reconstruction time. Static masks, keypoints and match lines
+are hidden during video playback. This player shows one muted camera video;
+it does not synchronize cameras or animate the reconstruction.
 
 ## Camera metadata and explicit companions
 

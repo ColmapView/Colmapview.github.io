@@ -26,7 +26,6 @@ import type {
   MatchLine,
 } from './imageDetailViewModel';
 import { ModalErrorBoundary } from './ModalErrorBoundary';
-import { ImageDetailNavigationControls } from './ImageDetailNavigationControls';
 
 interface DesktopImageDetailFrameProps {
   videoPlayer?: ReactNode;
@@ -261,8 +260,8 @@ export function DesktopImageDetailFrame({
                 ))}
               </div>
 
-              {videoPlayer ? <ImageDetailNavigationControls variant="desktop" hasPrev={hasPrev} hasNext={hasNext}
-                imageCount={imageCount} imageDetailId={imageDetailId} onOpenImageId={onOpenImageId} imageExists={imageExists} onPrev={onPrev} onNext={onNext} /> : <DesktopImageControls
+              <DesktopImageControls
+                mediaActive={Boolean(videoPlayer)}
                 isMarkedForDeletion={isMarkedForDeletion}
                 showPoints2D={showPoints2D}
                 showPoints3D={showPoints3D}
@@ -294,7 +293,7 @@ export function DesktopImageDetailFrame({
                 onOpacityKeyDown={handleOpacityKeyDown}
                 onOpenImageId={onOpenImageId}
                 imageExists={imageExists}
-              />}
+              />
             </div>
           </div>
         </ModalErrorBoundary>
