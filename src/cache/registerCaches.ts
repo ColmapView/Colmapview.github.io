@@ -36,6 +36,7 @@ import { useFloorPlaneStore } from '../store/stores/floorPlaneStore';
 import { usePointPickingStore } from '../store/stores/pointPickingStore';
 import { useCameraStore } from '../store/stores/cameraStore';
 import { useUIStore } from '../store/stores/uiStore';
+import { useReconstructionStore } from '../store/reconstructionStore';
 
 let registered = false;
 
@@ -148,6 +149,13 @@ export function registerAllCaches(): void {
     strategy: 'lazy',
     memoryType: 'js',
     showInStats: true,
+  });
+
+  CacheManager.register({
+    name: 'videoFrames', label: 'Video Frames', priority: CacheDisposalPriority.FILE_CACHE,
+    clear: () => useReconstructionStore.getState().loadedFiles?.videoFrames?.clear(),
+    getStats: () => useReconstructionStore.getState().loadedFiles?.videoFrames?.getStats() ?? { count: 0, sizeBytes: 0 },
+    strategy: 'lazy', memoryType: 'js', showInStats: true,
   });
 
   CacheManager.register({

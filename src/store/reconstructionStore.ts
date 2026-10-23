@@ -409,6 +409,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   setLoadedFiles: (loadedFiles, options) => {
     cancelPendingSplatLoad();
     const previousLoadedFiles = get().loadedFiles;
+    if (previousLoadedFiles?.videoFrames !== loadedFiles.videoFrames) previousLoadedFiles?.videoFrames?.dispose();
     const currentSource = get().wasmReconstruction;
     if (isReconstructionSnapshot(currentSource) && previousLoadedFiles && (
       previousLoadedFiles.camerasFile !== loadedFiles.camerasFile
@@ -717,6 +718,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   },
 
   clear: () => {
+    get().loadedFiles?.videoFrames?.dispose();
     cancelPendingSplatLoad();
     get().urlLoadController?.abort();
     cancelPendingReconstructionLoad();

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-23
+
+### Added
+
+- Load exact per-camera video frames through version 4 dataset manifests. Gallery, camera-plane, detail and export reads share asynchronous request ownership, prioritized work and a bounded frame cache.
+- Release video decoders and compressed buffers after each read, cancel work when consumers leave, and dispose pending and cached frames on scene replacement. Decode unsupported native codecs in an on-demand FFmpeg.wasm Worker.
+
 ## [0.20.6] - 2026-10-22
 
 ### Fixed

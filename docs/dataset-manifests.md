@@ -6,6 +6,52 @@ large source files stay at their original public URLs. The existing format suppo
 COLMAP binary/text models, camera-only models and a camera model with an XYZ PLY;
 these layouts do not need a new manifest version.
 
+## Camera video frames (version 4)
+
+Version 4 adds `videoImages`: exact registered image names mapped to presentation
+timestamps in MP4 or WebM videos. Existing versions 1–3 are unchanged. A video
+binding may accompany the same version 2 media archives and version 3 selected
+geometry. `skipImages: true` conflicts with video bindings and is rejected.
+
+```json
+{
+  "version": 4,
+  "baseUrl": "https://data.example/pinned/scene/",
+  "files": { "cameras": "colmap/cameras.bin", "images": "colmap/images.bin" },
+  "videoImages": {
+    "0028.png": { "url": "camera_0028.mp4", "bytes": 52031614, "timestamp": 240 }
+  },
+  "splats": []
+}
+```
+
+`timestamp` is presentation time in seconds, not a source frame ID. Use the
+publisher's ordered frame-ID list when it has dropped frames: DanceNet3D frame
+`0000242` in `s6/BiancaGolden_Ocho` is video sample 240. The URL can be absolute or
+relative to `baseUrl`; credentials and fragments are rejected. The declared byte
+size must match validated HTTP range responses. Hosts need CORS and exposed
+`Content-Range` headers. Video sources never imply an `images/` or `masks/` folder.
+
+Frames are requested asynchronously through the existing gallery, camera-plane,
+detail and export image access. Concurrent requests for one registered image
+coalesce. A selected camera takes priority over queued background work. The
+64 MiB frame cache evicts older PNG files; moving away cancels unneeded work.
+Each read releases its demuxer, compressed cache and decoder, and replacing or
+clearing the scene aborts pending reads and clears retained frames.
+
+Native WebCodecs decoding is preferred. An on-demand, same-origin single-thread
+FFmpeg.wasm Worker handles codecs such as H.265 when native decoding is unavailable;
+its core is downloaded only when needed (about 10 MiB compressed, 31 MiB decoded).
+It receives a bounded
+encoded keyframe group rather than a URL and terminates after the frame is read.
+Reads are limited to 16 million pixels, 512 packets and 64 MiB of encoded data per
+keyframe group. Errors leave the model usable and report that frame's failure.
+
+Image export writes lossless PNGs of the decoded video frames. These are derived
+from the encoded recordings; video compression and optional publisher color LUTs
+are not reversed. This is a static, matched frame selection; other recording times
+remain in the source videos.
+
 ## Camera metadata and explicit companions
 
 For NeRF/Nerfstudio, DTU or other supported camera metadata, a separate JSON document can retain the original metadata URL while selecting a companion cloud:
@@ -181,15 +227,16 @@ conflict with a loose points or splat selection.
 
 Label the selected frame in the scene and retain the publisher's frame/camera
 manifest as evidence. `skipImages: true` disables guessed photograph requests;
-an explicitly bound mask remains available even without RGB. Video frames,
-sequence playback and unselected archive masks are separate capabilities.
+an explicitly bound mask remains available even without RGB. Add version 4 video
+bindings for matching camera frames. Sequence playback and unselected archive
+masks remain separate capabilities.
 
 ## Generating Hub manifests
 
 Generate manifests offline from the catalog's pinned source listing and explicit
 per-scene associations. Do not fetch submitted source URLs in the Hub Worker.
-Update an existing curated manifest when one already represents that exact scene;
-otherwise generate one for the scene and point its Hub launch link at it.
+Generate a new immutable manifest when a scene selection changes and point its Hub
+launch link at it. Retain old manifest bodies so previously shared URLs still work.
 
 Before activating a generated manifest:
 

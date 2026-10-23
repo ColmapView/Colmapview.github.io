@@ -30,7 +30,7 @@ export interface ManifestGeometryArchive {
 }
 
 export interface ColmapManifest {
-  /** Version 1 for loose files, 2 for media archives, 3 for explicit archived geometry frames. */
+  /** Versions 1–3 retain their existing contracts; version 4 adds exact video frames. */
   version: number;
   /** Optional name for the reconstruction */
   name?: string;
@@ -90,6 +90,8 @@ export interface ColmapManifest {
   mediaArchives?: ManifestMediaArchive[];
   /** Version 3: required, integrity-checked geometry extracted using bounded archive reads. */
   geometryFiles?: ManifestGeometryArchive[];
+  /** Version 4: registered image name -> exact presentation timestamp in a camera video. */
+  videoImages?: Record<string, { url: string; bytes: number; timestamp: number }>;
 }
 
 function safeArchivePath(value: string): boolean {
@@ -104,11 +106,18 @@ function archiveUrlMatches(value: string, extensions: readonly string[]): boolea
   } catch { return false; }
 }
 
+function safeVideoUrl(value: string): boolean {
+  try {
+    const url = new URL(value, 'https://manifest.invalid/');
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.hash;
+  } catch { return false; }
+}
+
 /**
  * Zod schema for validating manifest files
  */
 export const ColmapManifestSchema = z.object({
-  version: z.number().int().min(1).max(3),
+  version: z.number().int().min(1).max(4),
   name: z.string().optional(),
   baseUrl: z.string().url(),
   viewerStatePath: z.string().min(1).max(4096).optional(),
@@ -128,6 +137,11 @@ export const ColmapManifestSchema = z.object({
   images: z.array(z.string()).optional(),
   masks: z.array(z.string()).optional(),
   splats: z.array(z.string().min(1)).optional(),
+  videoImages: z.record(z.string().min(1).max(4096), z.object({
+    url: z.string().min(1).max(4096).refine(safeVideoUrl),
+    bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    timestamp: z.number().finite().min(0).max(604800),
+  })).refine(value => Object.keys(value).length > 0 && Object.keys(value).length <= 100000).optional(),
   mediaArchives: z.array(z.object({
     url: z.string().url().refine(value => archiveUrlMatches(value, ['zip', 'tar'])),
     bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -156,9 +170,10 @@ export const ColmapManifestSchema = z.object({
     && (value.role === 'points3D' ? /\.ply$/i.test(value.member.path) : /\.(ply|spz|sog)$/i.test(value.member.path))
     && (value.format === 'zip' ? value.prefix === undefined : value.prefix !== undefined && value.prefix.bytes <= value.bytes),
   { message: 'Geometry needs the declared archive format, member type and bounded optional prefix.' })).min(1).max(2).optional(),
-}).refine(value => value.version === 1 ? value.mediaArchives === undefined && value.geometryFiles === undefined
-  : value.version === 2 ? value.mediaArchives !== undefined && value.geometryFiles === undefined : value.geometryFiles !== undefined,
-{ message: 'Media archives require version 2; archived geometry requires version 3.' })
+}).refine(value => value.version === 4 ? value.videoImages !== undefined && !value.skipImages
+  : value.videoImages === undefined && (value.version === 1 ? value.mediaArchives === undefined && value.geometryFiles === undefined
+    : value.version === 2 ? value.mediaArchives !== undefined && value.geometryFiles === undefined : value.geometryFiles !== undefined),
+{ message: 'Media archives require version 2; archived geometry requires version 3; video frames require version 4 with images enabled.' })
   .refine(value => !value.geometryFiles || new Set(value.geometryFiles.map(file => file.role)).size === value.geometryFiles.length
     && !(value.files.points3D && value.geometryFiles.some(file => file.role === 'points3D'))
     && !(value.splats?.length && value.geometryFiles.some(file => file.role === 'splat')),

@@ -117,6 +117,41 @@ for (const directory of profiles) {
   const hosts = profile === 'custom' ? [CUSTOM_ORIGIN, 'https://artifact-check.pages.dev', GITHUB_ORIGIN]
     : profile === 'github' ? [GITHUB_ORIGIN] : ['https://artifact-check.pages.dev'];
 
+  test(`${directory}: video frames use the lazy software decoder without cross-origin isolation`, async ({ page, context }) => {
+    const origin = hosts[0], server = await startArtifactServer(output, metadata.base);
+    const traffic = await routeArtifact(context, origin, server.origin, false);
+    const source = 'https://video.example.test/';
+    const video = readFileSync('e2e/fixtures/video-frames/colors.mp4');
+    const files: Record<string, Buffer> = Object.fromEntries(['cameras.txt', 'images.txt'].map(name => [name, readFileSync(`e2e/fixtures/video-frames/${name}`)]));
+    files['scene.manifest.json'] = Buffer.from(JSON.stringify({ version: 4, baseUrl: source,
+      files: { cameras: 'cameras.txt', images: 'images.txt' }, splats: [], videoImages: {
+        'a.png': { url: 'colors.mp4', bytes: video.length, timestamp: 0 }, 'b.png': { url: 'colors.mp4', bytes: video.length, timestamp: 1 },
+      } }));
+    await context.route(source + '**', route => {
+      const name = new URL(route.request().url()).pathname.slice(1), range = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers().range || '');
+      if (name === 'colors.mp4' && range) {
+        const start = Number(range[1]), end = Number(range[2]);
+        return route.fulfill({ status: 206, headers: { 'Content-Type': 'video/mp4', 'Content-Range': `bytes ${start}-${end}/${video.length}`,
+          'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range, Content-Length' }, body: video.subarray(start, end + 1) });
+      }
+      return route.fulfill(files[name] ? { status: 200, body: files[name] } : { status: 404 });
+    });
+    await page.addInitScript(() => { VideoDecoder.isConfigSupported = async config => ({ supported: false, config }); });
+    const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+    try {
+      await page.goto(`${origin}${metadata.base}`);
+      await expect(page.getByRole('button', { name: 'Browse for a COLMAP dataset folder', exact: true })).toBeVisible();
+      expect(traffic.assetRequests.some(url => /ffmpeg-core/.test(url))).toBe(false);
+      await page.goto(`${origin}${metadata.base}?url=${encodeURIComponent(source + 'scene.manifest.json')}`);
+      await expect(page.getByRole('img', { name: 'a.png', exact: true })).toBeVisible({ timeout: 45000 });
+      await expect(page.getByRole('img', { name: 'b.png', exact: true })).toBeVisible({ timeout: 45000 });
+      expect(await page.evaluate(() => crossOriginIsolated)).toBe(false);
+      expect(traffic.assetRequests.some(url => /ffmpeg-core\.wasm-.*\.gz$/.test(url))).toBe(true);
+      expect(traffic.externalRequests).toEqual([]);
+      expect(errors).toEqual([]);
+    } finally { await closeArtifact(context, server); }
+  });
+
   for (const origin of hosts) {
     if (profile !== 'preview') test(`${directory} at ${origin}: Drive Open with startup`, async ({ page, context }) => {
       const server = await startArtifactServer(output, metadata.base);

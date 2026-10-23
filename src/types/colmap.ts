@@ -123,6 +123,8 @@ export interface SplatFileSource {
 
 // File structure for loaded data
 export interface LoadedFiles {
+  /** On-demand frames owned by this scene; no video bytes enter the reconstruction. */
+  videoFrames?: import('../dataset/video/types').VideoFrameMedia;
   cameraImport?: CameraDatasetImportContext;
   /** Physical media bindings for an unchanged native COLMAP reconstruction. */
   nativeMedia?: CameraDatasetImportContext;

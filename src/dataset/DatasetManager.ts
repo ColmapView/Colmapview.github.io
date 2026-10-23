@@ -63,7 +63,10 @@ export class DatasetManager {
       }
     };
     try {
-      const file = await this.getSourceAdapter(state)?.[method](state, name, options?.onError ? { ...options, onError } : options);
+      const access = options?.onError ? { ...options, onError } : options;
+      const video = state.loadedFiles?.videoFrames;
+      const file = method !== 'getMask' && video?.has(name) ? await video.getImage(name, access)
+        : await this.getSourceAdapter(state)?.[method](state, name, access);
       return !options?.signal?.aborted && this.isCurrent(state) ? file ?? null : null;
     } catch (error) {
       onError({ kind: options?.signal?.aborted ? 'aborted' : 'network', message: error instanceof Error ? error.message : 'Media read failed.' });
@@ -112,7 +115,8 @@ export class DatasetManager {
   getImageSync(imageName: string): File | undefined {
     const state = this.getState();
     if (!this.isCurrent(state)) return undefined;
-    return this.getSourceAdapter(state)?.getImageSync(state, imageName);
+    return state.loadedFiles?.videoFrames?.has(imageName) ? state.loadedFiles.videoFrames.getImageSync(imageName)
+      : this.getSourceAdapter(state)?.getImageSync(state, imageName);
   }
 
   // ===========================================================================
@@ -157,7 +161,7 @@ export class DatasetManager {
    */
   async prefetchImages(imageNames: string[], concurrency: number = 5, options?: DatasetAccessOptions): Promise<void> {
     const state = this.getState();
-    if (state.loadedFiles?.cameraImport || state.loadedFiles?.nativeMedia) {
+    if (state.loadedFiles?.cameraImport || state.loadedFiles?.nativeMedia || state.loadedFiles?.videoFrames) {
       const batch=Math.max(1,Math.min(8,Math.floor(concurrency)||1));
       for (let index=0;index<imageNames.length;index+=batch) {
         if (options?.signal?.aborted || !this.isCurrent(state)) return;
@@ -176,6 +180,8 @@ export class DatasetManager {
   /** A completed import found no photo binding; an uncached URL is not known missing. */
   isImageKnownMissing(imageName: string): boolean {
     const state = this.getState();
+    if (state.loadedFiles?.videoFrames?.has(imageName)) return false;
+    if (state.loadedFiles?.videoFrames?.exclusive) return true;
     const media = state.loadedFiles?.cameraImport ?? state.loadedFiles?.nativeMedia;
     return media !== undefined && !media.bindings.has(imageName);
   }
@@ -183,7 +189,7 @@ export class DatasetManager {
   /** Check if the dataset has images available */
   hasImages(): boolean {
     const state = this.getState();
-    return this.getSourceAdapter(state)?.hasImages(state) ?? false;
+    return Boolean(state.loadedFiles?.videoFrames?.size) || (this.getSourceAdapter(state)?.hasImages(state) ?? false);
   }
 
   /** Check if the dataset has masks available */

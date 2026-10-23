@@ -61,6 +61,8 @@ export interface CacheEntryStats {
 
 /** Statistics for all caches */
 export interface CacheStats {
+  /** Lossless PNG frames decoded from camera videos, owned by the current scene. */
+  videoFrames?: CacheEntryStats;
   /** Combined cache-owned File bytes; excludes external references and decoded/GPU memory. */
   urlFileRetention?: import('./urlFileCache').UrlFileCacheStats;
   /** URL image cache (for 'url' and 'manifest' sources) */

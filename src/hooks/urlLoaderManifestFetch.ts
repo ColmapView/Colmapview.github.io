@@ -16,6 +16,7 @@ import { openManifestMediaArchives, rememberManifestMediaArchives } from './urlL
 import { getDiscoveredManifestMedia } from './urlLoaderColmapDiscovery';
 import { CameraDatasetManifestSchema, type CameraDatasetManifest } from '../types/cameraDatasetManifest';
 import { fetchManifestGeometry } from './urlLoaderGeometryArchives';
+import { rememberManifestVideoImages } from '../dataset/video/videoFrameMedia';
 
 // Keep the loader's existing entry point stable while discovery owns its implementations.
 export {
@@ -278,16 +279,17 @@ export async function fetchManifestColmapFiles(
   const maskPaths = archives ? [...archives.maskPaths, ...(manifest.masks?.map(mediaPath) ?? [])] : manifest.masks?.map(mediaPath);
   if (archives) rememberManifestMediaArchives(files, archives);
   const declaredMasks = manifest.masksPath !== undefined || Object.keys(manifest.maskNameToPath ?? {}).length > 0 || Boolean(maskPaths?.length);
-  if (!manifest.skipImages || declaredMasks) rememberNativeMediaSource(files, {
+  const looseImages = !manifest.videoImages || manifest.imagesPath !== undefined || Boolean(manifest.images?.length) || Boolean(manifest.imageNameToPath);
+  if (!manifest.skipImages && looseImages || declaredMasks) rememberNativeMediaSource(files, {
     source: { kind: 'url', baseUrl: joinManifestUrlPath(media?.baseUrl ?? manifest.baseUrl, ''),
       ...(archives && { archiveEntries: archives.entries }) },
     paths: archives ? [...(media?.paths ?? []), ...imagePaths!, ...maskPaths!] : media?.paths,
-    imagePaths: manifest.skipImages ? [] : imagePaths, modelDir: media?.modelDir ?? dirnameOf(manifest.files.cameras),
-    imagesDisabled: manifest.skipImages,
+    imagePaths: manifest.skipImages || !looseImages ? [] : imagePaths, modelDir: media?.modelDir ?? dirnameOf(manifest.files.cameras),
+    imagesDisabled: manifest.skipImages || !looseImages,
     // Keep inferred relative mappings relative so the native index still checks
     // their physical existence; absolutizing them would bypass that check.
-    overrides: manifest.skipImages ? undefined : media?.overrides ?? manifestOverrides,
-    declaredImageRoot: manifest.skipImages ? undefined : joinManifestUrlPath(manifest.baseUrl, manifest.imagesPath ?? 'images/').replace(/\/?$/, '/'),
+    overrides: manifest.skipImages || !looseImages ? undefined : media?.overrides ?? manifestOverrides,
+    declaredImageRoot: manifest.skipImages || !looseImages ? undefined : joinManifestUrlPath(manifest.baseUrl, manifest.imagesPath ?? 'images/').replace(/\/?$/, '/'),
     // A discovered sibling prefix is inference; the full listing must bind masks to the resolved photos.
     declaredMaskRoot: media || manifest.masksPath === undefined ? undefined : joinManifestUrlPath(manifest.baseUrl, manifest.masksPath).replace(/\/?$/, '/'),
     maskOverrides: manifest.maskNameToPath && Object.fromEntries(Object.entries(manifest.maskNameToPath)
@@ -295,5 +297,6 @@ export async function fetchManifestColmapFiles(
     maskRole: manifest.maskRole,
     maskPaths,
   });
+  rememberManifestVideoImages(files, manifest);
   return files;
 }

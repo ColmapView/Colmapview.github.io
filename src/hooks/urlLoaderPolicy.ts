@@ -466,8 +466,9 @@ export function getManifestLazySourceBases(manifest: ColmapManifest): ManifestLa
   const masksPath = manifest.masksPath ?? 'masks/';
 
   const bases: ManifestLazySourceBases = {
-    imageUrlBase: manifest.skipImages ? null : joinManifestUrlPath(manifest.baseUrl, imagesPath),
-    maskUrlBase: manifest.skipImages && manifest.masksPath === undefined && !manifest.masks?.length
+    imageUrlBase: manifest.skipImages || manifest.videoImages && manifest.imagesPath === undefined
+      ? null : joinManifestUrlPath(manifest.baseUrl, imagesPath),
+    maskUrlBase: (manifest.skipImages || manifest.videoImages) && manifest.masksPath === undefined && !manifest.masks?.length
       && !Object.keys(manifest.maskNameToPath ?? {}).length ? null : joinManifestUrlPath(manifest.baseUrl, masksPath),
   };
 

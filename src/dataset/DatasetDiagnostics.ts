@@ -61,11 +61,13 @@ export class DatasetDiagnostics {
     const zipImages = getZipImageCacheStats();
     const zipMasks = getZipMaskCacheStats();
     const localImages = getLocalImageStats(loadedFiles?.imageFiles);
+    const videoFrames = loadedFiles?.videoFrames?.getStats();
 
-    const totalCount = urlImages.count + urlMasks.count + zipImages.count + zipMasks.count + localImages.count;
-    const totalBytes = urlImages.sizeBytes + urlMasks.sizeBytes + zipImages.sizeBytes + zipMasks.sizeBytes + localImages.sizeBytes;
+    const totalCount = urlImages.count + urlMasks.count + zipImages.count + zipMasks.count + localImages.count + (videoFrames?.count ?? 0);
+    const totalBytes = urlImages.sizeBytes + urlMasks.sizeBytes + zipImages.sizeBytes + zipMasks.sizeBytes + localImages.sizeBytes + (videoFrames?.sizeBytes ?? 0);
 
     return {
+      ...(videoFrames && { videoFrames: this.formatCacheEntry(videoFrames) }),
       urlFileRetention: getUrlFileRetentionStats(),
       urlImages: this.formatCacheEntry(urlImages),
       urlMasks: this.formatCacheEntry(urlMasks),
@@ -111,10 +113,10 @@ export class DatasetDiagnostics {
 
     const imageFilesCount = isLocalSource
       ? cacheStats.localImages.count
-      : cacheStats.urlImages.count + cacheStats.zipImages.count;
+      : cacheStats.urlImages.count + cacheStats.zipImages.count + (cacheStats.videoFrames?.count ?? 0);
     const imageFilesBytes = isLocalSource
       ? cacheStats.localImages.sizeBytes
-      : cacheStats.urlImages.sizeBytes + cacheStats.zipImages.sizeBytes;
+      : cacheStats.urlImages.sizeBytes + cacheStats.zipImages.sizeBytes + (cacheStats.videoFrames?.sizeBytes ?? 0);
 
     const isUrlSource = sourceType === 'url' || sourceType === 'manifest';
     const maskFilesCount = sourceType === 'zip'
@@ -189,7 +191,7 @@ export class DatasetDiagnostics {
   }
 
   private hasImages(state: DatasetState): boolean {
-    return this.getSourceAdapter(state)?.hasImages(state) ?? false;
+    return Boolean(state.loadedFiles?.videoFrames?.size) || (this.getSourceAdapter(state)?.hasImages(state) ?? false);
   }
 
   private hasMasks(state: DatasetState): boolean {

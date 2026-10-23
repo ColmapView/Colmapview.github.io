@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import * as path from 'node:path';
 import pkg from './package.json';
 import { resolveViteLocalAliasPolicy } from './viteLocalAliasPolicy';
+import { videoDecoderAsset } from './viteVideoDecoderAsset';
 
 export default defineConfig(({ mode }) => {
   const googleDriveClientId = process.env.VITE_GOOGLE_DRIVE_CLIENT_ID
@@ -18,7 +19,7 @@ export default defineConfig(({ mode }) => {
   const topLevelThreePath = path.resolve(__dirname, 'node_modules/three').replace(/\\/g, '/');
 
   return {
-    plugins: [react()],
+    plugins: [react(), videoDecoderAsset()],
     worker: { format: 'es' },
 
     test: {

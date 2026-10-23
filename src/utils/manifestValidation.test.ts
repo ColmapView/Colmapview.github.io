@@ -12,6 +12,20 @@ const manifest = {
 };
 
 describe('manifest validation helpers', () => {
+  it('requires explicit bounded video declarations and preserves version 1–3 contracts', () => {
+    const video = { url: 'camera.mp4', bytes: 123456, timestamp: 240 };
+    const value = { ...manifest, version: 4, videoImages: { '0028.png': video } };
+    expect(validateColmapManifest(value).success).toBe(true);
+    for (const change of [
+      { version: 3 }, { skipImages: true }, { videoImages: {} },
+      { videoImages: { '0028.png': { ...video, bytes: -1 } } },
+      { videoImages: { '0028.png': { ...video, timestamp: Infinity } } },
+      { videoImages: { '0028.png': { ...video, timestamp: -1 } } },
+      { videoImages: { '0028.png': { ...video, url: 'file:///camera.mp4' } } },
+      { videoImages: { '0028.png': { ...video, url: 'https://user:secret@media.test/video.mp4' } } },
+      { videoImages: { '0028.png': { ...video, url: 'camera.mp4#ambiguous' } } },
+    ]) expect(validateColmapManifest({ ...value, ...change }).success).toBe(false);
+  });
   const geometry = { url: 'https://example.com/frames.tar.zst', bytes: 5000000000, format: 'tar.zst', role: 'points3D',
     member: { path: 'frame.ply', bytes: 100, sha256: 'a'.repeat(64) }, prefix: { bytes: 1024, sha256: 'b'.repeat(64) } };
   const frameManifest = { version: 3, baseUrl: manifest.baseUrl, files: { cameras: 'cameras.bin', images: 'images.bin' }, geometryFiles: [geometry] };

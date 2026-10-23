@@ -43,6 +43,12 @@ This software includes or depends on the following third-party components:
 - React Three Fiber (MIT License) - https://github.com/pmndrs/react-three-fiber
 - Zustand (MIT License) - https://github.com/pmndrs/zustand
 - Mantine UI (MIT License) - https://mantine.dev/
+- Mediabunny 1.46.0 (MPL-2.0) - https://github.com/Vanilagy/mediabunny
+- FFmpeg.wasm JavaScript interface 0.12.15 (MIT License) and single-thread core
+  0.12.10 (GPL-2.0-or-later), used in a separate, on-demand browser Worker.
+  Source, build instructions and component licenses:
+  https://github.com/ffmpegwasm/ffmpeg.wasm
+  https://ffmpegwasm.netlify.app/docs/overview/#licensing
 
 See package.json for a complete list of dependencies and their licenses.
 

@@ -38,6 +38,7 @@ import { anySignal } from '../utils/abortSignals';
 import { prepareLocalCameraDataset, getPreparedCameraContext } from '../dataset/importers/prepareCameraDataset';
 import { chooseMixedCameraScene, isPathInCameraScene } from '../dataset/importers/sceneDiscovery';
 import { prepareNativeMedia } from '../dataset/nativeMedia';
+import { prepareManifestVideoImages } from '../dataset/video/videoFrameMedia';
 
 type SetUrlProgress = (progress: UrlLoadProgress | null) => void;
 type SetSourceInfo = {
@@ -585,6 +586,7 @@ export async function processFileDropzoneFiles(
     pendingSource = parseResult.wasmWrapper;
     load.assertCurrent();
     const nativeMedia = cameraImport ? undefined : await prepareNativeMedia(files, camerasFile, parseResult.cameras, parseResult.images, load.signal);
+    const videoFrames = prepareManifestVideoImages(files, parseResult.cameras, parseResult.images);
     load.assertCurrent();
     if (nativeMedia) {
       hasMasks = [...nativeMedia.bindings.values()].some(binding => Boolean(binding.mask)) || Boolean(nativeMedia.nativeMasks?.size);
@@ -648,6 +650,7 @@ export async function processFileDropzoneFiles(
     const committedFiles: LoadedFiles = {
       cameraImport,
       nativeMedia,
+      videoFrames,
       camerasFile,
       imagesFile,
       points3DFile,
