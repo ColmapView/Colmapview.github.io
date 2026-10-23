@@ -1,7 +1,7 @@
 import type { InputVideoTrack } from 'mediabunny';
 import { readEncodedVideoWindow } from './encodedVideoWindow';
 import { createSoftwareVideoDecoder } from './softwareVideoDecoder';
-import type { PlaybackFrame } from './videoPlayback';
+import type { PlaybackFrame } from './types';
 
 const MAX_RAW_WINDOW_BYTES = 32 * 1024 * 1024;
 const MAX_WINDOW_FRAMES = 8;
@@ -40,7 +40,6 @@ export async function* softwareVideoPlayback(track: InputVideoTrack, timestamp: 
             const pixels = new Uint8ClampedArray(buffer, raw.byteOffset + index * frameBytes, frameBytes);
             context.putImageData(new ImageData(pixels, width, height), 0, 0);
           },
-          close() {},
           width, height,
         };
       }

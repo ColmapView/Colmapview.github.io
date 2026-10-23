@@ -66,7 +66,8 @@ export class DatasetManager {
     try {
       const access = options?.onError ? { ...options, onError } : options;
       const video = state.loadedFiles?.videoFrames;
-      const file = method !== 'getMask' && video?.has(name) ? await video.getImage(name, access)
+      const file = method !== 'getMask' && video?.has(name) ? await video.getImage(name,
+        method === 'getOriginalImage' ? { ...access, priority: access?.priority ?? 'metric' } : access)
         : await this.getSourceAdapter(state)?.[method](state, name, access);
       return !options?.signal?.aborted && this.isCurrent(state) ? file ?? null : null;
     } catch (error) {

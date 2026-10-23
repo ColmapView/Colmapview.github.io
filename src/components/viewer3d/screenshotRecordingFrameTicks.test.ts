@@ -134,7 +134,7 @@ describe('screenshot recording frame ticks', () => {
     tickWebCodecsRecordingFrame(options);
 
     expect(drawFrameToCanvas).toHaveBeenCalledWith(expect.objectContaining({ canvas }));
-    expect(createVideoFrame).toHaveBeenCalledWith(canvas, 500000);
+    expect(createVideoFrame).toHaveBeenCalledWith(canvas, 500000, 16667);
     expect(encoder.encode).toHaveBeenCalledWith(frame, { keyFrame: true });
     expect(frame.close).toHaveBeenCalledOnce();
     expect(options.webCodecsFrameCountRef.current).toBe(31);

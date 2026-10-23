@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createVideoFrameMedia, prepareManifestVideoImages, rememberManifestVideoImages, type DecodeVideoFrame } from './videoFrameMedia';
 import type { VideoImageBinding } from './types';
 import type { Camera, Image } from '../../types/colmap';
+import { queueVideoPlayback } from './videoFrameQueue';
+import { DatasetManager } from '../DatasetManager';
 
 const binding: VideoImageBinding = { url: 'https://media.test/camera.mp4', bytes: 1000, timestamp: 2, width: 10, height: 10 };
 const bindings = new Map([['a.png', binding], ['b.png', { ...binding, timestamp: 3 }]]);
@@ -9,6 +11,40 @@ const deferred = <T>() => { let resolve!: (value: T) => void; const promise = ne
 const frame = (name = 'a.png') => new File(['12345678'], name, { type: 'image/png' });
 
 describe('camera video frame ownership', () => {
+  it('finishes a metric coalesced with a visible read before starting queued playback', async () => {
+    const pending = deferred<File>(), order: string[] = [];
+    const media = createVideoFrameMedia(bindings, true, async name => {
+      order.push(name); return name === 'a.png' ? pending.promise : frame(name);
+    });
+    const state = { sourceType: 'manifest' as const, imageUrlBase: null, maskUrlBase: null, imageNameToUrl: null,
+      loadedFiles: { imageFiles: new Map<string, File>(), hasMasks: false, videoFrames: media } };
+    const active = media.getImage('a.png');
+    const visible = media.getImage('b.png', { priority: 'visible' });
+    const metric = new DatasetManager(() => state).getMetricImage('b.png');
+    const playback = queueVideoPlayback({ signal: new AbortController().signal, getPriority: () => 'selected' },
+      async () => { order.push('playback'); return null; }, vi.fn());
+    pending.resolve(frame()); await Promise.all([active, visible, metric, playback]);
+    expect(order).toEqual(['a.png', 'b.png', 'playback']);
+    media.dispose();
+  });
+
+  it('lets an export joining a background read pause playback without starting a second decoder', async () => {
+    const controller = new AbortController(), stopped = vi.fn();
+    let finish!: () => void;
+    const playback = queueVideoPlayback({ signal: controller.signal, getPriority: () => 'selected' },
+      () => new Promise(resolve => { finish = () => resolve(null); }), () => { stopped(); controller.abort(); finish(); });
+    const decode = vi.fn<DecodeVideoFrame>(async name => frame(name));
+    const media = createVideoFrameMedia(bindings, true, decode);
+    const state = { sourceType: 'manifest' as const, imageUrlBase: null, maskUrlBase: null, imageNameToUrl: null,
+      loadedFiles: { imageFiles: new Map<string, File>(), hasMasks: false, videoFrames: media } };
+    const background = media.getImage('a.png', { priority: 'prefetch' });
+    expect(stopped).not.toHaveBeenCalled();
+    const original = new DatasetManager(() => state).getOriginalImage('a.png');
+    expect(stopped).toHaveBeenCalledOnce();
+    const results = await Promise.all([original, background, playback]);
+    expect(results[0]).toBe(results[1]); expect(decode).toHaveBeenCalledOnce();
+    media.dispose();
+  });
   it('exposes stable immutable playback metadata without decoding and aborts it with the scene', () => {
     const decode = vi.fn<DecodeVideoFrame>();
     const media = createVideoFrameMedia(bindings, true, decode);

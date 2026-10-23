@@ -1,17 +1,9 @@
 import { EncodedPacketSink, VideoSampleSink, type InputVideoTrack } from 'mediabunny';
 import { anySignal } from '../../utils/abortSignals';
 import { createVideoInput, readVideoTrack } from './videoInput';
-import { queueVideoFrame } from './videoFrameQueue';
-import type { CameraVideoSource } from './types';
-
-export interface PlaybackFrame {
-  timestamp: number;
-  duration: number;
-  width: number;
-  height: number;
-  draw(context: CanvasRenderingContext2D): void;
-  close(): void;
-}
+import { queueVideoPlayback } from './videoFrameQueue';
+import type { CameraVideoSource, PlaybackFrame } from './types';
+import { createVideoPlaybackClock } from './videoPlaybackClock';
 
 async function* nativeVideoPlayback(track: InputVideoTrack, timestamp: number): AsyncGenerator<PlaybackFrame> {
   const first = await new EncodedPacketSink(track).getPacket(timestamp, { metadataOnly: true });
@@ -19,7 +11,7 @@ async function* nativeVideoPlayback(track: InputVideoTrack, timestamp: number): 
   for await (const sample of new VideoSampleSink(track).samples(first.timestamp)) {
     try {
       yield { timestamp: sample.timestamp, duration: sample.duration, width: sample.displayWidth, height: sample.displayHeight,
-        draw: context => sample.draw(context, 0, 0), close() {} };
+        draw: context => sample.draw(context, 0, 0) };
     } finally { sample.close(); }
   }
 }
@@ -41,15 +33,18 @@ interface PlaybackOptions {
   onReady(duration: number): void;
   onFrame(timestamp: number): void;
   onBuffering(buffering: boolean): void;
+  onInterrupted?(): void;
+  onClock?(position: () => number): void;
 }
 
 /** The same serial decoder queue owns still reads and the single visible player. */
 export async function playCameraVideo(source: CameraVideoSource, canvas: HTMLCanvasElement, options: PlaybackOptions) {
-  const signal = anySignal([source.signal, options.signal]);
+  const interruption = new AbortController();
+  const signal = anySignal([source.signal, options.signal, interruption.signal]);
   // A same-turn close (including React's development effect probe) must not open a demuxer.
   await Promise.resolve();
   signal.throwIfAborted();
-  await queueVideoFrame({ signal, getPriority: () => 'selected' }, async () => {
+  await queueVideoPlayback({ signal, getPriority: () => 'selected' }, async () => {
     const input = createVideoInput(source, signal);
     try {
       const { track, duration } = await readVideoTrack(input.input, source, signal);
@@ -59,7 +54,9 @@ export async function playCameraVideo(source: CameraVideoSource, canvas: HTMLCan
         : (await import('./softwareVideoPlayback')).softwareVideoPlayback(track, timestamp, duration, source.width, source.height, signal, options.singleFrame ? 1 : undefined);
       const context = canvas.getContext('2d');
       if (!context) throw new Error('Video playback needs a canvas.');
-      let wallStart = performance.now(), mediaStart: number | undefined, lastEnd = timestamp;
+      const clock = createVideoPlaybackClock(timestamp, duration);
+      options.onClock?.(clock.position);
+      let started = false;
       try {
         for (;;) {
           options.onBuffering(true);
@@ -67,26 +64,28 @@ export async function playCameraVideo(source: CameraVideoSource, canvas: HTMLCan
           options.onBuffering(false);
           signal.throwIfAborted();
           if (result.done) {
-            if (mediaStart !== undefined) await waitForVideoFrame((lastEnd - mediaStart) * 1000 - (performance.now() - wallStart), signal);
+            if (started) await waitForVideoFrame(clock.delayUntil(duration), signal);
             break;
           }
           const frame = result.value;
-          try {
-            if (mediaStart === undefined) { mediaStart = frame.timestamp; wallStart = performance.now(); }
-            let delay = (frame.timestamp - mediaStart) * 1000 - (performance.now() - wallStart);
-            // Rebase after slow network/software decoding rather than racing through buffered frames.
-            if (delay < -250) { wallStart -= delay; delay = 0; }
-            await waitForVideoFrame(delay, signal);
-            if (canvas.width !== frame.width || canvas.height !== frame.height) { canvas.width = frame.width; canvas.height = frame.height; }
-            frame.draw(context);
-            lastEnd = frame.timestamp + frame.duration;
-            options.onFrame(frame.timestamp);
-            if (options.singleFrame) break;
-          } finally { frame.close(); }
+          if (!started) {
+            clock.start(frame.timestamp, frame.timestamp + frame.duration, !options.singleFrame); started = true;
+          } else {
+            clock.allowUntil(frame.timestamp);
+            await waitForVideoFrame(clock.delayUntil(frame.timestamp), signal);
+          }
+          if (canvas.width !== frame.width || canvas.height !== frame.height) { canvas.width = frame.width; canvas.height = frame.height; }
+          frame.draw(context);
+          clock.allowUntil(frame.timestamp + frame.duration);
+          options.onFrame(frame.timestamp);
+          if (options.singleFrame) break;
         }
-      } finally { await frames.return(undefined); }
+      } finally { clock.stop(); await frames.return(undefined); }
       return null;
     } finally { input.dispose(); }
+  }, () => {
+    interruption.abort();
+    try { options.onInterrupted?.(); } catch { /* An observer cannot prevent a foreground read. */ }
   });
   signal.throwIfAborted();
 }

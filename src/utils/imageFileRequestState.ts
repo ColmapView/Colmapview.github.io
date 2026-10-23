@@ -6,6 +6,8 @@ export interface FileRequestContext {
   readonly generation: number;
   readonly signal: AbortSignal;
   getPriority(): MediaPriority;
+  /** Individual demand remains visible when a higher-priority consumer coalesces. */
+  hasPriority?(priority: MediaPriority): boolean;
   isCurrent(): boolean;
   reportFailure(error: DatasetAccessError): void;
 }
@@ -106,6 +108,7 @@ export function createCoalescedRequestState<Result>(emptyResult: Result) {
             }
             return priority;
           },
+          hasPriority: priority => [...ownedOperation.consumers].some(consumer => consumer.getPriority() === priority),
           isCurrent: () => isCurrent(key, ownedOperation),
           reportFailure: error => { if (isCurrent(key, ownedOperation)) ownedOperation.failure = error; },
         };

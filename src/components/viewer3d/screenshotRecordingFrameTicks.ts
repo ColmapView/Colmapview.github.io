@@ -22,7 +22,7 @@ type AddNotification = NotificationState['addNotification'];
 type LogWithError = (message: string, error: unknown) => void;
 type CaptureDownsampledFrame = typeof captureDownsampledRecordingFrame;
 type DrawFrameToCanvas = typeof drawRecordingFrameToCanvas;
-type CreateVideoFrame = (canvas: HTMLCanvasElement, timestamp: number) => VideoFrame;
+type CreateVideoFrame = (canvas: HTMLCanvasElement, timestamp: number, duration: number) => VideoFrame;
 
 interface RecordingFrameLoopBaseOptions {
   gl: RecordingRenderer;
@@ -182,7 +182,7 @@ export function tickWebCodecsRecordingFrame({
   now = () => performance.now(),
   warn = appLogger.warn,
   log = appLogger.info,
-  createVideoFrame = (canvas, timestamp) => new VideoFrame(canvas, { timestamp }),
+  createVideoFrame = (canvas, timestamp, duration) => new VideoFrame(canvas, { timestamp, duration }),
   drawFrameToCanvas = drawRecordingFrameToCanvas,
 }: WebCodecsRecordingFrameTickOptions): void {
   if (!isRecordingWebCodecsRef.current || !videoEncoderRef.current || !webCodecsCanvasRef.current) return;
@@ -227,7 +227,9 @@ export function tickWebCodecsRecordingFrame({
       webCodecsFrameCountRef.current,
       webCodecsSpeedFactorRef.current
     );
-    const frame = createVideoFrame(canvas, timestamp);
+    // The muxer cannot infer a following timestamp for the last frame.
+    const duration = getWebCodecsFrameTimestamp(webCodecsFrameCountRef.current + 1, webCodecsSpeedFactorRef.current) - timestamp;
+    const frame = createVideoFrame(canvas, timestamp, duration);
 
     videoEncoderRef.current?.encode(frame, { keyFrame: webCodecsFrameCountRef.current % 30 === 0 });
     frame.close();

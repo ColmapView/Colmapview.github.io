@@ -15,7 +15,7 @@ async function loadVideoFixture(page: Page, baseURL: string, touch = false) {
 
 for (const software of [false, true]) {
   test(`individual camera playback, seek and cleanup (${software ? 'software' : 'native'})`, async ({ page, baseURL }) => {
-    if (software) await page.addInitScript(() => { VideoDecoder.isConfigSupported = async config => ({ supported: false, config }); });
+    if (software) await page.addInitScript(() => { Object.defineProperty(window, 'VideoDecoder', { value: undefined, configurable: true }); });
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await loadVideoFixture(page, baseURL!);

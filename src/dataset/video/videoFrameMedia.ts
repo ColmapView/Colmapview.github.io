@@ -4,7 +4,7 @@ import type { DatasetAccessOptions } from '../types';
 import { createImageFileRequestState } from '../../utils/imageFileRequestState';
 import { createUrlFileCache } from '../urlFileCache';
 import { joinManifestUrlPath } from '../../utils/urlUtils';
-import { queueVideoFrame } from './videoFrameQueue';
+import { interruptVideoPlayback, queueVideoFrame } from './videoFrameQueue';
 import type { VideoFrameMedia, VideoImageBinding } from './types';
 
 const manifests = new WeakMap<ReadonlyMap<string, File>, ColmapManifest>();
@@ -30,6 +30,8 @@ export function createVideoFrameMedia(bindings: ReadonlyMap<string, VideoImageBi
     async getImage(name: string, options?: DatasetAccessOptions) {
       const binding = bindings.get(name);
       if (!binding || disposed || options?.signal?.aborted) return null;
+      // Include a foreground consumer joining an already queued background read.
+      if (['selected', 'metric'].includes(options?.priority ?? '') && !state.peekCached(name)) interruptVideoPlayback();
       const file = await state.request(name, context => queueVideoFrame(context, async () => {
         if (disposed || !context.isCurrent()) return null;
         const result = await decode(name, binding, context.signal);

@@ -57,6 +57,8 @@ and export.
 Open a camera's image details and choose **Video** to play that recording from
 its matched timestamp. Playback has play/pause, seeking and a return-to-matched-frame
 button. One visible player shares the decoder queue with still-frame reads.
+An uncached selected-image, export or metric read pauses playback so required
+stills can finish; a cached still does not interrupt it. Resume is explicit.
 Gallery thumbnails and 3D camera planes retain their matched stills. During
 playback the image detail hides static masks, keypoints and match lines; the 3D
 geometry remains at its reconstructed time, shown below the player. This player
@@ -69,10 +71,12 @@ them; Mediabunny also keeps a small internal decode queue. Software decoding
 reuses one worker across windows of at most eight frames and 32 MiB of raw RGBA,
 with a maximum display edge of 1280 pixels. The same 64 MiB/512-packet encoded
 group limits apply. Worker/codec working memory is additional to these payload
-budgets. Slow software decoding can buffer between windows.
+budgets. Encoded group sizes are checked from packet metadata before reading
+the remaining payloads. Slow software decoding can buffer between windows.
 
 Pause, seek, camera changes, scene disposal, panel close and a hidden tab abort
-the active session. Pause preserves the displayed canvas and position; resume
+the active session. Pause preserves the displayed canvas and presentation time,
+including positions between frames; resume
 opens a fresh session. Playback does not write frames or videos into the still
 cache, IndexedDB, Cache Storage or the Hub. Normal browser HTTP caching is
 browser-managed. No complete recording is fetched as a Blob for playback.

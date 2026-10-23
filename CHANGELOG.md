@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Update Mediabunny to 1.62.1 so disposing an input during its first read settles cancellation and suppresses obsolete background failures.
+- Pause camera playback when an uncached export or metric needs the shared decoder, including reads coalesced with gallery work. Exports retain the registered still instead of the currently playing frame.
+- Preserve fractional seek and pause positions between video frames, and check encoded group budgets from metadata before reading remaining packet payloads.
+- Give the last MP4 recording frame its full duration at every speed, and close recording encoders after completion or failed configuration.
 
 ## [0.21.1] - 2026-10-23
 
@@ -1042,7 +1045,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript for type safety
 - Deno native test runner for testing
 
-[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.20.1...HEAD
+[Unreleased]: https://github.com/ColmapView/colmapview.github.io/compare/v0.21.1...HEAD
 [0.20.1]: https://github.com/ColmapView/colmapview.github.io/compare/v0.19.11...v0.20.1
 [0.17.2]: https://github.com/ColmapView/colmapview.github.io/compare/v0.17.1...v0.17.2
 [0.16.4]: https://github.com/ColmapView/colmapview.github.io/compare/v0.16.3...v0.16.4

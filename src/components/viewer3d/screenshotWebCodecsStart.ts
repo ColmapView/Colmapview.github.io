@@ -119,6 +119,7 @@ export async function startScreenshotWebCodecsRecording({
     log(`VideoEncoder configured: ${codec}, ${width}x${height}, ${formatBitrateMbps(bitrate)}Mbps`);
   } catch (error) {
     errorLog('VideoEncoder configure failed:', error);
+    if (encoder.state !== 'closed') encoder.close();
     throw error;
   }
 

@@ -14,3 +14,19 @@ presentation frame indices 9, 11, 21 and 24 (1.8, 2.2, 4.2 and 4.8 seconds):
 ffmpeg -f lavfi -i 'testsrc2=s=64x80:r=5:d=5' -vf 'scale=in_color_matrix=bt601:out_color_matrix=bt709' -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -c:v libx264 -x264-params 'keyint=10:min-keyint=10:scenecut=0:open-gop=1:bframes=3' -pix_fmt yuv420p -movflags +faststart bframes.mp4
 ffmpeg -i bframes.mp4 -vf 'select=eq(n\,24)' -fps_mode passthrough -frames:v 1 reference-4.8.png
 ```
+
+`vfr.mp4` and `vfr.webm` retain variable presentation timestamps after removing
+two frame ranges. They cover playback across timing gaps in both containers:
+
+```sh
+ffmpeg -f lavfi -i 'testsrc2=size=64x80:rate=10:duration=6' -vf 'select=not(between(n\,10\,14)+between(n\,30\,39))' -fps_mode vfr -c:v libx264 -pix_fmt yuv420p -x264-params 'bframes=3:keyint=12:min-keyint=12:scenecut=0:open-gop=1' vfr.mp4
+ffmpeg -f lavfi -i 'testsrc2=size=64x80:rate=10:duration=6' -vf 'select=not(between(n\,10\,14)+between(n\,30\,39))' -fps_mode vfr -c:v libvpx -b:v 200k vfr.webm
+```
+
+`long.mp4` has one red frame followed by 29 seconds of green at 1 fps. It checks
+that an original image read can interrupt a long recording and still returns the
+registered frame, and that a fractional seek retains its requested time:
+
+```sh
+ffmpeg -f lavfi -i 'color=c=red:size=64x80:rate=1:duration=1' -f lavfi -i 'color=c=green:size=64x80:rate=1:duration=29' -filter_complex '[0:v][1:v]concat=n=2:v=1:a=0,scale=in_color_matrix=bt601:out_color_matrix=bt709' -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -c:v libx264 -pix_fmt yuv420p long.mp4
+```

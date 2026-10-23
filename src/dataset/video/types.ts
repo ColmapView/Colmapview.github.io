@@ -13,6 +13,15 @@ export interface CameraVideoSource extends Readonly<VideoImageBinding> {
   readonly signal: AbortSignal;
 }
 
+/** Valid until the iterator advances/returns; its generator owns decoder resources. */
+export interface PlaybackFrame {
+  timestamp: number;
+  duration: number;
+  width: number;
+  height: number;
+  draw(context: CanvasRenderingContext2D): void;
+}
+
 export interface VideoFrameMedia {
   readonly size: number;
   readonly exclusive: boolean;

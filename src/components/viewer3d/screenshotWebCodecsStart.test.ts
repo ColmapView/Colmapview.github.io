@@ -125,10 +125,12 @@ describe('screenshot WebCodecs start helper', () => {
 
   it('rejects and avoids ref initialization when encoder configuration fails', async () => {
     const error = new Error('unsupported codec');
+    const close = vi.fn();
     const { options } = createOptions({
       createEncoder: vi.fn((init: VideoEncoderInit) =>
         buildVideoEncoder({
           init,
+          close,
           configure: vi.fn(() => {
             throw error;
           }),
@@ -142,6 +144,7 @@ describe('screenshot WebCodecs start helper', () => {
     expect(options.muxerRef.current).toBeNull();
     expect(options.webCodecsCanvasRef.current).toBeNull();
     expect(options.setIsRecordingGif).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it('rejects and avoids ref initialization when muxer start fails', async () => {

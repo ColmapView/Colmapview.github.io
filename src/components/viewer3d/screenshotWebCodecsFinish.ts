@@ -69,5 +69,5 @@ export async function finishScreenshotWebCodecsRecording({
     errorLog('Error finalizing WebCodecs recording:', error);
     setIsRecordingGif(false);
     resolve?.(null);
-  }
+  } finally { if (encoder.state !== 'closed') encoder.close(); }
 }

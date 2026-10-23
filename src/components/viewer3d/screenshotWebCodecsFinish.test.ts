@@ -12,6 +12,7 @@ function createOptions(overrides: Partial<Parameters<typeof finishScreenshotWebC
   const blob = new Blob(['mp4'], { type: 'video/mp4' });
   const encoder = buildVideoEncoder({
     flush: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn(),
   });
   const muxer: WebCodecsMuxer = {
     target: { buffer },
@@ -57,6 +58,7 @@ describe('screenshot WebCodecs finish helper', () => {
     expect(options.webCodecsCanvasRef.current).toBeNull();
     expect(options.isRecordingWebCodecsRef.current).toBe(false);
     expect(encoder.flush).toHaveBeenCalledOnce();
+    expect(encoder.close).toHaveBeenCalledOnce();
     expect(muxer.finalize).toHaveBeenCalledOnce();
     expect(options.createBlob).toHaveBeenCalledWith(buffer);
     expect(options.createObjectUrl).toHaveBeenCalledWith(blob);
@@ -91,6 +93,7 @@ describe('screenshot WebCodecs finish helper', () => {
     expect(options.errorLog).toHaveBeenCalledWith('Error finalizing WebCodecs recording:', error);
     expect(options.setIsRecordingGif).toHaveBeenCalledWith(false);
     expect(resolve).toHaveBeenCalledWith(null);
+    expect(encoder.close).toHaveBeenCalledOnce();
   });
 
   it('resolves null when finalized muxer has no output buffer', async () => {
@@ -111,5 +114,13 @@ describe('screenshot WebCodecs finish helper', () => {
     );
     expect(options.setIsRecordingGif).toHaveBeenCalledWith(false);
     expect(resolve).toHaveBeenCalledWith(null);
+  });
+
+  it('does not close an encoder again after a codec error closed it', async () => {
+    const encoder = buildVideoEncoder({ state: 'closed', close: vi.fn(), flush: vi.fn().mockRejectedValue(new Error('closed')) });
+    const { options, resolve } = createOptions({ videoEncoderRef: ref<VideoEncoder | null>(encoder) });
+    await finishScreenshotWebCodecsRecording(options);
+    expect(resolve).toHaveBeenCalledWith(null);
+    expect(encoder.close).not.toHaveBeenCalled();
   });
 });

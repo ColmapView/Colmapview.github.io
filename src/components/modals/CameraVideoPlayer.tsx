@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CameraVideoSource } from '../../dataset/video/types';
 import { playCameraVideo } from '../../dataset/video/videoPlayback';
 import { buttonStyles, TOUCH } from '../../theme';
@@ -28,6 +28,7 @@ export default function CameraVideoPlayer({ source, name, onClose }: CameraVideo
   const controllerRef = useRef<AbortController | null>(null);
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const positionRef = useRef(source.timestamp);
+  const clockRef = useRef<(() => number) | null>(null);
   const durationRef = useRef<number | null>(null);
   const [time, setTime] = useState(source.timestamp);
   const [duration, setDuration] = useState<number | null>(null);
@@ -37,18 +38,24 @@ export default function CameraVideoPlayer({ source, name, onClose }: CameraVideo
   const [status, setStatus] = useState<'loading' | 'playing' | 'paused' | 'ended' | 'error'>('loading');
   const [error, setError] = useState('');
 
+  const cancelSession = useCallback(() => {
+    clearTimeout(seekTimerRef.current); seekTimerRef.current = undefined;
+    positionRef.current = clockRef.current?.() ?? positionRef.current;
+    clockRef.current = null;
+    controllerRef.current?.abort();
+  }, []);
+
   useEffect(() => {
     const stop = () => {
-      clearTimeout(seekTimerRef.current);
-      controllerRef.current?.abort(); setPlaying(false); setPreview(false); setStatus('paused');
+      cancelSession(); setPlaying(false); setPreview(false); setStatus('paused'); setTime(positionRef.current);
     };
     const hide = () => {
       if (document.hidden) stop();
     };
     document.addEventListener('visibilitychange', hide);
     source.signal.addEventListener('abort', stop, { once: true });
-    return () => { document.removeEventListener('visibilitychange', hide); source.signal.removeEventListener('abort', stop); clearTimeout(seekTimerRef.current); };
-  }, [source]);
+    return () => { document.removeEventListener('visibilitychange', hide); source.signal.removeEventListener('abort', stop); cancelSession(); };
+  }, [source, cancelSession]);
 
   useEffect(() => {
     if ((!playing && !preview) || !canvasRef.current) return;
@@ -67,12 +74,17 @@ export default function CameraVideoPlayer({ source, name, onClose }: CameraVideo
       signal: controller.signal,
       onReady(value) { if (!controller.signal.aborted) { durationRef.current = value; setDuration(value); } },
       onBuffering: buffer,
+      onClock(position) { if (!controller.signal.aborted) clockRef.current = position; },
+      onInterrupted() {
+        if (controller.signal.aborted) return;
+        cancelSession(); setPlaying(false); setPreview(false); setStatus('paused'); setTime(positionRef.current);
+      },
       onFrame(value) {
         if (controller.signal.aborted) return;
         clearTimeout(bufferingTimer);
-        positionRef.current = value;
+        positionRef.current = clockRef.current?.() ?? value;
         setStatus(playing ? 'playing' : 'paused');
-        if (performance.now() - lastUpdate > 200) { setTime(value); lastUpdate = performance.now(); }
+        if (performance.now() - lastUpdate > 200) { setTime(positionRef.current); lastUpdate = performance.now(); }
       },
     }).then(() => {
       if (!controller.signal.aborted) {
@@ -85,26 +97,33 @@ export default function CameraVideoPlayer({ source, name, onClose }: CameraVideo
         setStatus('error'); setPlaying(false); setPreview(false);
       }
     }).finally(() => clearTimeout(bufferingTimer));
-    return () => { controller.abort(); clearTimeout(bufferingTimer); };
-  }, [source, playing, preview, revision]);
+    return () => {
+      if (controllerRef.current === controller) cancelSession();
+      else controller.abort();
+      clearTimeout(bufferingTimer);
+    };
+  }, [source, playing, preview, revision, cancelSession]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     return () => { if (canvas) { canvas.width = 0; canvas.height = 0; } };
   }, []);
 
-  const pause = () => { clearTimeout(seekTimerRef.current); controllerRef.current?.abort(); setPlaying(false); setPreview(false); setStatus('paused'); setTime(positionRef.current); };
+  const pause = () => {
+    const pendingSeek = seekTimerRef.current !== undefined;
+    cancelSession(); setPlaying(false); setPreview(pendingSeek); setStatus(pendingSeek ? 'loading' : 'paused'); setTime(positionRef.current);
+    if (pendingSeek) setRevision(value => value + 1);
+  };
   const resume = () => {
-    clearTimeout(seekTimerRef.current); controllerRef.current?.abort(); setPreview(false);
+    cancelSession(); setPreview(false);
     if (status === 'ended') { positionRef.current = 0; setTime(0); }
     setError(''); setPlaying(true); setStatus('loading');
   };
   const seek = (value: number) => {
-    controllerRef.current?.abort();
-    clearTimeout(seekTimerRef.current);
+    cancelSession();
     positionRef.current = value;
     setTime(value); setError(''); setStatus('loading');
-    seekTimerRef.current = setTimeout(() => { setPreview(!playing); setRevision(value => value + 1); }, 150);
+    seekTimerRef.current = setTimeout(() => { seekTimerRef.current = undefined; setPreview(!playing); setRevision(value => value + 1); }, 150);
   };
 
   return <div className="absolute inset-0 flex flex-col bg-ds-secondary" role="group" aria-label={`Camera video ${name}`}
