@@ -16,18 +16,21 @@ export async function decodeSoftwareVideoFrame(track: InputVideoTrack, timestamp
   const targetPacket = await sink.getPacket(timestamp, { metadataOnly: true });
   const first = await sink.getKeyPacket(timestamp, { verifyKeyPackets: true });
   if (!targetPacket || !first) throw new Error('No independently decodable video frame exists at this timestamp.');
-  const end = await sink.getNextKeyPacket(first, { metadataOnly: true });
+  // A B-frame can follow the next keyframe in decode order while preceding it
+  // in presentation order. Stop after the target packet and let the decoder flush.
+  const end = await sink.getNextPacket(targetPacket, { metadataOnly: true });
   const target = new BufferTarget();
   const output = new Output({ format: new Mp4OutputFormat(), target });
   const packets = new EncodedVideoPacketSource(codec);
   output.addVideoTrack(packets, { rotation: await track.getRotation() });
   await output.start();
-  let bytes = 0, count = 0;
+  let bytes = 0, count = 0, frameIndex = 0;
   try {
     for await (const packet of sink.packets(first, end ?? undefined)) {
       signal.throwIfAborted();
       bytes += packet.byteLength;
       if (bytes > MAX_GOP_BYTES || ++count > MAX_GOP_PACKETS) throw new Error('This video needs a shorter keyframe interval for bounded browser decoding.');
+      if (packet.timestamp >= first.timestamp && packet.timestamp < targetPacket.timestamp) frameIndex++;
       await packets.add(packet.clone({ timestamp: packet.timestamp - first.timestamp }), { decoderConfig });
     }
     await output.finalize();
@@ -47,9 +50,12 @@ export async function decodeSoftwareVideoFrame(track: InputVideoTrack, timestamp
     await ffmpeg.load({ coreURL, wasmURL, classWorkerURL: workerURL }, { signal });
     signal.throwIfAborted();
     await ffmpeg.writeFile('input.mp4', new Uint8Array(target.buffer), { signal });
-    const offset = (targetPacket.timestamp - first.timestamp).toFixed(9);
-    const exit = await ffmpeg.exec(['-nostdin', '-threads', '1', '-max_alloc', '134217728', '-i', 'input.mp4',
-      '-ss', offset, '-frames:v', '1', '-threads', '1', '-f', 'image2', 'frame.png'], 60000, { signal });
+    // Select an actual decoded frame; seeking/CFR synchronization can duplicate
+    // a neighboring frame or discard the last frame of a reordered packet group.
+    // Open GOP recovery can otherwise hide valid decoded frames; discard the
+    // leading frames with negative timestamps before counting presentation frames.
+    const exit = await ffmpeg.exec(['-nostdin', '-threads', '1', '-max_alloc', '134217728', '-flags2', '+showall', '-i', 'input.mp4',
+      '-vf', `select=gte(t\\,0),select=eq(n\\,${frameIndex})`, '-fps_mode', 'passthrough', '-frames:v', '1', '-threads', '1', '-f', 'image2', 'frame.png'], 60000, { signal });
     signal.throwIfAborted();
     if (exit !== 0) throw new Error('The software decoder could not extract this video frame.');
     const data = await ffmpeg.readFile('frame.png', undefined, { signal });

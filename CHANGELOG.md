@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-10-23
+
+### Fixed
+
+- Preserve matching B-frames around open GOP boundaries and the last video frame in software decoding. Select the actual decoded frame without seeking or duplicating neighbors.
+- Keep development hot reload working in checkouts located inside a parent `.tmp` directory.
+
 ## [0.21.0] - 2026-10-23
 
 ### Added

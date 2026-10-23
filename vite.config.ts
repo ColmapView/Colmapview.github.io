@@ -68,8 +68,10 @@ export default defineConfig(({ mode }) => {
       // Fast Refresh can preserve stale R3F hook state after deep renderer edits.
       // Use full reloads in dev so hook-order changes cannot survive in the browser.
       hmr: false,
-      // Native SDKs and scratch worktrees are not application sources.
-      watch: { ignored: ['**/colmap-wasm/**', '**/.tmp/**', '**/.playwright-cli/**', '**/test-results/**', '**/playwright-report/**'] },
+      // Ignore this checkout's scratch files, including when the checkout itself
+      // lives inside a parent .tmp worktree directory.
+      watch: { ignored: ['colmap-wasm', '.tmp', '.playwright-cli', 'test-results', 'playwright-report']
+        .map(directory => path.resolve(__dirname, directory).replace(/\\/g, '/') + '/**') },
       // OAuth popups need their opener. Keep optional SharedArrayBuffer isolation
       // only when Google sign-in is not configured; production Pages is also unisolated.
       headers: googleDriveSignInEnabled ? {
