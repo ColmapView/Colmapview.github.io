@@ -29,8 +29,14 @@ export interface ManifestGeometryArchive {
   prefix?: { bytes: number; sha256: string };
 }
 
+export type ManifestVideoImage = {
+  url: string;
+  bytes: number;
+  playbackRate?: number;
+} & ({ timestamp: number; frameIndex?: never } | { frameIndex: number; timestamp?: never });
+
 export interface ColmapManifest {
-  /** Versions 1–3 retain their existing contracts; version 4 adds exact video frames. */
+  /** Versions 1–4 retain their contracts; version 5 adds presentation-frame indices. */
   version: number;
   /** Optional name for the reconstruction */
   name?: string;
@@ -90,8 +96,8 @@ export interface ColmapManifest {
   mediaArchives?: ManifestMediaArchive[];
   /** Version 3: required, integrity-checked geometry extracted using bounded archive reads. */
   geometryFiles?: ManifestGeometryArchive[];
-  /** Version 4: registered image name -> exact presentation timestamp in a camera video. */
-  videoImages?: Record<string, { url: string; bytes: number; timestamp: number; playbackRate?: number }>;
+  /** Registered name -> source presentation time (v4+) or zero-based displayed frame (v5). */
+  videoImages?: Record<string, ManifestVideoImage>;
 }
 
 function safeArchivePath(value: string): boolean {
@@ -116,8 +122,21 @@ function safeVideoUrl(value: string): boolean {
 /**
  * Zod schema for validating manifest files
  */
-export const ColmapManifestSchema = z.object({
-  version: z.number().int().min(1).max(4),
+const videoSourceShape = {
+  url: z.string().min(1).max(4096).refine(safeVideoUrl),
+  bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  playbackRate: z.number().finite().min(0.0625).max(120).optional(),
+};
+const timestampSchema = z.number().finite().min(0).max(604800);
+const legacyVideoImageSchema = z.object({ ...videoSourceShape, timestamp: timestampSchema });
+const videoImageSchema = z.union([
+  z.object({ ...videoSourceShape, timestamp: timestampSchema, frameIndex: z.never().optional() }),
+  z.object({ ...videoSourceShape, frameIndex: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), timestamp: z.never().optional() }),
+]);
+const videoImagesSchema = <T extends z.ZodType>(binding: T) => z.record(z.string().min(1).max(4096), binding)
+  .refine(value => Object.keys(value).length > 0 && Object.keys(value).length <= 100000).optional();
+
+const manifestShape = {
   name: z.string().optional(),
   baseUrl: z.string().url(),
   viewerStatePath: z.string().min(1).max(4096).optional(),
@@ -137,12 +156,6 @@ export const ColmapManifestSchema = z.object({
   images: z.array(z.string()).optional(),
   masks: z.array(z.string()).optional(),
   splats: z.array(z.string().min(1)).optional(),
-  videoImages: z.record(z.string().min(1).max(4096), z.object({
-    url: z.string().min(1).max(4096).refine(safeVideoUrl),
-    bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    timestamp: z.number().finite().min(0).max(604800),
-    playbackRate: z.number().finite().min(0.0625).max(120).optional(),
-  })).refine(value => Object.keys(value).length > 0 && Object.keys(value).length <= 100000).optional(),
   mediaArchives: z.array(z.object({
     url: z.string().url().refine(value => archiveUrlMatches(value, ['zip', 'tar'])),
     bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -171,10 +184,14 @@ export const ColmapManifestSchema = z.object({
     && (value.role === 'points3D' ? /\.ply$/i.test(value.member.path) : /\.(ply|spz|sog)$/i.test(value.member.path))
     && (value.format === 'zip' ? value.prefix === undefined : value.prefix !== undefined && value.prefix.bytes <= value.bytes),
   { message: 'Geometry needs the declared archive format, member type and bounded optional prefix.' })).min(1).max(2).optional(),
-}).refine(value => value.version === 4 ? value.videoImages !== undefined && !value.skipImages
+};
+export const ColmapManifestSchema = z.discriminatedUnion('version', [
+  z.object({ ...manifestShape, version: z.literal([1, 2, 3, 4]), videoImages: videoImagesSchema(legacyVideoImageSchema) }),
+  z.object({ ...manifestShape, version: z.literal(5), videoImages: videoImagesSchema(videoImageSchema) }),
+]).refine(value => value.version >= 4 ? value.videoImages !== undefined && !value.skipImages
   : value.videoImages === undefined && (value.version === 1 ? value.mediaArchives === undefined && value.geometryFiles === undefined
     : value.version === 2 ? value.mediaArchives !== undefined && value.geometryFiles === undefined : value.geometryFiles !== undefined),
-{ message: 'Media archives require version 2; archived geometry requires version 3; video frames require version 4 with images enabled.' })
+{ message: 'Media archives require version 2; archived geometry requires version 3; video frames require version 4 or 5 with images enabled.' })
   .refine(value => !value.geometryFiles || new Set(value.geometryFiles.map(file => file.role)).size === value.geometryFiles.length
     && !(value.files.points3D && value.geometryFiles.some(file => file.role === 'points3D'))
     && !(value.splats?.length && value.geometryFiles.some(file => file.role === 'splat')),

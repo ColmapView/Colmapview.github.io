@@ -25,7 +25,7 @@ interface CameraVideoPlayerProps {
 export default function CameraVideoPlayer({ source, cache, name, poster, layout, onClose }: CameraVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controllerRef = useRef<AbortController | null>(null);
-  const matchedTime = source.timestamp / (source.playbackRate ?? 1);
+  const matchedTime = (source.timestamp ?? 0) / (source.playbackRate ?? 1);
   const [time, setTime] = useState(matchedTime);
   const [duration, setDuration] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);

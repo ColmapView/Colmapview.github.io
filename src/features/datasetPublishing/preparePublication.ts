@@ -5,6 +5,7 @@ import type { CameraViewState } from '../../store/types';
 import type { ShareConfig } from '../../utils/shareDataCodec';
 import type { DatasetState } from '../../dataset/types';
 import { DatasetManager } from '../../dataset/DatasetManager';
+import { prepareVideoFrameExport } from '../../dataset/video/videoFrameFile';
 import { prepareReconstructionFiles } from '../../parsers/prepareReconstructionFiles';
 import { composeSim3d, createIdentityEuler, createSim3dFromEuler, sim3dToEuler } from '../../utils/sim3dTransforms';
 import { parsePublishedViewerState, sanitizeShareConfig } from '../../utils/publishedViewerState';
@@ -153,6 +154,17 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
         return asset;
       }
       return null;
+    }
+    if (!mask && captured.loadedFiles?.videoFrames?.has(name)) {
+      return { path, kind: 'image', size: null, open: async targetSignal => {
+        targetSignal.throwIfAborted(); deps.assertCurrent();
+        const value = await manager.getOriginalImage(name, { signal: targetSignal, priority: 'selected', maxBytes: MAX_BUFFERED_PUBLICATION_FILE_BYTES });
+        targetSignal.throwIfAborted(); deps.assertCurrent();
+        if (!value) throw new HfError(`Could not retrieve selected video frame ${name}.`);
+        const output = input.imageFormat === 'jpeg' ? value : await prepareVideoFrameExport(value, outputName, targetSignal);
+        checkAssetSize(output.size, path, 'image');
+        return output;
+      } };
     }
     if (isRemote) {
       const url = captured.imageNameToUrl?.[name] || (captured.imageUrlBase ? buildImageUrl(captured.imageUrlBase, name).url : null);

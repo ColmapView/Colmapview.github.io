@@ -25,7 +25,7 @@ The toolbar's **Align** button holds everything that works out *where the scene 
 ### Image Viewing
 - **Gallery View** - Grid or list layout with virtual scrolling for large datasets.
 - **Image Detail Modal** - Full camera intrinsics, pose data, and matched image browsing.
-- **Camera Videos** - Play and seek camera recordings from image details. Previous/Next stays in video mode with a bounded cache for adjacent recordings; manifest timing can restore the publisher's capture speed.
+- **Camera Videos** - Bind registered views to exact video frame numbers or source times through a manifest. Play and seek supported recordings from image details; Previous/Next reuses a bounded cache, while larger clips remain available for matched stills.
 - **Match Visualization** - Animated feature connections between images.
 - **Lens Undistortion** - Real-time preview for COLMAP's projective and fisheye camera models.
 

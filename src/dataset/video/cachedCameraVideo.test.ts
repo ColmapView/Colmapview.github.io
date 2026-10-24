@@ -47,6 +47,16 @@ it('downloads once with exact byte verification, seeks the cached file and relea
   expect(releaseArchiveDownload).toHaveBeenCalledOnce();
 });
 
+it('uses the same resolved source frame for indexed playback', async () => {
+  const element = video(), owner = new AbortController();
+  const { timestamp: _timestamp, ...recording } = source;
+  const resolveFrame = vi.fn(async () => ({ ...source, timestamp: 1 }));
+  const result = await loadCachedCameraVideo({ ...recording, frameIndex: 17, resolveFrame }, element,
+    { signal: owner.signal, onProgress: vi.fn() });
+  expect(resolveFrame).toHaveBeenCalledOnce(); expect(element.currentTime).toBe(1);
+  await result.dispose();
+});
+
 it('converts an unsupported clip once without another download', async () => {
   const element = video(); vi.mocked(element.canPlayType).mockReturnValue('');
   vi.mocked(prepareCompatibleCameraVideo).mockResolvedValue(new Blob(['converted']));

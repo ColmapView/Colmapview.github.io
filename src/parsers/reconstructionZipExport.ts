@@ -1,6 +1,7 @@
 import { downloadBlob } from '../utils/download';
 import { appLogger } from '../utils/logger';
 import { awaitWithAbort } from '../utils/awaitWithAbort';
+import { prepareVideoFrameExport } from '../dataset/video/videoFrameFile';
 import { compressZip, type ZipFiles } from './zipCompression';
 import {
   normalizeZipCompressionLevel,
@@ -79,7 +80,8 @@ async function addImageFilesToZip(
     const imagePath = normalizeReconstructionZipImagePath(path);
 
     try {
-      const buffer = await awaitWithAbort(file.arrayBuffer(), signal);
+      const output = await prepareVideoFrameExport(file, path, signal);
+      const buffer = await awaitWithAbort(output.arrayBuffer(), signal);
       signal?.throwIfAborted();
       files[imagePath] = new Uint8Array(buffer);
       imageCount++;

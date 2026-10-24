@@ -3,9 +3,13 @@ import { createRemoteArchiveRead } from '../../archive/remoteArchive';
 import type { VideoImageBinding } from './types';
 
 /** A single bounded range cache; avoid a second demuxer cache retaining merged video ranges. */
-export function createVideoInput(binding: VideoImageBinding, signal: AbortSignal) {
+export function createVideoInput(binding: VideoImageBinding, signal: AbortSignal, metadataBudget?: number) {
   signal.throwIfAborted();
-  const read = createRemoteArchiveRead(binding.url, binding.bytes);
+  let bytesRead = 0;
+  const read = createRemoteArchiveRead(binding.url, binding.bytes, undefined, binding.bytes, metadataBudget === undefined ? undefined : bytes => {
+    bytesRead += bytes;
+    if (bytesRead > metadataBudget) throw new Error('Video presentation index exceeds its metadata read budget.');
+  });
   const input = new Input({ formats: [MP4, WEBM], source: new CustomSource({
     getSize: () => binding.bytes,
     read: async (start, end) => {
@@ -31,6 +35,6 @@ export async function readVideoTrack(input: Input, binding: VideoImageBinding, s
   if (width !== binding.width || height !== binding.height) throw new Error('Video dimensions do not match camera calibration.');
   const duration = await track.computeDuration();
   signal.throwIfAborted();
-  if (!Number.isFinite(duration) || duration <= 0 || binding.timestamp >= duration) throw new Error('The matched frame is outside the video.');
+  if (!Number.isFinite(duration) || duration <= 0 || binding.timestamp !== undefined && binding.timestamp >= duration) throw new Error('The matched frame is outside the video.');
   return { track, duration };
 }

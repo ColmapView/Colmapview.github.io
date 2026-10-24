@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-24
+
+### Added
+
+- Version 5 manifests select zero-based video frames in presentation order, with shared bounded metadata indices for images from the same recording. Versions 1–4 retain their existing contracts.
+
+### Fixed
+
+- Keep indexed stills, playback start, metrics, exports and publishing on the same source frame, including variable frame timing. Large clips remain eligible for ranged still extraction without offering oversized whole-video playback.
+- Publish video-derived images without requiring a loose-photo URL. Encode JPEG-named derived package images as JPEG while retaining lossless decoded pixels in the image cache.
+
 ## [0.22.0] - 2026-10-24
 
 ### Added

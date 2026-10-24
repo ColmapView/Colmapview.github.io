@@ -1,24 +1,22 @@
 import type { DatasetAccessOptions } from '../types';
+import type { ManifestVideoImage } from '../../types/manifest';
 
 /** Each cached source and prepared playback copy stays within this file budget. */
 export const MAX_CACHED_VIDEO_BYTES = 256 * 1024 * 1024;
 
 export interface CameraVideoProgress { phase: 'download' | 'prepare'; percent: number }
 
-export interface VideoImageBinding {
-  url: string;
-  bytes: number;
-  timestamp: number;
-  /** Playback clock / encoded presentation clock. Still extraction always uses timestamp unchanged. */
-  playbackRate?: number;
+export type VideoImageBinding = ManifestVideoImage & {
   width: number;
   height: number;
-}
+};
+export type ResolvedVideoImageBinding = Omit<VideoImageBinding, 'frameIndex' | 'timestamp'> & { timestamp: number };
 
 /** Stable, read-only binding; a disposed scene also cancels an open player. */
-export interface CameraVideoSource extends Readonly<VideoImageBinding> {
+export type CameraVideoSource = Readonly<VideoImageBinding> & {
   readonly signal: AbortSignal;
-}
+  readonly resolveFrame?: (signal: AbortSignal) => Promise<ResolvedVideoImageBinding>;
+};
 
 export interface VideoFrameMedia {
   readonly size: number;

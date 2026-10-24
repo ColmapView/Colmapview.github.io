@@ -15,6 +15,7 @@ import { MediaLoadError } from '../MediaLoadError';
 import { useResetKeyedState } from '../../hooks/useResetKeyedState';
 import { useCameraVideoWindow } from './useCameraVideoWindow';
 import { buttonStyles } from '../../theme';
+import { MAX_CACHED_VIDEO_BYTES } from '../../dataset/video/types';
 
 const CameraVideoPlayer = lazy(() => import('./CameraVideoPlayer'));
 
@@ -116,7 +117,9 @@ export function ImageDetailModal() {
   });
 
   const videoSource = image ? dataset.getVideoSource(image.name) : undefined;
-  const [videoActive, setVideoActive] = useResetKeyedState(videoSource && !isMatchViewMode ? videoSource.signal : undefined, false);
+  const [videoRequested, setVideoRequested] = useResetKeyedState(videoSource && !isMatchViewMode ? videoSource.signal : undefined, false);
+  const videoPlayable = Boolean(videoSource && videoSource.bytes <= MAX_CACHED_VIDEO_BYTES);
+  const videoActive = videoRequested && videoPlayable;
   const previousImage = prevImageId === null ? undefined : reconstruction?.images.get(prevImageId);
   const nextImage = nextImageId === null ? undefined : reconstruction?.images.get(nextImageId);
   const videoCache = useCameraVideoWindow(videoActive, videoSource,
@@ -210,11 +213,12 @@ export function ImageDetailModal() {
 
   const videoPlayer = videoActive && videoSource ? <Suspense fallback={imageSrc ? <img src={imageSrc} alt="" className="absolute object-contain pointer-events-none"
     style={{ left: singleImageLayout.offsetX, top: singleImageLayout.offsetY, width: singleImageLayout.renderedImageWidth, height: singleImageLayout.renderedImageHeight }} /> : null}>
-    <CameraVideoPlayer key={imageDetailId} source={videoSource} cache={videoCache} name={image.name} poster={imageSrc} layout={singleImageLayout} onClose={() => setVideoActive(false)} />
+    <CameraVideoPlayer key={imageDetailId} source={videoSource} cache={videoCache} name={image.name} poster={imageSrc} layout={singleImageLayout} onClose={() => setVideoRequested(false)} />
   </Suspense> : undefined;
   const mediaActions = videoSource && !videoActive && !isMatchViewMode ? <button
     className={`absolute top-2 right-2 z-10 ${buttonStyles.base} ${buttonStyles.sizes.sm} ${buttonStyles.variants.secondary}`}
-    aria-label="Play camera video" title="Play this camera’s recording" onClick={() => setVideoActive(true)}>
+    aria-label={videoPlayable ? 'Play camera video' : 'Video playback unavailable'} disabled={!videoPlayable}
+    title={videoPlayable ? 'Play this camera’s recording' : 'Matched frames are available; this recording exceeds the 256 MiB playback limit.'} onClick={() => setVideoRequested(true)}>
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m7 3 15 9-15 9z" /></svg>Video
   </button> : undefined;
 

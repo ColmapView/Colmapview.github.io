@@ -12,6 +12,25 @@ const manifest = {
 };
 
 describe('manifest validation helpers', () => {
+  it('supports v5 presentation-frame indices or times, without changing v4 timestamp parsing', () => {
+    const source = { url: 'camera.mp4', bytes: 300000000 };
+    const value = { ...manifest, version: 5, videoImages: {
+      'cam/a.jpg': { ...source, frameIndex: 0 }, 'cam/b.jpg': { ...source, frameIndex: 240 },
+      'other.png': { ...source, timestamp: 12.5, playbackRate: 30 },
+    } };
+    const parsed = validateColmapManifest(value);
+    expect(parsed.success && parsed.manifest.videoImages?.['cam/b.jpg'].frameIndex).toBe(240);
+    for (const selector of [{}, { frameIndex: -1 }, { frameIndex: 0.5 }, { frameIndex: Infinity },
+      { frameIndex: Number.MAX_SAFE_INTEGER + 1 }, { timestamp: 0, frameIndex: 0 }]) {
+      expect(validateColmapManifest({ ...value, videoImages: { 'a.jpg': { ...source, ...selector } } }).success).toBe(false);
+    }
+    expect(validateColmapManifest({ ...value, version: 4 }).success).toBe(false);
+    expect(validateColmapManifest({ ...value, skipImages: true }).success).toBe(false);
+    const legacy = validateColmapManifest({ ...manifest, version: 4,
+      videoImages: { 'a.png': { ...source, timestamp: 0, frameIndex: 'historically ignored' } } });
+    expect(legacy.success && legacy.manifest.videoImages?.['a.png']).toEqual({ ...source, timestamp: 0 });
+  });
+
   it('requires explicit bounded video declarations and preserves version 1–3 contracts', () => {
     const video = { url: 'camera.mp4', bytes: 123456, timestamp: 240 };
     const value = { ...manifest, version: 4, videoImages: { '0028.png': video } };

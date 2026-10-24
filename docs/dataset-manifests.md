@@ -6,6 +6,63 @@ large source files stay at their original public URLs. The existing format suppo
 COLMAP binary/text models, camera-only models and a camera model with an XYZ PLY;
 these layouts do not need a new manifest version.
 
+## Video frame numbers (version 5)
+
+Version 5 adds a zero-based `frameIndex` selector. Several registered views can
+refer to different frames of the same recording:
+
+```json
+{
+  "version": 5,
+  "baseUrl": "https://data.example/pinned/scene/",
+  "files": { "cameras": "cameras.bin", "images": "images.bin" },
+  "videoImages": {
+    "cameraA/view01.jpg": { "url": "cameraA.mp4", "bytes": 100000000, "frameIndex": 240 },
+    "cameraA/view02.jpg": { "url": "cameraA.mp4", "bytes": 100000000, "frameIndex": 255 }
+  },
+  "splats": []
+}
+```
+
+`frameIndex: 0` means the first displayed frame in the source's primary video
+track; 240 means the 241st. The order is presentation order, including variable
+frame timing and B-frame reordering. Decode preroll is excluded; a frame spanning
+time zero is selected at zero. Frames missing from the source are not counted.
+A publisher frame ID, extracted JPEG counter or COLMAP image ID is a different
+identifier and needs an explicit association. The native COLMAP rig file
+`files.frames` is unrelated to video selection.
+
+Each v5 binding must have exactly one of `frameIndex` or `timestamp`. Timestamp
+bindings retain v4 behavior: seconds in the source presentation clock, selecting
+the last frame whose presentation start is at or before that time. `playbackRate`
+changes only playback time. Frame indices resolve against the original source
+before retiming or compatibility conversion; seeking never changes the image used
+by geometry, metrics, exports or publishing. An explicit video binding takes
+precedence for its registered name. Unmapped names retain the existing declared
+photo sources; a failed binding never substitutes another frame.
+
+Indices are read lazily from sample metadata, without decoding all frames or
+caching full recordings. Images sharing a recording share one cancellable index.
+Reads have a 16 MiB metadata budget, at most 250,000 samples, and an 8 MiB scene
+index cache. Duplicate presentation timestamps or invalid sample durations are
+reported as ambiguous rather than guessed. Existing frame-decoding budgets below
+still apply. Scene replacement cancels work and releases its indices.
+
+The Hub's offline authoring tool accepts a model plus deduplicated `videos` and
+`images` tables and emits ordinary, explicit v5 bindings:
+
+```sh
+node scripts/audit/compile-video-frame-manifest.mjs --input mapping.json --output scene.manifest.json --viewer-root ../colmap-webview
+```
+
+In that authoring document, `model` is the base manifest, `videos` contains
+`{ "id": "cameraA", "url": "cameraA.mp4", "bytes": 100000000 }`, and `images`
+contains `{ "name": "cameraA/view01.jpg", "video": "cameraA", "frameIndex": 240 }`.
+Compilation validates structure, not source pixels. Verify the exact native names,
+source dimensions and frame correspondence independently before publication.
+Versions 1–4 and their existing selectors remain unchanged; older viewers reject
+v5 rather than silently treating frame numbers as times.
+
 ## Camera video frames (version 4)
 
 Version 4 adds `videoImages`: exact registered image names mapped to presentation
@@ -58,8 +115,12 @@ For synchronized multi-camera scenes such as DanceNet3D, COLMAP export is one
 temporal snapshot: one matched image per registered camera, their calibration and
 poses, and the reconstruction's COLMAP points when available. Playing or seeking
 a recording leaves that export selection unchanged.
-Exported images are lossless PNGs of the decoded frames. Source compression
-artifacts remain, and optional publisher color LUTs are not applied.
+Decoded frames stay lossless PNGs in the frame/metric cache. Dataset packages and
+uploads preserve registered image names: derived PNG-named files stay PNG;
+JPEG-named files are encoded once at JPEG quality 0.95. Other derived filename
+formats need an explicit supported export format. Original uploaded photographs
+are copied unchanged. Derived frames do not recover the publisher's original JPEG
+bytes; source compression artifacts remain, and optional color LUTs are not applied.
 
 ### Individual camera playback
 
@@ -80,6 +141,10 @@ URLs or credentials. Cached input and converted output each have a 256 MiB limit
 decoder and conversion working memory are additional. Required original/metric
 reads can interrupt compatibility conversion and remain independent of ordinary
 cached playback. Retry restarts interrupted preparation.
+
+A source larger than 256 MiB can still provide matched stills through bounded
+ranges. Its Video control explains that whole-recording playback is unavailable;
+opening that control does not download the recording or raise the cache limits.
 
 Video mode stays active when Previous/Next selects another camera with a recording.
 Its cache holds the current recording and, when they fit, the next and previous

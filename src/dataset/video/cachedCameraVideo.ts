@@ -1,11 +1,12 @@
 import { BlobSource, Input, MP4, WEBM } from 'mediabunny';
 import { anySignal } from '../../utils/abortSignals';
 import { readVideoTrack } from './videoInput';
-import { MAX_CACHED_VIDEO_BYTES, type CameraVideoProgress, type CameraVideoSource } from './types';
+import { MAX_CACHED_VIDEO_BYTES, type CameraVideoProgress, type CameraVideoSource, type ResolvedVideoImageBinding } from './types';
+import { resolveCameraVideoFrame } from './videoFrameSelection';
 import { createCameraVideoCache, type CameraVideoCache, type PreparedCameraVideo } from './cameraVideoCache';
 
 /** Validate and optionally retime a local source, always releasing its demuxer. */
-async function prepareCameraVideoFile(original: Blob, source: CameraVideoSource, signal: AbortSignal,
+async function prepareCameraVideoFile(original: Blob, source: ResolvedVideoImageBinding, signal: AbortSignal,
   onProgress: (progress: CameraVideoProgress) => void): Promise<PreparedCameraVideo> {
   const input = new Input({ source: new BlobSource(original), formats: [MP4, WEBM] });
   const abortInput = () => input.dispose();
@@ -53,6 +54,7 @@ export async function loadCachedCameraVideo(source: CameraVideoSource, video: HT
   await Promise.resolve();
   signal.throwIfAborted();
   if (source.bytes > MAX_CACHED_VIDEO_BYTES) throw new Error('This video exceeds the 256 MiB playback cache limit.');
+  const selected = await resolveCameraVideoFrame(source, signal);
   const cache = options.cache ?? createCameraVideoCache();
   let lease: Awaited<ReturnType<CameraVideoCache['acquire']>> | undefined, url: string | undefined;
   const detach = () => {
@@ -74,9 +76,9 @@ export async function loadCachedCameraVideo(source: CameraVideoSource, video: HT
     lease = await cache.acquire(source, signal, options.onProgress);
     signal.throwIfAborted();
     let prepared = lease.getPrepared();
-    const matchedTime = source.timestamp / (source.playbackRate ?? 1);
+    const matchedTime = selected.timestamp / (source.playbackRate ?? 1);
     if (!prepared) {
-      prepared = await prepareCameraVideoFile(lease.blob, source, signal, options.onProgress);
+      prepared = await prepareCameraVideoFile(lease.blob, selected, signal, options.onProgress);
       lease.setPrepared(prepared);
     }
     const { duration } = prepared;

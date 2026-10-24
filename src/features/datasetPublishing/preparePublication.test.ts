@@ -17,6 +17,7 @@ import { parseDatasetViewerSettings } from '../../utils/datasetViewerSettings';
 import { getManifestLoadSourceInfo } from '../../hooks/urlLoaderPolicy';
 import { buildImageUrl, buildMaskUrlCandidates } from '../../utils/imageFileLookupPolicy';
 import { appLogger } from '../../utils/logger';
+import { createVideoFrameMedia } from '../../dataset/video/videoFrameMedia';
 
 function input(): PublicationInput {
   const original = new File(['original png bytes'], 'nested/photo.png', { type: 'image/png' });
@@ -35,6 +36,24 @@ beforeEach(() => { vi.stubGlobal('Blob', NodeBlob); vi.stubGlobal('File', NodeFi
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('publication snapshot preparation', () => {
+  it('prepares video-derived frames lazily for every publication destination without a loose image URL', async () => {
+    const source = input(), decode = vi.fn(async () => new File(['matched pixels'], 'nested/photo.png', { type: 'image/png' }));
+    const videoFrames = createVideoFrameMedia(new Map([['nested/photo.png', {
+      url: 'https://source.example/clip.mp4', bytes: 300000000, timestamp: 12.5, width: 640, height: 480,
+    }]]), true, decode);
+    source.dataset = buildDatasetState({ sourceType: 'manifest', imageUrlBase: null, maskUrlBase: null,
+      loadedFiles: { ...buildLoadedFiles(), videoFrames } });
+    const signal = new AbortController().signal;
+    try {
+      const prepared = await preparePublication(source, signal, deps());
+      expect(decode).not.toHaveBeenCalled();
+      const asset = prepared.assets.find(item => item.kind === 'image')!;
+      expect(asset.path).toBe('images/nested/photo.png'); expect(asset.size).toBeNull();
+      expect(await (await asset.open(signal)).text()).toBe('matched pixels');
+      expect(decode).toHaveBeenCalledOnce();
+    } finally { videoFrames.dispose(); }
+  });
+
   it('exports JPEG names and associated mask names without mutating the scene or changing observations', async () => {
     const source = input(); source.imageFormat = 'jpeg';
     source.dataset = buildDatasetState({ sourceType: 'url', imageUrlBase: 'https://source.example/images/', maskUrlBase: 'https://source.example/masks/' });

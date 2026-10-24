@@ -13,6 +13,17 @@ function server() {
   });
 }
 describe('remote archive ranges', () => {
+  it('charges actual padded transport bytes once and rejects over-budget reads before fetching', async () => {
+    const request = server(); let charged = 0;
+    const read = createRemoteArchiveRead('https://example.test/video.mp4', size, request, size, bytes => {
+      charged += bytes;
+      if (charged > 65536) throw new Error('metadata read budget');
+    });
+    await read(0, 16, signal()); await read(100, 16, signal());
+    expect(charged).toBe(65536); expect(request).toHaveBeenCalledOnce();
+    await expect(read(65536, 16, signal())).rejects.toThrow('metadata read budget');
+    expect(request).toHaveBeenCalledOnce();
+  });
   it('bounds reads to a selected prefix while checking the original object size', async () => {
     const request = server();
     const read = createRemoteArchiveRead('https://example.test/frames.tar', size, request, 1024);

@@ -10,6 +10,7 @@ import { downloadStreamingZip, saveStreamingZip, type AddZipBlob } from './strea
 import { awaitWithAbort } from '../utils/awaitWithAbort';
 import type { ZipExportProgressCallback } from './reconstructionZipExport';
 import { alphaMask } from '../dataset/importers/importedMedia';
+import { prepareVideoFrameExport } from '../dataset/video/videoFrameFile';
 
 const ORIGINAL_MEDIA_READ_LIMIT = 64 * 1024 * 1024;
 export interface CameraPackageMedia {
@@ -99,7 +100,7 @@ export async function writeCameraDatasetPackage(reconstruction: Reconstruction, 
     if (!size || size.width !== camera.width || size.height !== camera.height || await readImageOrientation(rgb, signal) !== 1) throw new Error(`Original photo does not match camera calibration: ${image.name}`);
     const decoded = await awaitWithAbort(createImageBitmap(rgb, { imageOrientation: 'none', resizeWidth: 1, resizeHeight: 1 }), signal, bitmap => bitmap.close());
     decoded.close(); signal.throwIfAborted();
-    await add(`images/${name}`, rgb);
+    await add(`images/${name}`, await prepareVideoFrameExport(rgb, name, signal));
     if (includeMasks) {
       const binding = media.getBinding?.(image.name);
       if (binding?.mask?.kind === 'file' && (binding.mask.role === 'unknown' || binding.mask.role === 'label')) {

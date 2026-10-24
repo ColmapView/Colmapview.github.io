@@ -12,12 +12,13 @@ const REQUEST_TIMEOUT_MS = 120000;
 
 /** Credentials stay on the main thread, under the same provider policy as full downloads. */
 export function createRemoteArchiveRead(url: string, size: number, fetchImpl: ZipDownloadOptions['fetchImpl'] = fetchDatasetResource,
-  readLimit = size) {
+  readLimit = size, onRange?: (bytes: number) => void) {
   validateByteRange(size, 0, readLimit);
   const blocks = new Map<number, Uint8Array<ArrayBuffer>>();
   let validator: string | null | undefined;
   const fetchRange = async (offset: number, length: number, signal: AbortSignal) => {
     signal.throwIfAborted();
+    onRange?.(length);
     const response = await fetchImpl!(url, REQUEST_TIMEOUT_MS, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, signal });
     const discard = () => { void response.body?.cancel().catch(() => {}); };
     try { assertStorageReadAccess(response, url); } catch (error) { discard(); throw error; }

@@ -1,14 +1,15 @@
 import { CanvasSink } from 'mediabunny';
 import { anySignal, timeoutSignal } from '../../utils/abortSignals';
 import { readImageDimensions } from '../../utils/imageDimensions';
-import type { VideoImageBinding } from './types';
+import type { ResolvedVideoImageBinding } from './types';
 import { createVideoInput, readVideoTrack } from './videoInput';
+import { createVideoFrameFile } from './videoFrameFile';
 
 export const VIDEO_DECODE_TIMEOUT_MS = 90_000;
 export const MAX_VIDEO_FRAME_BYTES = 64 * 1024 * 1024;
 
 /** Every read owns and releases its demuxer, compressed cache, decoder and temporary canvas. */
-export async function decodeVideoFrame(name: string, binding: VideoImageBinding, signal: AbortSignal): Promise<File> {
+export async function decodeVideoFrame(name: string, binding: ResolvedVideoImageBinding, signal: AbortSignal): Promise<File> {
   const active = anySignal([signal, timeoutSignal(VIDEO_DECODE_TIMEOUT_MS)]);
   active.throwIfAborted();
   const source = createVideoInput(binding, active);
@@ -33,7 +34,7 @@ export async function decodeVideoFrame(name: string, binding: VideoImageBinding,
     if (!size || size.width !== binding.width || size.height !== binding.height) {
       throw new Error(`Video frame dimensions do not match camera calibration for ${name}.`);
     }
-    return new File([blob], name, { type: 'image/png' });
+    return createVideoFrameFile(blob, name);
   } finally {
     source.dispose();
   }

@@ -5,7 +5,8 @@ import { createImageFileRequestState } from '../../utils/imageFileRequestState';
 import { createUrlFileCache } from '../urlFileCache';
 import { joinManifestUrlPath } from '../../utils/urlUtils';
 import { interruptVideoPlayback, queueVideoFrame } from './videoFrameQueue';
-import type { VideoFrameMedia, VideoImageBinding } from './types';
+import type { ResolvedVideoImageBinding, VideoFrameMedia, VideoImageBinding } from './types';
+import { createVideoFrameResolver } from './videoFrameSelection';
 
 const manifests = new WeakMap<ReadonlyMap<string, File>, ColmapManifest>();
 export const rememberManifestVideoImages = (files: ReadonlyMap<string, File>, manifest: ColmapManifest) => {
@@ -13,7 +14,7 @@ export const rememberManifestVideoImages = (files: ReadonlyMap<string, File>, ma
 };
 
 export const VIDEO_FRAME_CACHE_BYTES = 64 * 1024 * 1024;
-export type DecodeVideoFrame = (name: string, binding: VideoImageBinding, signal: AbortSignal) => Promise<File>;
+export type DecodeVideoFrame = (name: string, binding: ResolvedVideoImageBinding, signal: AbortSignal) => Promise<File>;
 
 export function createVideoFrameMedia(bindings: ReadonlyMap<string, VideoImageBinding>, exclusive: boolean,
   decode: DecodeVideoFrame = async (name, binding, signal) => (await import('./decodeVideoFrame')).decodeVideoFrame(name, binding, signal),
@@ -21,7 +22,9 @@ export function createVideoFrameMedia(bindings: ReadonlyMap<string, VideoImageBi
   const cache = createUrlFileCache(budgetBytes).scope('videoFrames');
   const state = createImageFileRequestState(cache);
   const lifetime = new AbortController();
-  const sources = new Map([...bindings].map(([name, binding]) => [name, Object.freeze({ ...binding, signal: lifetime.signal })]));
+  const resolveFrame = createVideoFrameResolver(lifetime.signal);
+  const sources = new Map([...bindings].map(([name, binding]) => [name, Object.freeze({ ...binding, signal: lifetime.signal,
+    resolveFrame: (signal: AbortSignal) => resolveFrame(binding, signal) })]));
   let disposed = false;
   return {
     size: bindings.size, exclusive,
@@ -34,7 +37,8 @@ export function createVideoFrameMedia(bindings: ReadonlyMap<string, VideoImageBi
       if (['selected', 'metric'].includes(options?.priority ?? '') && !state.peekCached(name)) interruptVideoPlayback();
       const file = await state.request(name, context => queueVideoFrame(context, async () => {
         if (disposed || !context.isCurrent()) return null;
-        const result = await decode(name, binding, context.signal);
+        const selected = binding.timestamp !== undefined ? binding : await resolveFrame(binding, context.signal);
+        const result = await decode(name, selected, context.signal);
         return context.isCurrent() && !disposed ? result : null;
       }), options);
       if (file && options?.maxBytes !== undefined && file.size > options.maxBytes) {

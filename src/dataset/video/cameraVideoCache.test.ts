@@ -5,7 +5,7 @@ import { MAX_CACHED_VIDEO_BYTES, type CameraVideoSource } from './types';
 
 vi.mock('../../utils/zipDownload', () => ({ downloadZip: vi.fn(), releaseArchiveDownload: vi.fn(async () => {}) }));
 const lifetime = new AbortController();
-const source = (name: string): CameraVideoSource => ({ url: `https://media.test/${name}.mp4`, bytes: 3,
+const source = (name: string): CameraVideoSource & { timestamp: number } => ({ url: `https://media.test/${name}.mp4`, bytes: 3,
   width: 64, height: 80, timestamp: 0, signal: lifetime.signal });
 const [a, b, c, d] = ['a', 'b', 'c', 'd'].map(source);
 const acquire = (cache: ReturnType<typeof createCameraVideoCache>, item: CameraVideoSource, signal = new AbortController().signal) => cache.acquire(item, signal, vi.fn());
