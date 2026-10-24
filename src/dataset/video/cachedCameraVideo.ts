@@ -4,8 +4,6 @@ import { readVideoTrack } from './videoInput';
 import { MAX_CACHED_VIDEO_BYTES, type CameraVideoProgress, type CameraVideoSource } from './types';
 import { createCameraVideoCache, type CameraVideoCache, type PreparedCameraVideo } from './cameraVideoCache';
 
-export type { CameraVideoProgress } from './types';
-
 /** Validate and optionally retime a local source, always releasing its demuxer. */
 async function prepareCameraVideoFile(original: Blob, source: CameraVideoSource, signal: AbortSignal,
   onProgress: (progress: CameraVideoProgress) => void): Promise<PreparedCameraVideo> {
@@ -76,13 +74,13 @@ export async function loadCachedCameraVideo(source: CameraVideoSource, video: HT
     lease = await cache.acquire(source, signal, options.onProgress);
     signal.throwIfAborted();
     let prepared = lease.getPrepared();
-    const rate = source.playbackRate ?? 1;
+    const matchedTime = source.timestamp / (source.playbackRate ?? 1);
     if (!prepared) {
       prepared = await prepareCameraVideoFile(lease.blob, source, signal, options.onProgress);
       lease.setPrepared(prepared);
     }
     const { duration } = prepared;
-    if (source.timestamp / rate >= duration) throw new Error('The matched frame is outside the video.');
+    if (matchedTime >= duration) throw new Error('The matched frame is outside the video.');
     let convert = !prepared.playable && !video.canPlayType(prepared.mimeType);
     if (!convert) {
       try { await attach(prepared.blob); }
@@ -96,7 +94,7 @@ export async function loadCachedCameraVideo(source: CameraVideoSource, video: HT
       await attach(blob);
       prepared = { blob, duration, mimeType: 'video/mp4' };
     }
-    const timestamp = Math.min(source.timestamp / rate, Math.max(0, duration - 0.001));
+    const timestamp = Math.min(matchedTime, Math.max(0, duration - 0.001));
     if (Math.abs(video.currentTime - timestamp) > 0.001) await mediaEvent(video, 'seeked', signal, () => { video.currentTime = timestamp; });
     signal.throwIfAborted();
     lease.setPrepared({ ...prepared, playable: true });

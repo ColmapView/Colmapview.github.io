@@ -54,10 +54,12 @@ encoded keyframe group rather than a URL and terminates after the frame is read.
 Reads are limited to 16 million pixels, 512 packets and 64 MiB of encoded data per
 keyframe group. Errors leave the model usable and report that frame's failure.
 
-Image export writes lossless PNGs of the decoded video frames. These are derived
-from the encoded recordings; video compression and optional publisher color LUTs
-are not reversed. The matched frame remains the image used by the reconstruction
-and export.
+For synchronized multi-camera scenes such as DanceNet3D, COLMAP export is one
+temporal snapshot: one matched image per registered camera, their calibration and
+poses, and the reconstruction's COLMAP points when available. Playing or seeking
+a recording leaves that export selection unchanged.
+Exported images are lossless PNGs of the decoded frames. Source compression
+artifacts remain, and optional publisher color LUTs are not applied.
 
 ### Individual camera playback
 
@@ -98,8 +100,8 @@ retaining completed entries. No videos go to IndexedDB, Cache Storage or the Hub
 Browser HTTP caching remains browser-managed; decoder/conversion working memory
 is additional to the file cache budget.
 
-Gallery thumbnails, camera planes, 3D geometry and image exports keep their
-registered still and reconstruction time. Static masks, keypoints and match lines
+Gallery thumbnails, camera planes and 3D geometry stay at the registered
+reconstruction time. Static masks, keypoints and match lines
 are hidden during video playback. This player shows one muted camera video;
 it does not synchronize cameras or animate the reconstruction.
 

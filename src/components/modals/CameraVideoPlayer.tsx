@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CameraVideoSource } from '../../dataset/video/types';
+import type { CameraVideoProgress, CameraVideoSource } from '../../dataset/video/types';
 import type { CameraVideoCache } from '../../dataset/video/cameraVideoCache';
-import { loadCachedCameraVideo, type CameraVideoProgress } from '../../dataset/video/cachedCameraVideo';
+import { loadCachedCameraVideo } from '../../dataset/video/cachedCameraVideo';
 import { buttonStyles, controlPanelStyles, TOUCH } from '../../theme';
 import type { SingleImageLayout } from './imageDetailLayoutViewModel';
 
