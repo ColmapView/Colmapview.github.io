@@ -87,7 +87,7 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByText(/public, discoverable dataset/)).toBeVisible();
     await dialog.screenshot({ path: test.info().outputPath('publication-form.png') });
     expect(hub.writes).toHaveLength(0);
-    await expect(dialog.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.', { exact: true })).toBeVisible();
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
     await expect(dialog.getByRole('region', { name: 'Published dataset' })).toBeVisible({ timeout: 45000 });
     await expect(dialog.getByRole('button', { name: 'Share on Hub', exact: true })).toBeVisible();

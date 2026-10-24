@@ -12,7 +12,7 @@ export const EXPORT_FORMAT_OPTIONS: { value: ExportFormat; label: string }[] = [
   { value: 'text', label: 'Text (.txt)' },
   { value: 'ply', label: 'Points (.ply)' },
   { value: 'zip', label: 'ZIP (.zip)' },
-  { value: 'zip-images', label: 'COLMAP + original images (.zip)' },
+  { value: 'zip-images', label: 'COLMAP + images (.zip)' },
   { value: 'zip-masks', label: 'COLMAP + images + masks (.zip)' },
 ];
 
@@ -21,8 +21,8 @@ export const EXPORT_FORMAT_DESCRIPTIONS: Record<ExportFormat, string> = {
   text: 'COLMAP text format. Human-readable, useful for debugging.',
   ply: 'Point cloud only. Compatible with MeshLab, CloudCompare.',
   zip: 'Binary files (.bin) in a single archive.',
-  'zip-images': 'COLMAP model and original photos, preserving their bytes and calibration. Requires free disk space.',
-  'zip-masks': 'COLMAP model, original photos and PNG feature masks where available. Requires free disk space.',
+  'zip-images': 'COLMAP with full-resolution photos or matched video frames. Requires free disk space.',
+  'zip-masks': 'COLMAP with photos or matched video frames and available PNG feature masks. Requires free disk space.',
 };
 
 export function getCameraModelSummary(

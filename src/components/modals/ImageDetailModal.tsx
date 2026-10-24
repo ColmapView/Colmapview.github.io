@@ -218,7 +218,7 @@ export function ImageDetailModal() {
   const mediaActions = videoSource && !videoActive && !isMatchViewMode ? <button
     className={`absolute top-2 right-2 z-10 ${buttonStyles.base} ${buttonStyles.sizes.sm} ${buttonStyles.variants.secondary}`}
     aria-label={videoPlayable ? 'Play camera video' : 'Video playback unavailable'} disabled={!videoPlayable}
-    title={videoPlayable ? 'Play this camera’s recording' : 'Matched frames are available; this recording exceeds the 256 MiB playback limit.'} onClick={() => setVideoRequested(true)}>
+    title={videoPlayable ? 'Play from the matched frame. Exports keep the matched image.' : 'Matched image available; this recording exceeds the 256 MiB playback limit.'} onClick={() => setVideoRequested(true)}>
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m7 3 15 9-15 9z" /></svg>Video
   </button> : undefined;
 

@@ -42,7 +42,7 @@ it('packages each model image once with the exact original bytes and canonical n
   expect(getOriginalImage.mock.calls[0][1]).toMatchObject({maxBytes:64*1024*1024});
 });
 it('fails missing mandatory RGB, declared masks and unverified mask roles',async()=>{
-  await expect(prepareCameraDatasetPackage(model(),null,{} as Sim3dEuler,{getOriginalImage:async()=>null,getMask:async()=>null},false,signal())).rejects.toThrow(/Required original/);
+  await expect(prepareCameraDatasetPackage(model(),null,{} as Sim3dEuler,{getOriginalImage:async()=>null,getMask:async()=>null},false,signal())).rejects.toThrow(/Required image/);
   const media={getOriginalImage:async()=>file(),getMask:async()=>null,getBinding:()=>({sourceImagePath:'a.png',width:4,height:3,frameIndex:0,mask:{kind:'file' as const,path:'mask.png',role:'validity' as const,invert:false}})};
   await expect(prepareCameraDatasetPackage(model(),null,{} as Sim3dEuler,media,true,signal())).rejects.toThrow(/Declared mask/);
   await expect(prepareCameraDatasetPackage(model(),null,{} as Sim3dEuler,{...media,getBinding:()=>({...media.getBinding(),mask:{...media.getBinding().mask,role:'unknown' as const}})},true,signal())).rejects.toThrow(/unverified/);

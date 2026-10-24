@@ -5,7 +5,7 @@ const LINES: Record<HubDisclosureKind, string> = {
   private: 'Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.',
   bucket: 'Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description, preview and dataset link.',
 };
-const ORIGINAL_IMAGES = 'Original images keep their metadata, such as location.';
+const ORIGINAL_IMAGES = 'Original photos can retain metadata, such as location.';
 
 /**
  * The line beside the publish button, or null where the Hub is off. A Hub draft exists exactly when

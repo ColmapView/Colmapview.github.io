@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-10-24
+
+### Fixed
+
+- Clarify matched video frames across export controls, publication options, generated dataset READMEs and current guides. Source formats preserve photo bytes and use the manifest's fixed frame for video-backed views.
+- Remove the unresolved timestamp from the return-to-frame tooltip, explain playback limits, and align public help and policy descriptions with the actual upload defaults and image contents.
+
 ## [0.23.0] - 2026-10-24
 
 ### Added

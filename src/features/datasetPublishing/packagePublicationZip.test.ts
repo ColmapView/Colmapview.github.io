@@ -56,7 +56,7 @@ describe('shared publication ZIP', () => {
     if (reason === 'source-change') assets[0].size = 100;
     const encode = vi.fn(async () => {
       if (reason === 'cancel') owner.abort();
-      if (reason === 'failure') throw new Error('Choose Original images instead.');
+      if (reason === 'failure') throw new Error('Choose Source formats instead.');
       return new File(['jpeg'], 'image.jpg', { type: 'image/jpeg' });
     });
     const close = vi.fn(async () => {}), createImageEncoder = vi.fn(() => ({ encode, close }));
@@ -66,8 +66,10 @@ describe('shared publication ZIP', () => {
   });
   it('preserves nested names and exact original bytes, and makes a complete portable object', async () => {
     const input = prepared();
+    input.videoFrameCount = 1;
     const releases = input.assets.map(item => item.release!);
     const result = await packageZipPublication(input, signal(), () => {}, () => {});
+    expect(result.videoFrameCount).toBe(1);
     expect(result.assets.map(item => item.path)).toEqual(['dataset.zip']);
     expect(result.archive?.size).toBe(result.assets[0].size);
     const blob = await result.assets[0].open(signal());

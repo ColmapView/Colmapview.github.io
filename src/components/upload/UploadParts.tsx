@@ -86,8 +86,9 @@ export function UploadImageFormatField({ id, value, onChange }: {
     <div className="publication-access">
       <select id={id} className={`${inputStyles.select} ${inputStyles.selectSizes.sm} w-full min-w-0`}
         value={value} onChange={event => onChange(event.target.value === 'jpeg' ? 'jpeg' : 'original')}
-        aria-describedby={value === 'jpeg' ? `${id}-hint` : undefined}>
-        <option value="original">Original files</option>
+        aria-describedby={value === 'jpeg' ? `${id}-hint` : undefined}
+        title={value === 'original' ? 'Source photos keep their bytes. Video-backed views use matched PNG/JPEG frames.' : undefined}>
+        <option value="original">Source formats</option>
         <option value="jpeg">JPEG ({Math.round(PUBLICATION_JPEG_QUALITY * 100)}% quality)</option>
       </select>
       {value === 'jpeg' && <p id={`${id}-hint`} className="publication-note">Lossy, full resolution. Metadata removed; transparency turns white.</p>}

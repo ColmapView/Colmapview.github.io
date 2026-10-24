@@ -19,10 +19,10 @@ export async function encodePublicationJpeg(blob: Blob, quality: number, signal:
   if (!Number.isFinite(quality) || quality < 0 || quality > 1) throw new Error('JPEG quality must be between 0 and 1.');
   if (blob.size > MAX_BUFFERED_PUBLICATION_FILE_BYTES) throw new Error('JPEG source images are limited to 128 MiB.');
   const declared = await readImageDimensions(blob, { signal });
-  if (!declared) throw new Error('This image format cannot be converted to JPEG. Choose Original images instead.');
-  if (declared.width * declared.height > PIXEL_LIMIT) throw new Error('JPEG conversion supports up to 64 megapixels per image. Choose Original images instead.');
+  if (!declared) throw new Error('This image format cannot be converted to JPEG. Choose Source formats instead.');
+  if (declared.width * declared.height > PIXEL_LIMIT) throw new Error('JPEG conversion supports up to 64 megapixels per image. Choose Source formats instead.');
   if (typeof createImageBitmap === 'undefined' || typeof OffscreenCanvas === 'undefined') {
-    throw new Error('JPEG conversion is unavailable in this browser. Choose Original images instead.');
+    throw new Error('JPEG conversion is unavailable in this browser. Choose Source formats instead.');
   }
   const orientation = await readImageOrientation(blob, signal);
   signal.throwIfAborted();
@@ -35,11 +35,11 @@ export async function encodePublicationJpeg(blob: Blob, quality: number, signal:
     signal.throwIfAborted();
     const rotated = orientation >= 5 && orientation <= 8;
     if (bitmap.width !== (rotated ? declared.height : declared.width) || bitmap.height !== (rotated ? declared.width : declared.height)) {
-      throw new Error('The decoder changed the image dimensions. Choose Original images instead.');
+      throw new Error('The decoder changed the image dimensions. Choose Source formats instead.');
     }
     canvas = new OffscreenCanvas(declared.width, declared.height);
     const context = canvas.getContext('2d');
-    if (!context) throw new Error('JPEG conversion is unavailable in this browser. Choose Original images instead.');
+    if (!context) throw new Error('JPEG conversion is unavailable in this browser. Choose Source formats instead.');
     context.fillStyle = '#ffffff'; context.fillRect(0, 0, declared.width, declared.height);
     restorePixelCoordinates(context, orientation, declared.width, declared.height);
     context.drawImage(bitmap, 0, 0);

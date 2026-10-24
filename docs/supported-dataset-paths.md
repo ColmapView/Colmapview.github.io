@@ -98,7 +98,7 @@ There are 132 exact qualified scene viewer targets: 103 native directory targets
 
 ## Remaining source requirements
 
-- Missing original RGB cannot be recovered from masks, camera poses or a geometry file. The ArmGS mask-only case remains a camera-and-mask scene; a COLMAP + original images export still requires original photographs.
+- Missing original RGB cannot be recovered from masks, camera poses or a geometry file. The ArmGS mask-only case remains a camera-and-mask scene; a COLMAP + images export requires matching images supplied separately.
 - Ambiguous photos, duplicate paths and inconsistent array/list counts must fail or require an explicit mapping/order. Nearby similarly named files are not sufficient evidence.
 - Custom matrix schemas, unsupported distortion, nonrigid transforms and oriented/resized photos with incompatible calibration need separate validated adapters or corrected packaging.
 - A recognized image extension or readable dimensions do not establish browser pixel support. TIFF remains an explicit display limitation.

@@ -60,7 +60,7 @@ export function stripControlCharacters(value: string, multiline = false): string
 
 export function validatePublicationDetails(details: PublicationDetails): PublicationDetails {
   if (details.format !== undefined && !['folder', 'zip'].includes(details.format)) throw new HfError('Choose Folder or ZIP archive format.');
-  if (details.imageFormat !== undefined && !['original', 'jpeg'].includes(details.imageFormat)) throw new HfError('Choose Original images or JPEG copies.');
+  if (details.imageFormat !== undefined && !['original', 'jpeg'].includes(details.imageFormat)) throw new HfError('Choose Source formats or JPEG copies.');
   if (details.imageFormat === 'jpeg' && details.format !== 'zip') throw new HfError('JPEG image conversion requires ZIP archive format.');
   if (!['private', 'public'].includes(details.visibility)) throw new HfError('Choose private or public access for this dataset.');
   const name = validateRepositoryName(details.name);
@@ -127,7 +127,9 @@ export function publicationMetadata(prepared: PreparedPublication, details: Publ
     + `## Contents\n\n${prepared.counts.cameras} cameras, ${prepared.counts.images} registered images, ${prepared.counts.points} points.\n\n`
     + (prepared.archive ? `Download [${prepared.archive.path}](${sourceUrl}) for the complete dataset. Inside the ZIP, ` : '')
     + `COLMAP binary files are in ${PUBLICATION_MODEL_DIRECTORY}/. ${prepared.imageFormat === 'jpeg'
-      ? `Full-resolution JPEG image copies (${Math.round(PUBLICATION_JPEG_QUALITY * 100)}% quality, without image metadata) are in images/.` : 'Original images are in images/.'}\n`
+      ? `Full-resolution JPEG image copies (${Math.round(PUBLICATION_JPEG_QUALITY * 100)}% quality, without image metadata) are in images/.`
+      : `Images are in images/. Source photos keep their original bytes.${prepared.videoFrameCount ? ' Matched video frames use PNG, or JPEG at 95% quality for JPEG filenames.' : ''}`}\n`
+    + (prepared.videoFrameCount ? `Matched video frames: ${prepared.videoFrameCount} registered ${prepared.videoFrameCount === 1 ? 'view' : 'views'}. Playback and seeking leave the saved frame selection unchanged. Source recordings remain at their original host.\n` : '')
     + `${payload.filter(file => file.path.startsWith('masks/')).length} masks and ${prepared.splatPaths.length} original splat files were included.\n\n`
     + `The reviewed scene transform is baked into the COLMAP model. Original splat bytes retain their original coordinates; `
     + `their alignment and the saved camera view are recorded in colmapview.yaml at the dataset root. `

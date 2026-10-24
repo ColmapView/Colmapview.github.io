@@ -92,7 +92,7 @@ export default function CameraVideoPlayer({ source, cache, name, poster, layout,
         </span> : <input type="range" className={`${controlPanelStyles.slider} button-standard`} aria-label="Video time" min={0} max={duration ?? matchedTime + 1} step="0.01"
           title={`${formatTime(time)} / ${duration === null ? '—' : formatTime(duration)}`} aria-valuetext={`${formatTime(time)} / ${duration === null ? '—' : formatTime(duration)}`}
           value={time} disabled={duration === null} onChange={event => { const value = Number(event.target.value); videoRef.current!.currentTime = value; setTime(value); }} />}
-        <button className={iconButton} style={iconStyle} aria-label="Back to matched frame" title={`Back to matched frame (${formatTime(matchedTime)})`} onClick={onClose}>
+        <button className={iconButton} style={iconStyle} aria-label="Back to matched frame" title="Return to the frame matched to this camera pose" onClick={onClose}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 10h11a6 6 0 0 1 0 12M3 10l6-6M3 10l6 6" /></svg>
         </button>
     </div>

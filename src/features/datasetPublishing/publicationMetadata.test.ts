@@ -63,6 +63,19 @@ describe('dataset card', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
+  it.each(['original', 'jpeg'] as const)('describes matched video frames separately from source photos for %s images', async imageFormat => {
+    vi.stubGlobal('Blob', NodeBlob);
+    const input = prepared([]); input.videoFrameCount = 1;
+    if (imageFormat === 'jpeg') input.imageFormat = 'jpeg';
+    const files = publicationMetadata(input, { name: 'scene', description: '', license: '', visibility: 'public' }, 'owner/scene', DATA_COMMIT, []);
+    const readme = await files[0].content.text();
+    expect(readme).toContain('Matched video frames: 1 registered view.');
+    expect(readme).toContain('Playback and seeking leave the saved frame selection unchanged.');
+    expect(readme).not.toContain('Original images are in images/');
+    if (imageFormat === 'original') expect(readme).toContain('JPEG at 95% quality for JPEG filenames');
+    else { expect(readme).toContain('85% quality'); expect(readme).not.toContain('95% quality'); }
+  });
+
   it('documents ZIP contents and uses the same pinned link without publishing a broken loose-file manifest', async () => {
     vi.stubGlobal('Blob', NodeBlob);
     const input = prepared(['splats/scene.sog']);

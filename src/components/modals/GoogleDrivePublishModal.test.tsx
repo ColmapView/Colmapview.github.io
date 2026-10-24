@@ -204,8 +204,8 @@ describe('Google Drive publishing dialog', () => {
   });
   it('discloses the Hub link for the sharing choice and titles results by access', async () => {
     await renderOpenDialog();
-    expect(screen.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toHaveAccessibleDescription('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.');
+    expect(screen.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toHaveAccessibleDescription('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.');
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
     expect(screen.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save private dataset' })).toHaveAccessibleDescription('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.');

@@ -63,7 +63,7 @@ export async function packagePublicationZip(assets: PublishAsset[], signal: Abor
           try { blob = await encoder.encode(original, PUBLICATION_JPEG_QUALITY, signal); }
           catch (error) {
             check();
-            throw new HfError(`JPEG conversion failed for ${asset.path}: ${error instanceof Error ? error.message : 'Choose Original images instead.'}`, undefined, true);
+            throw new HfError(`JPEG conversion failed for ${asset.path}: ${error instanceof Error ? error.message : 'Choose Source formats instead.'}`, undefined, true);
           }
           check();
           if (blob.size + total > sizeLimit) throw archiveTooLarge();

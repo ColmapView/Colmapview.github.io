@@ -254,8 +254,8 @@ describe('bucket publisher', () => {
     cleanup();
     open();
     expect(screen.queryByLabelText('Access', { exact: true })).toBeNull();
-    expect(screen.getByText('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Upload dataset' })).toHaveAccessibleDescription('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.');
+    expect(screen.getByText('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Upload dataset' })).toHaveAccessibleDescription('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.');
   });
 
   it('shows no Hub disclosure where the Hub is off', () => {

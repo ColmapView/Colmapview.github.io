@@ -42,7 +42,7 @@ test('gives a private bucket upload an unguessable Hub link and keeps it after t
     await dialog.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(dialog.getByRole('combobox', { name: 'Format' })).toBeFocused();
     await expect(dialog.getByLabel('Access', { exact: true })).toHaveCount(0);
-    await expect(dialog.getByText('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.', { exact: true })).toBeVisible();
     await expect(dialog.getByLabel('Upload folder', { exact: true })).toHaveValue('colmap-dataset');
     await dialog.getByRole('button', { name: 'Upload dataset', exact: true }).click();
     const result = dialog.getByRole('region', { name: 'Published bucket dataset' });

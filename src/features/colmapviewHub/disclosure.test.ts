@@ -4,7 +4,7 @@ import { hubDisclosure } from './disclosure';
 const PUBLIC = 'Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link.';
 const PRIVATE = 'Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.';
 const BUCKET = 'Also creates a ColmapView Hub link (short if the bucket is public). Anyone with it sees the title, description, preview and dataset link.';
-const ORIGINALS = 'Original images keep their metadata, such as location.';
+const ORIGINALS = 'Original photos can retain metadata, such as location.';
 
 describe('hubDisclosure', () => {
   it.each([['public', PUBLIC], ['private', PRIVATE], ['bucket', BUCKET]] as const)('states what a %s upload creates', (kind, line) => {

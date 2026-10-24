@@ -58,7 +58,7 @@ Folders, archives and discovered HF trees now use original physical paths for na
 
 An explicit full physical CSV path can identify shared RGB outside the automatically selected scene. The mapping columns are `colmap_image,raw_path`. Unrelated scene CSVs are ignored. A native source keeps its existing archive/URL owner and is not converted into a camera-JSON import.
 
-Standard COLMAP sidecars named `masks/<registered-name>.png` are treated as validity masks. Other inferred mask roles remain display-only for feature-mask export: select COLMAP + RGB unless an adapter declares their semantics. Package export still checks original image dimensions, orientation and mask validity. Resized native previews cannot silently produce a package with mismatched calibration. See the [COLMAP model specification](https://colmap.github.io/format.html) and [mask convention](https://colmap.github.io/faq.html).
+Standard COLMAP sidecars named `masks/<registered-name>.png` are treated as validity masks. Other inferred mask roles remain display-only for feature-mask export: select COLMAP + images unless an adapter declares their semantics. Package export still checks original image dimensions, orientation and mask validity. Resized native previews cannot silently produce a package with mismatched calibration. See the [COLMAP model specification](https://colmap.github.io/format.html) and [mask convention](https://colmap.github.io/faq.html).
 
 ## Original data checks
 

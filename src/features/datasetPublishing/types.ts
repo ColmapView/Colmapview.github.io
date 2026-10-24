@@ -45,11 +45,13 @@ export interface PreparedPublication {
   assets: PublishAsset[];
   viewerState: PublishedViewerState;
   counts: { cameras: number; images: number; points: number };
+  /** Matched video images in this snapshot, retained when ZIP packaging replaces loose assets. */
+  videoFrameCount?: number;
   imageNameToPath: Record<string, string>;
   splatPaths: string[];
   viewerBaseUrl: string;
   previewPath?: string;
-  /** ZIP image encoding, applied while packaging. Loose publications retain originals. */
+  /** ZIP image encoding, applied while packaging. Source formats keep photo bytes and encode matched video frames to their registered PNG/JPEG names. */
   imageFormat?: PublicationImageFormat;
   /** ZIP payload inventory; assets contain the ZIP and repository sidecars instead of loose dataset files. */
   archive?: { path: string; size: number; files: Array<{ path: string; size: number }>; summary?: PublicationAssetSummary };

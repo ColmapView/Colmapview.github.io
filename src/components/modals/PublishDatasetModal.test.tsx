@@ -237,8 +237,8 @@ describe('PublishDatasetModal', () => {
   it('shows the disclosure for the chosen access beside the publish button', () => {
     render(<PublishDatasetModal isOpen onClose={vi.fn()} />);
     const row = screen.getByRole('button', { name: 'Publish public dataset' }).parentElement!;
-    expect(within(row).getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Publish public dataset' })).toHaveAccessibleDescription('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original images keep their metadata, such as location.');
+    expect(within(row).getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Publish public dataset' })).toHaveAccessibleDescription('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.');
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
     expect(screen.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save private dataset' })).toHaveAccessibleDescription('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.');

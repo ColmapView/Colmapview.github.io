@@ -20,6 +20,12 @@ const source = { url: 'https://media.test/camera.mp4', bytes: 1000, timestamp: 2
 const layout = { renderedImageWidth: 300, renderedImageHeight: 480, width: 300, height: 480, offsetX: 20, offsetY: 5, scaleX: 0.375, scaleY: 0.375 };
 const props = { source, name: '0028.png', poster: 'blob:matched-still', layout, onClose: vi.fn() };
 
+it('does not present an unresolved frame index as a source timestamp', () => {
+  render(<CameraVideoPlayer {...props} source={{ url: source.url, bytes: source.bytes, width: source.width,
+    height: source.height, frameIndex: 240, signal: source.signal }} />);
+  expect(screen.getByRole('button', { name: 'Back to matched frame' }).title).not.toMatch(/\d+:\d+/);
+});
+
 it('loads once and retains the cached clip across pause, resume, fractional seeks and image resizing', async () => {
   const dispose = vi.fn(async () => {}), view = render(<CameraVideoPlayer {...props} />);
   expect(screen.getByRole('status')).toHaveTextContent('Loading video');

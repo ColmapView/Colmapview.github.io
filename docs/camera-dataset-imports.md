@@ -45,10 +45,10 @@ Companion XYZ stays in the metadata's saved world coordinates: camera-basis conv
 The Export panel has three package options:
 
 - **ZIP**: native COLMAP model only.
-- **COLMAP + original images**: native model and original image bytes under `images/<model name>`.
+- **COLMAP + images**: native model and full-resolution images under `images/<model name>`.
 - **COLMAP + images + masks**: adds grayscale PNG feature masks under `masks/<model name>.png`, where available. A missing declared mask fails this requested export; an opaque alpha mask is optional. The completion message reports mask coverage.
 
-Combined packages stop if required RGB is unavailable, calibration mismatches, paths collide or the package exceeds its byte budget. Original RGB is never replaced by a preview or JPEG conversion. The separate Images download action remains a JPEG export.
+Combined packages stop if required images are unavailable, calibration mismatches, paths collide or the package exceeds its byte budget. Source photos keep their bytes. Video-backed views use the manifest's fixed matched frame: PNG, or JPEG at 95% quality for JPEG filenames. Playing or seeking does not change exported frames. The separate Images download action remains a JPEG export. See [video manifests](dataset-manifests.md#video-loading-playback-and-export).
 
 Package paths must also form an extractable file tree. Registered names such as `a.png` and `a.png/b.png` conflict as RGB files; appending the mask suffix can create a separate mask-only conflict. Such exports stop with a path-conflict error, including case-insensitive conflicts. The loaded scene remains available for model-only export, or RGB export when only mask paths conflict. Missing optional masks do not reserve hypothetical package paths.
 
@@ -56,7 +56,7 @@ Partial mask coverage produces a warning. COLMAP's mask-folder reader requires a
 
 COLMAP model image names remain intact during packaging, including a genuine nested `images/` directory. Conversion from camera JSON removes the source image-root prefix once; subsequent native export/reimport does not remove it again. Native archive reimport resolves original media paths within the selected model's scene before considering legacy suffix aliases.
 
-Limits are 16 MiB of selected metadata, 256 metadata candidates, 100,000 frames, 64 MiB per original media read and 16 million pixels per derived/normalized mask. Photo-package export writes original photos and normalized masks sequentially to temporary browser-managed disk storage, with backpressure and ZIP64 support. It no longer accumulates all photos or a complete ZIP in JavaScript memory and has no 256 MiB aggregate input limit when writable browser storage is available. Model serialization, one original photo, mask decoding, existing media caches and ZIP directory records still use memory; this is not a bound on total browser/GPU memory.
+Limits are 16 MiB of selected metadata, 256 metadata candidates, 100,000 frames, 64 MiB per original media read and 16 million pixels per derived/normalized mask. Photo-package export writes source photos, matched video frames and normalized masks sequentially to temporary browser-managed disk storage, with backpressure and ZIP64 support. It no longer accumulates all photos or a complete ZIP in JavaScript memory and has no 256 MiB aggregate input limit when writable browser storage is available. Model serialization, one original photo, mask decoding, existing media caches and ZIP directory records still use memory; this is not a bound on total browser/GPU memory.
 
 The completed package is downloaded only after all mandatory media validates and the ZIP finishes. Cancellation, missing media and disk errors discard the temporary output. Browser storage quota and available disk space limit package size. On browsers without writable storage, small exports retain a bounded memory fallback (256 MiB of ZIP output); larger exports explain that writable storage is required. Completed disk-backed exports remain for at least 24 hours so cleanup cannot immediately invalidate the browser download; later archive operations reclaim expired files when browser locks permit safe cleanup. Clearing site data also removes them. Keep the tab open until the download starts.
 
@@ -101,7 +101,7 @@ Validation uses authored original-schema browser fixtures, independent PyCOLMAP 
 
 ## Hugging Face layout coverage
 
-The October 15, 2026 implementation adds the three missing standard camera-schema families from the October 14 audit. This does **not** establish support for every Hugging Face dataset layout. Hugging Face is a host; each dataset still needs a supported camera schema, matching original photos and accessible assets.
+The October 15, 2026 implementation adds the three missing standard camera-schema families from the October 14 audit. This does **not** establish support for every Hugging Face dataset layout. Hugging Face is a host; each dataset still needs a supported camera schema and accessible model assets. Image display and image-package exports require matching photos or explicit video-frame bindings.
 
 | Catalog layout | Application support |
 | --- | --- |

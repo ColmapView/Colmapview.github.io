@@ -24,6 +24,9 @@ refer to different frames of the same recording:
 }
 ```
 
+Open the manifest URL with **Load URL**, or use the Hub's **Open in viewer** link.
+The manifest supplies the exact recording and frame association for each view.
+
 `frameIndex: 0` means the first displayed frame in the source's primary video
 track; 240 means the 241st. The order is presentation order, including variable
 frame timing and B-frame reordering. Decode preroll is excluded; a frame spanning
@@ -48,8 +51,8 @@ index cache. Duplicate presentation timestamps or invalid sample durations are
 reported as ambiguous rather than guessed. Existing frame-decoding budgets below
 still apply. Scene replacement cancels work and releases its indices.
 
-The Hub's offline authoring tool accepts a model plus deduplicated `videos` and
-`images` tables and emits ordinary, explicit v5 bindings:
+From the Hub repository root, its offline authoring tool accepts a model plus
+deduplicated `videos` and `images` tables and emits explicit v5 bindings:
 
 ```sh
 node scripts/audit/compile-video-frame-manifest.mjs --input mapping.json --output scene.manifest.json --viewer-root ../colmap-webview
@@ -84,7 +87,14 @@ geometry. `skipImages: true` conflicts with video bindings and is rejected.
 
 `timestamp` is presentation time in seconds, not a source frame ID. Use the
 publisher's ordered frame-ID list when it has dropped frames: DanceNet3D frame
-`0000242` in `s6/BiancaGolden_Ocho` is video sample 240. The URL can be absolute or
+`0000242` in `s6/BiancaGolden_Ocho` is video sample 240.
+
+## Video loading, playback and export
+
+These rules apply to both v4 timestamp bindings and v5 frame-index or timestamp
+bindings. Version 5 requires viewer 0.23.0 or newer.
+
+The URL can be absolute or
 relative to `baseUrl`; credentials and fragments are rejected. The declared byte
 size must match validated HTTP range responses. Hosts need CORS and exposed
 `Content-Range` headers. Video sources never imply an `images/` or `masks/` folder.
@@ -108,13 +118,15 @@ FFmpeg.wasm Worker handles codecs such as H.265 when native decoding is unavaila
 its core is downloaded only when needed (about 10 MiB compressed, 31 MiB decoded).
 It receives a bounded
 encoded keyframe group rather than a URL and terminates after the frame is read.
-Reads are limited to 16 million pixels, 512 packets and 64 MiB of encoded data per
-keyframe group. Errors leave the model usable and report that frame's failure.
+All decoded frames are limited to 16 million pixels. Software frame extraction
+limits each keyframe group to 512 packets and 64 MiB of encoded data. Errors leave
+the model usable and report that frame's failure.
 
-For synchronized multi-camera scenes such as DanceNet3D, COLMAP export is one
-temporal snapshot: one matched image per registered camera, their calibration and
-poses, and the reconstruction's COLMAP points when available. Playing or seeking
-a recording leaves that export selection unchanged.
+Image export includes the fixed matched frame for each registered view, its
+calibration and pose, and the reconstruction's COLMAP points when available.
+Moving-camera poses can select different frames from the same recording.
+Synchronized multi-camera scenes such as DanceNet3D retain one temporal snapshot.
+Playing or seeking leaves geometry, metrics and saved image selections unchanged.
 Decoded frames stay lossless PNGs in the frame/metric cache. Dataset packages and
 uploads preserve registered image names: derived PNG-named files stay PNG;
 JPEG-named files are encoded once at JPEG quality 0.95. Other derived filename
@@ -126,7 +138,7 @@ bytes; source compression artifacts remain, and optional color LUTs are not appl
 
 Open a camera's image details and choose **Video**. The selected recording is
 downloaded once, with progress and exact byte-size validation, before playback
-starts at its matched timestamp. Its image placement and footer height stay
+starts at its matched source frame. Its image placement and footer height stay
 unchanged. A translucent play/pause, seek and return-to-matched-frame bar floats
 over the image's bottom edge, using the viewer's existing icon and slider styles.
 Time appears on hover and through accessible slider text. The matched still
@@ -143,8 +155,8 @@ reads can interrupt compatibility conversion and remain independent of ordinary
 cached playback. Retry restarts interrupted preparation.
 
 A source larger than 256 MiB can still provide matched stills through bounded
-ranges. Its Video control explains that whole-recording playback is unavailable;
-opening that control does not download the recording or raise the cache limits.
+ranges. Its disabled Video control explains the playback limit. No whole-recording
+download starts, and the cache limits stay unchanged.
 
 Video mode stays active when Previous/Next selects another camera with a recording.
 Its cache holds the current recording and, when they fit, the next and previous

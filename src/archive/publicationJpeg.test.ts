@@ -53,7 +53,7 @@ describe('full-resolution publication JPEGs', () => {
     expect(draw).toHaveBeenCalledWith(bitmap, 0, 0); expect(bitmap.close).toHaveBeenCalledOnce();
   });
   it('rejects unknown or oversized rasters before allocating decoded pixels', async () => {
-    await expect(encodePublicationJpeg(new Blob(['not an image']), 0.85, signal())).rejects.toThrow('Original images');
+    await expect(encodePublicationJpeg(new Blob(['not an image']), 0.85, signal())).rejects.toThrow('Source formats');
     await expect(encodePublicationJpeg(new Blob([pngHeader(30_000, 20_000)]), 0.85, signal())).rejects.toThrow('64 megapixels');
     expect(createImageBitmap).not.toHaveBeenCalled(); expect(canvases).toHaveLength(0);
   });
@@ -80,6 +80,6 @@ describe('full-resolution publication JPEGs', () => {
     encode.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
     await expect(encodePublicationJpeg(original(), 0.85, signal())).rejects.toThrow('did not produce a JPEG');
     vi.stubGlobal('OffscreenCanvas', undefined);
-    await expect(encodePublicationJpeg(original(), 0.85, signal())).rejects.toThrow('Original images');
+    await expect(encodePublicationJpeg(original(), 0.85, signal())).rejects.toThrow('Source formats');
   });
 });

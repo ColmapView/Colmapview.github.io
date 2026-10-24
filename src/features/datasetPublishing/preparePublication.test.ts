@@ -46,6 +46,7 @@ describe('publication snapshot preparation', () => {
     const signal = new AbortController().signal;
     try {
       const prepared = await preparePublication(source, signal, deps());
+      expect(prepared.videoFrameCount).toBe(1);
       expect(decode).not.toHaveBeenCalled();
       const asset = prepared.assets.find(item => item.kind === 'image')!;
       expect(asset.path).toBe('images/nested/photo.png'); expect(asset.size).toBeNull();

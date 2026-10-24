@@ -1,6 +1,6 @@
 # Publish datasets to Google Drive
 
-Load a COLMAP reconstruction with its original images, then choose **Share → Google Drive** in the viewer toolbar.
+Load a COLMAP reconstruction with its source photos or manifest-matched video frames, then choose **Share → Google Drive** in the viewer toolbar.
 
 1. **Sign in** with Google and allow ColmapView to create and manage the files it creates in Drive.
 2. Choose a ZIP file name. Files are saved in **My Drive**.
@@ -17,9 +17,9 @@ Share links use `https://colmapview.opsiclear.com/s/<id>` and open the saved vie
 
 ## Dataset contents
 
-The ZIP contains the current COLMAP reconstruction in binary format, original images, available masks, the active splat, and embedded `colmapview.yaml` settings. Pending reconstruction transforms are applied to exported COLMAP data, with the splat transform and current viewer settings saved for reopening. Apply pending image deletions before publishing.
+The ZIP contains the current COLMAP reconstruction in binary format, source photos or matched video frames, available masks, the active splat, and embedded `colmapview.yaml` settings. Pending reconstruction transforms are applied to exported COLMAP data, with the splat transform and current viewer settings saved for reopening. Apply pending image deletions before publishing.
 
-**Images → Original files** preserves image bytes and metadata by default. Choose **JPEG (85% quality)** to encode lossy copies at full resolution before uploading. This removes source image metadata and makes transparent pixels white. COLMAP image names and mask references are updated together; masks and splats retain their original bytes. One worker converts one image at a time, preserving the model's pixel coordinates even for EXIF-oriented sources. JPEG, PNG, WebP, GIF, BMP, and TIFF sources are supported when the browser can decode them, up to 64 megapixels and 128 MiB per image. Unsupported files stop preparation so you can switch back to originals.
+**Images → Source formats** preserves source photo bytes and metadata by default. Video-backed views save the manifest’s fixed matched frame as PNG, or JPEG at 95% quality for JPEG filenames. Playing or seeking keeps this image selection unchanged; source recordings stay at their original host. Choose **JPEG (85% quality)** to encode lossy copies at full resolution before uploading. This removes source image metadata and makes transparent pixels white. COLMAP image names and mask references are updated together; masks and splats retain their original bytes. One worker converts one image at a time, preserving the model's pixel coordinates even for EXIF-oriented sources. JPEG, PNG, WebP, GIF, BMP, and TIFF sources are supported when the browser can decode them, up to 64 megapixels and 128 MiB per image. Unsupported files stop preparation so you can switch back to **Source formats**.
 
 Publication copies the active splat, rather than every catalogued splat. Originals from local files, archives, and remote URLs are supported. Private Hugging Face source assets require the existing repository read connection; dataset files are pinned to a commit before copying, while files in Hugging Face model or Space repositories are copied unpinned, like other hosts' files. The source repository and its visibility are unchanged.
 

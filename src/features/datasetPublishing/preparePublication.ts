@@ -128,6 +128,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
         Math.min(deps.maxAssetBytes ?? Infinity, kind === 'splat' ? Infinity : MAX_BUFFERED_PUBLICATION_FILE_BYTES)) };
   };
   const isRemote = captured.sourceType === 'url' || captured.sourceType === 'manifest';
+  let videoFrameCount = 0;
   const media = async (name: string, mask: boolean): Promise<PublishAsset | null> => {
     // Masks go where buildMaskUrlCandidates looks: masks/<name without a leading images/>.png.
     const outputName = publicationPath(outputNames?.get(name) ?? name);
@@ -156,6 +157,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
       return null;
     }
     if (!mask && captured.loadedFiles?.videoFrames?.has(name)) {
+      videoFrameCount++;
       return { path, kind: 'image', size: null, open: async targetSignal => {
         targetSignal.throwIfAborted(); deps.assertCurrent();
         const value = await manager.getOriginalImage(name, { signal: targetSignal, priority: 'selected', maxBytes: MAX_BUFFERED_PUBLICATION_FILE_BYTES });
@@ -265,6 +267,7 @@ export async function preparePublication(input: PublicationInput, signal: AbortS
   if ([...folders.values()].some(entries => entries.size >= 10_000)) throw new HfError('A dataset folder has too many files for publication.', undefined, true);
   return { operationId: crypto.randomUUID(), sourceKey: input.sourceKey, modelRevision: input.modelRevision,
     assets, viewerState, imageNameToPath, splatPaths, viewerBaseUrl: input.viewerBaseUrl,
+    ...(videoFrameCount > 0 && { videoFrameCount }),
     ...(input.imageFormat === 'jpeg' ? { imageFormat: input.imageFormat } : {}),
     ...(input.preview ? { previewPath: PUBLICATION_PREVIEW_PATH } : {}),
     counts: { cameras: input.reconstruction.cameras.size, images: input.reconstruction.images.size,

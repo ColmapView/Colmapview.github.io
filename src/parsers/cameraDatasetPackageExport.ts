@@ -92,12 +92,12 @@ export async function writeCameraDatasetPackage(reconstruction: Reconstruction, 
     let failure: DatasetAccessError | undefined;
     const options: DatasetAccessOptions = { signal, priority: 'selected', maxBytes: ORIGINAL_MEDIA_READ_LIMIT, onError: error => { failure = error; } };
     const rgb = await media.getOriginalImage(image.name, options);
-    if (!rgb) throw new Error(`Required original photo is unavailable: ${image.name}${failure ? ` (${failure.message})` : ''}`);
-    if (rgb.size > options.maxBytes!) throw new Error(`Original photo exceeds its read budget: ${image.name}`);
+    if (!rgb) throw new Error(`Required image is unavailable: ${image.name}${failure ? ` (${failure.message})` : ''}`);
+    if (rgb.size > options.maxBytes!) throw new Error(`Image exceeds its read budget: ${image.name}`);
     const camera = reconstruction.cameras.get(image.cameraId);
     if (!camera) throw new Error(`Camera calibration is unavailable: ${image.name}`);
     const size = await readImageDimensions(rgb, { signal });
-    if (!size || size.width !== camera.width || size.height !== camera.height || await readImageOrientation(rgb, signal) !== 1) throw new Error(`Original photo does not match camera calibration: ${image.name}`);
+    if (!size || size.width !== camera.width || size.height !== camera.height || await readImageOrientation(rgb, signal) !== 1) throw new Error(`Image does not match camera calibration: ${image.name}`);
     const decoded = await awaitWithAbort(createImageBitmap(rgb, { imageOrientation: 'none', resizeWidth: 1, resizeHeight: 1 }), signal, bitmap => bitmap.close());
     decoded.close(); signal.throwIfAborted();
     await add(`images/${name}`, await prepareVideoFrameExport(rgb, name, signal));
@@ -120,7 +120,7 @@ export async function writeCameraDatasetPackage(reconstruction: Reconstruction, 
         await add(`masks/${name}.png`, png); maskCount++;
       }
     }
-    onProgress?.(10 + Math.round(80 * (index + 1) / Math.max(1, images.length)), `Writing original photos (${index + 1}/${images.length})...`);
+    onProgress?.(10 + Math.round(80 * (index + 1) / Math.max(1, images.length)), `Writing images (${index + 1}/${images.length})...`);
   }
   return { maskCount };
 }
