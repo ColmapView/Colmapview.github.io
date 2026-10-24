@@ -32,14 +32,15 @@ for (const mode of ['native', 'converted', 'without WebCodecs']) {
     await page.getByRole('button', { name: 'Play camera video' }).click();
     const frame = page.getByLabel('Video frame a.png', { exact: true });
     await expect.poll(async () => frame.evaluate(element => (element as HTMLVideoElement).readyState), { timeout: 45000 }).toBeGreaterThanOrEqual(2);
-    await expect(page.getByRole('slider', { name: 'Video time' })).toBeEnabled();
+    const slider = page.getByRole('slider', { name: 'Video time' });
+    await expect(slider).toBeEnabled();
     await page.getByRole('button', { name: 'Pause video' }).click();
+    await slider.fill('0');
     await expect.poll(async () => (await frame.evaluate(videoPixel))[0]).toBeGreaterThan(200);
     expect(await frame.boundingBox()).toEqual(bounds);
     expect(await page.getByRole('button', { name: 'Next', exact: true }).boundingBox()).toEqual(navigation);
     const controls = await page.getByLabel('Video controls', { exact: true }).boundingBox();
     expect(controls!.y).toBeGreaterThan(bounds!.y); expect(controls!.y + controls!.height).toBeLessThanOrEqual(bounds!.y + bounds!.height);
-    const slider = page.getByRole('slider', { name: 'Video time' });
     await slider.fill('1');
     await expect.poll(async () => (await frame.evaluate(videoPixel))[1]).toBeGreaterThan(90);
     await slider.fill('0.8');
