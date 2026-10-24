@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-24
+
 ### Added
 
 - Play individual camera videos in the same image bounds with a floating control bar. Keep video mode through Previous/Next and prefetch adjacent recordings in a bounded three-recording cache. Reuse cached files and prepared MP4 copies for playback and seeking.
