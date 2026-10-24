@@ -1,10 +1,30 @@
 import { BlobSource, Input, MP4, WEBM } from 'mediabunny';
 import { anySignal } from '../../utils/abortSignals';
-import { downloadZip, releaseArchiveDownload } from '../../utils/zipDownload';
 import { readVideoTrack } from './videoInput';
-import { MAX_CACHED_VIDEO_BYTES, type CameraVideoSource } from './types';
+import { MAX_CACHED_VIDEO_BYTES, type CameraVideoProgress, type CameraVideoSource } from './types';
+import { createCameraVideoCache, type CameraVideoCache, type PreparedCameraVideo } from './cameraVideoCache';
 
-export interface CameraVideoProgress { phase: 'download' | 'prepare'; percent: number }
+export type { CameraVideoProgress } from './types';
+
+/** Validate and optionally retime a local source, always releasing its demuxer. */
+async function prepareCameraVideoFile(original: Blob, source: CameraVideoSource, signal: AbortSignal,
+  onProgress: (progress: CameraVideoProgress) => void): Promise<PreparedCameraVideo> {
+  const input = new Input({ source: new BlobSource(original), formats: [MP4, WEBM] });
+  const abortInput = () => input.dispose();
+  signal.addEventListener('abort', abortInput, { once: true });
+  try {
+    const { track, duration } = await readVideoTrack(input, source, signal);
+    const codec = (await track.getDecoderConfig())?.codec, container = (await input.getFormat()).mimeType;
+    const rate = source.playbackRate ?? 1;
+    let blob = original;
+    if (rate !== 1) {
+      onProgress({ phase: 'prepare', percent: 0 });
+      const { retimeCameraVideo } = await import('./retimeCameraVideo');
+      blob = await retimeCameraVideo(track, container, rate, signal);
+    }
+    return { blob, duration: duration / rate, mimeType: `${container}${codec ? `; codecs="${codec}"` : ''}` };
+  } finally { signal.removeEventListener('abort', abortInput); input.dispose(); }
+}
 
 /** Attach listeners before loading/seeking, and settle every aborted or failed attempt. */
 function mediaEvent(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', signal: AbortSignal, run: () => void) {
@@ -24,31 +44,28 @@ function mediaEvent(video: HTMLVideoElement, event: 'loadeddata' | 'seeked', sig
   });
 }
 
-/** One selected recording, retained across pause/seek and released with this image detail. */
+/** Attach a cached recording; the navigation window owns shared files, this player owns its Blob URL. */
 export async function loadCachedCameraVideo(source: CameraVideoSource, video: HTMLVideoElement, options: {
   signal: AbortSignal;
   onProgress(progress: CameraVideoProgress): void;
+  cache?: CameraVideoCache;
 }) {
   const signal = anySignal([source.signal, options.signal]);
   // React's same-turn development cleanup must not start a throwaway download.
   await Promise.resolve();
   signal.throwIfAborted();
   if (source.bytes > MAX_CACHED_VIDEO_BYTES) throw new Error('This video exceeds the 256 MiB playback cache limit.');
-  let original: Blob | undefined, url: string | undefined;
-  let cleanup = Promise.resolve();
+  const cache = options.cache ?? createCameraVideoCache();
+  let lease: Awaited<ReturnType<CameraVideoCache['acquire']>> | undefined, url: string | undefined;
   const detach = () => {
     if (!url) return;
     if (video.getAttribute('src') === url) { video.pause(); video.removeAttribute('src'); video.load(); }
     URL.revokeObjectURL(url); url = undefined;
   };
-  const releaseOriginal = () => {
-    if (original) {
-      const blob = original; original = undefined;
-      cleanup = cleanup.catch(() => {}).then(() => releaseArchiveDownload(blob));
-    }
-    return cleanup;
+  const dispose = async () => {
+    detach(); await lease?.dispose();
+    if (!options.cache) await cache.clear();
   };
-  const dispose = () => { detach(); return releaseOriginal(); };
   const cancel = () => { void dispose().catch(() => {}); };
   signal.addEventListener('abort', cancel, { once: true });
   const attach = async (blob: Blob) => {
@@ -56,34 +73,33 @@ export async function loadCachedCameraVideo(source: CameraVideoSource, video: HT
     await mediaEvent(video, 'loadeddata', signal, () => { video.src = url!; video.load(); });
   };
   try {
-    original = await downloadZip(source.url, progress => options.onProgress({ phase: 'download',
-      percent: Math.min(100, Math.round((progress.bytesLoaded ?? 0) / source.bytes * 100)) }),
-    { signal, expectedSize: source.bytes, sizeLimit: MAX_CACHED_VIDEO_BYTES });
+    lease = await cache.acquire(source, signal, options.onProgress);
     signal.throwIfAborted();
-    const input = new Input({ source: new BlobSource(original), formats: [MP4, WEBM] });
-    const abortInput = () => input.dispose();
-    signal.addEventListener('abort', abortInput, { once: true });
-    let duration: number, mimeType: string;
-    try {
-      ({ duration } = await readVideoTrack(input, source, signal));
-      const track = (await input.getPrimaryVideoTrack())!, codec = (await track.getDecoderConfig())?.codec;
-      mimeType = `${(await input.getFormat()).mimeType}${codec ? `; codecs="${codec}"` : ''}`;
-    } finally { signal.removeEventListener('abort', abortInput); input.dispose(); }
-    let convert = !video.canPlayType(mimeType);
+    let prepared = lease.getPrepared();
+    const rate = source.playbackRate ?? 1;
+    if (!prepared) {
+      prepared = await prepareCameraVideoFile(lease.blob, source, signal, options.onProgress);
+      lease.setPrepared(prepared);
+    }
+    const { duration } = prepared;
+    if (source.timestamp / rate >= duration) throw new Error('The matched frame is outside the video.');
+    let convert = !prepared.playable && !video.canPlayType(prepared.mimeType);
     if (!convert) {
-      try { await attach(original); }
+      try { await attach(prepared.blob); }
       catch { signal.throwIfAborted(); convert = true; }
     }
     if (convert) {
       detach(); options.onProgress({ phase: 'prepare', percent: 0 });
       const { prepareCompatibleCameraVideo } = await import('./prepareCompatibleCameraVideo');
-      await attach(await prepareCompatibleCameraVideo(original, source, duration, signal,
-        percent => options.onProgress({ phase: 'prepare', percent })));
-      await releaseOriginal();
+      const blob = await prepareCompatibleCameraVideo(prepared.blob, source, duration, signal,
+        percent => options.onProgress({ phase: 'prepare', percent }));
+      await attach(blob);
+      prepared = { blob, duration, mimeType: 'video/mp4' };
     }
-    const timestamp = Math.min(source.timestamp, Math.max(0, duration - 0.001));
+    const timestamp = Math.min(source.timestamp / rate, Math.max(0, duration - 0.001));
     if (Math.abs(video.currentTime - timestamp) > 0.001) await mediaEvent(video, 'seeked', signal, () => { video.currentTime = timestamp; });
     signal.throwIfAborted();
+    lease.setPrepared({ ...prepared, playable: true });
     return { duration, dispose: async () => { signal.removeEventListener('abort', cancel); await dispose(); } };
   } catch (error) {
     signal.removeEventListener('abort', cancel); await dispose().catch(() => {}); throw error;

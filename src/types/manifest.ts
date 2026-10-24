@@ -91,7 +91,7 @@ export interface ColmapManifest {
   /** Version 3: required, integrity-checked geometry extracted using bounded archive reads. */
   geometryFiles?: ManifestGeometryArchive[];
   /** Version 4: registered image name -> exact presentation timestamp in a camera video. */
-  videoImages?: Record<string, { url: string; bytes: number; timestamp: number }>;
+  videoImages?: Record<string, { url: string; bytes: number; timestamp: number; playbackRate?: number }>;
 }
 
 function safeArchivePath(value: string): boolean {
@@ -141,6 +141,7 @@ export const ColmapManifestSchema = z.object({
     url: z.string().min(1).max(4096).refine(safeVideoUrl),
     bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     timestamp: z.number().finite().min(0).max(604800),
+    playbackRate: z.number().finite().min(0.0625).max(120).optional(),
   })).refine(value => Object.keys(value).length > 0 && Object.keys(value).length <= 100000).optional(),
   mediaArchives: z.array(z.object({
     url: z.string().url().refine(value => archiveUrlMatches(value, ['zip', 'tar'])),

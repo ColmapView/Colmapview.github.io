@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Play an individual camera video in the same image bounds, with a floating control bar. Cache only the opened clip before playing; pause, resume and seek reuse it. Convert unsupported codecs to a cached MP4 once instead of extracting playback frames repeatedly.
-- Release video caches when playback closes or its camera/scene changes. Pause hidden tabs, retain the prepared clip while details stay open, and keep static overlays out of playback.
+- Play individual camera videos in the same image bounds with a floating control bar. Keep video mode through Previous/Next and prefetch adjacent recordings in a bounded three-recording cache. Reuse cached files and prepared MP4 copies for playback and seeking.
+- Clear the playback window when video mode or its detail closes, or the scene changes. Pause hidden tabs and neighbor downloads, and keep static overlays out of playback.
 
 ### Fixed
 
+- Restore declared capture speed when recordings use a slower encoded clock, including DanceNet3D's 30 fps capture packaged at 1 fps. Retiming preserves encoded pictures, matched stills and geometry.
 - Update Mediabunny to 1.62.1 so disposing an input during its first read settles cancellation and suppresses obsolete background failures.
 - Keep original and metric reads responsive during cached playback, including reads coalesced with gallery work. Exports retain the registered still instead of the currently playing frame.
 - Preserve fractional seek and pause positions between video frames, and check encoded group budgets from metadata before reading remaining packet payloads.

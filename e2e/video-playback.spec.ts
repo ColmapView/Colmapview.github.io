@@ -56,7 +56,11 @@ for (const mode of ['native', 'converted', 'without WebCodecs']) {
     await page.getByRole('button', { name: 'Play camera video' }).click();
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await expect(page.getByRole('group', { name: 'Camera video a.png', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Play camera video' })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Camera video b.png', exact: true })).toBeVisible();
+    await expect(page.getByRole('slider', { name: 'Video time' })).toBeEnabled({ timeout: 45000 });
+    await expect.poll(async () => (await page.getByLabel('Video frame b.png', { exact: true }).evaluate(videoPixel))[1]).toBeGreaterThan(90);
+    await expect(page.getByRole('button', { name: 'Play camera video' })).toHaveCount(0);
+    expect(downloads).toHaveLength(2);
     expect(errors).toEqual([]);
   });
 }
@@ -70,6 +74,9 @@ test('phone controls float within the unchanged image and keep touch targets rea
     while (await notifications.count()) { const count = await notifications.count(); await notifications.first().tap(); await expect.poll(() => notifications.count()).toBeLessThan(count); }
     const image = page.getByRole('img', { name: 'a.png', exact: true });
     await image.tap(); await image.tap();
+    // The newly mounted camera header loads its monospace font; measure after reflow.
+    await page.evaluate(async () => { await document.fonts.ready; });
+    await image.last().scrollIntoViewIfNeeded();
     const bounds = await image.last().boundingBox();
     await page.getByRole('button', { name: 'Play camera video' }).tap();
     const slider = page.getByRole('slider', { name: 'Video time' });

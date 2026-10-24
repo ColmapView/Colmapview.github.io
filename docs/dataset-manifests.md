@@ -19,7 +19,7 @@ geometry. `skipImages: true` conflicts with video bindings and is rejected.
   "baseUrl": "https://data.example/pinned/scene/",
   "files": { "cameras": "colmap/cameras.bin", "images": "colmap/images.bin" },
   "videoImages": {
-    "0028.png": { "url": "camera_0028.mp4", "bytes": 52031614, "timestamp": 240 }
+    "0028.png": { "url": "camera_0028.mp4", "bytes": 52031614, "timestamp": 240, "playbackRate": 30 }
   },
   "splats": []
 }
@@ -31,6 +31,13 @@ publisher's ordered frame-ID list when it has dropped frames: DanceNet3D frame
 relative to `baseUrl`; credentials and fragments are rejected. The declared byte
 size must match validated HTTP range responses. Hosts need CORS and exposed
 `Content-Range` headers. Video sources never imply an `images/` or `masks/` folder.
+
+Optional `playbackRate` scales only the playback clock (0.0625–120, default 1).
+Declare it from publisher evidence, never by guessing from the filename or frame
+count. DanceNet3D declares 30 fps capture but encodes each sample at 1 fps, so its
+binding uses 30: source timestamp 240 becomes playback time 8 seconds. The player
+remuxes the cached encoded pictures with scaled timestamps, without decoding or
+re-encoding pixels. Matching stills, geometry and exports keep source time 240.
 
 Frames are requested asynchronously through the existing gallery, camera-plane,
 detail and export image access. Concurrent requests for one registered image
@@ -72,12 +79,24 @@ decoder and conversion working memory are additional. Required original/metric
 reads can interrupt compatibility conversion and remain independent of ordinary
 cached playback. Retry restarts interrupted preparation.
 
-Only the opened recording is cached. Large recordings use temporary browser
-storage when available, otherwise a bounded Blob in memory. Closing playback,
-changing camera or disposing the scene revokes its Blob URL and removes its
-temporary download. A hidden tab pauses without automatically resuming; its
-prepared clip remains available while the detail stays open. No videos go to
-IndexedDB, Cache Storage or the Hub. Browser HTTP caching remains browser-managed.
+Video mode stays active when Previous/Next selects another camera with a recording.
+Its cache holds the current recording and, when they fit, the next and previous
+recordings. Full downloads run one at a time; selecting a downloading neighbor
+reuses its request, and a different selection interrupts background work. Neighbor
+prefetch downloads bytes without decoding or transcoding. Successfully prepared
+playback copies are retained too, so returning to a nearby camera avoids repeated
+conversion. Identical recording URLs, sizes, dimensions and rates share one entry
+even when their matched timestamps differ.
+
+The window reserves room for source and prepared copies within 512 MiB total;
+each file still has a 256 MiB limit. Large recordings use temporary browser storage
+when available, otherwise bounded Blobs in memory. Entries outside the window are
+evicted after their player releases them. Returning to the matched still, closing
+the detail or disposing the scene cancels work and clears the window. A hidden tab
+pauses playback without automatically resuming and pauses neighbor downloads while
+retaining completed entries. No videos go to IndexedDB, Cache Storage or the Hub.
+Browser HTTP caching remains browser-managed; decoder/conversion working memory
+is additional to the file cache budget.
 
 Gallery thumbnails, camera planes, 3D geometry and image exports keep their
 registered still and reconstruction time. Static masks, keypoints and match lines

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CameraVideoSource } from '../../dataset/video/types';
+import type { CameraVideoCache } from '../../dataset/video/cameraVideoCache';
 import { loadCachedCameraVideo, type CameraVideoProgress } from '../../dataset/video/cachedCameraVideo';
 import { buttonStyles, controlPanelStyles, TOUCH } from '../../theme';
 import type { SingleImageLayout } from './imageDetailLayoutViewModel';
@@ -13,17 +14,19 @@ function formatTime(seconds: number) {
 
 interface CameraVideoPlayerProps {
   source: CameraVideoSource;
+  cache?: CameraVideoCache;
   name: string;
   poster: string | null;
   layout: SingleImageLayout;
   onClose(): void;
 }
 
-/** Same image placement, one cached video, and controls which never affect layout. */
-export default function CameraVideoPlayer({ source, name, poster, layout, onClose }: CameraVideoPlayerProps) {
+/** One displayed camera, with controls that never affect image placement. */
+export default function CameraVideoPlayer({ source, cache, name, poster, layout, onClose }: CameraVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controllerRef = useRef<AbortController | null>(null);
-  const [time, setTime] = useState(source.timestamp);
+  const matchedTime = source.timestamp / (source.playbackRate ?? 1);
+  const [time, setTime] = useState(matchedTime);
   const [duration, setDuration] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState<CameraVideoProgress | null>({ phase: 'download', percent: 0 });
@@ -40,7 +43,7 @@ export default function CameraVideoPlayer({ source, name, poster, layout, onClos
     const disposeSource = () => { controller.abort(); stop(); void cached?.dispose().catch(() => {}); };
     const hide = () => { if (document.hidden) stop(); };
     document.addEventListener('visibilitychange', hide); source.signal.addEventListener('abort', disposeSource, { once: true });
-    void loadCachedCameraVideo(source, video, { signal: controller.signal,
+    void loadCachedCameraVideo(source, video, { signal: controller.signal, cache,
       onProgress(value) { if (!controller.signal.aborted) setProgress(value); },
     }).then(async resource => {
       cached = resource;
@@ -57,7 +60,7 @@ export default function CameraVideoPlayer({ source, name, poster, layout, onClos
       void cached?.dispose().catch(() => {});
       document.removeEventListener('visibilitychange', hide); source.signal.removeEventListener('abort', disposeSource);
     };
-  }, [source, revision]);
+  }, [source, cache, revision]);
 
   const toggle = () => {
     const video = videoRef.current!;
@@ -86,10 +89,10 @@ export default function CameraVideoPlayer({ source, name, poster, layout, onClos
         </button>
         {progress || error ? <span className="flex-1 min-w-0 text-xs truncate" role={error ? 'alert' : 'status'} title={error || undefined}>
           {error || `${progress!.phase === 'download' ? 'Loading video' : 'Preparing video'} ${progress!.percent}%`}
-        </span> : <input type="range" className={`${controlPanelStyles.slider} button-standard`} aria-label="Video time" min={0} max={duration ?? source.timestamp + 1} step="0.01"
+        </span> : <input type="range" className={`${controlPanelStyles.slider} button-standard`} aria-label="Video time" min={0} max={duration ?? matchedTime + 1} step="0.01"
           title={`${formatTime(time)} / ${duration === null ? '—' : formatTime(duration)}`} aria-valuetext={`${formatTime(time)} / ${duration === null ? '—' : formatTime(duration)}`}
           value={time} disabled={duration === null} onChange={event => { const value = Number(event.target.value); videoRef.current!.currentTime = value; setTime(value); }} />}
-        <button className={iconButton} style={iconStyle} aria-label="Back to matched frame" title={`Back to matched frame (${formatTime(source.timestamp)})`} onClick={onClose}>
+        <button className={iconButton} style={iconStyle} aria-label="Back to matched frame" title={`Back to matched frame (${formatTime(matchedTime)})`} onClick={onClose}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 10h11a6 6 0 0 1 0 12M3 10l6-6M3 10l6 6" /></svg>
         </button>
     </div>

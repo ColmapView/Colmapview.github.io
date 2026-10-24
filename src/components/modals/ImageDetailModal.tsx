@@ -13,6 +13,7 @@ import { useImageDetailStoreFacade } from './useImageDetailStoreFacade';
 import { useLazyImagePoints2D } from './useLazyImagePoints2D';
 import { MediaLoadError } from '../MediaLoadError';
 import { useResetKeyedState } from '../../hooks/useResetKeyedState';
+import { useCameraVideoWindow } from './useCameraVideoWindow';
 import { buttonStyles } from '../../theme';
 
 const CameraVideoPlayer = lazy(() => import('./CameraVideoPlayer'));
@@ -115,7 +116,12 @@ export function ImageDetailModal() {
   });
 
   const videoSource = image ? dataset.getVideoSource(image.name) : undefined;
-  const [videoActive, setVideoActive] = useResetKeyedState(videoSource && !isMatchViewMode ? videoSource : undefined, false);
+  const [videoActive, setVideoActive] = useResetKeyedState(videoSource && !isMatchViewMode ? videoSource.signal : undefined, false);
+  const previousImage = prevImageId === null ? undefined : reconstruction?.images.get(prevImageId);
+  const nextImage = nextImageId === null ? undefined : reconstruction?.images.get(nextImageId);
+  const videoCache = useCameraVideoWindow(videoActive, videoSource,
+    previousImage ? dataset.getVideoSource(previousImage.name) : undefined,
+    nextImage ? dataset.getVideoSource(nextImage.name) : undefined);
 
   const {
     imageSrc,
@@ -204,7 +210,7 @@ export function ImageDetailModal() {
 
   const videoPlayer = videoActive && videoSource ? <Suspense fallback={imageSrc ? <img src={imageSrc} alt="" className="absolute object-contain pointer-events-none"
     style={{ left: singleImageLayout.offsetX, top: singleImageLayout.offsetY, width: singleImageLayout.renderedImageWidth, height: singleImageLayout.renderedImageHeight }} /> : null}>
-    <CameraVideoPlayer source={videoSource} name={image.name} poster={imageSrc} layout={singleImageLayout} onClose={() => setVideoActive(false)} />
+    <CameraVideoPlayer key={imageDetailId} source={videoSource} cache={videoCache} name={image.name} poster={imageSrc} layout={singleImageLayout} onClose={() => setVideoActive(false)} />
   </Suspense> : undefined;
   const mediaActions = videoSource && !videoActive && !isMatchViewMode ? <button
     className={`absolute top-2 right-2 z-10 ${buttonStyles.base} ${buttonStyles.sizes.sm} ${buttonStyles.variants.secondary}`}

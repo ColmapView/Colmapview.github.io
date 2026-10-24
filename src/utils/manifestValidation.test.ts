@@ -16,11 +16,14 @@ describe('manifest validation helpers', () => {
     const video = { url: 'camera.mp4', bytes: 123456, timestamp: 240 };
     const value = { ...manifest, version: 4, videoImages: { '0028.png': video } };
     expect(validateColmapManifest(value).success).toBe(true);
+    const timed = validateColmapManifest({ ...value, videoImages: { '0028.png': { ...video, playbackRate: 30 } } });
+    expect(timed.success && timed.manifest.videoImages?.['0028.png'].playbackRate).toBe(30);
     for (const change of [
       { version: 3 }, { skipImages: true }, { videoImages: {} },
       { videoImages: { '0028.png': { ...video, bytes: -1 } } },
       { videoImages: { '0028.png': { ...video, timestamp: Infinity } } },
       { videoImages: { '0028.png': { ...video, timestamp: -1 } } },
+      ...[0, -1, Infinity, 121].map(playbackRate => ({ videoImages: { '0028.png': { ...video, playbackRate } } })),
       { videoImages: { '0028.png': { ...video, url: 'file:///camera.mp4' } } },
       { videoImages: { '0028.png': { ...video, url: 'https://user:secret@media.test/video.mp4' } } },
       { videoImages: { '0028.png': { ...video, url: 'camera.mp4#ambiguous' } } },

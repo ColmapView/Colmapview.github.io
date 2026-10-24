@@ -4,10 +4,14 @@ import { downloadZip, releaseArchiveDownload } from '../../utils/zipDownload';
 import { loadCachedCameraVideo } from './cachedCameraVideo';
 import { MAX_CACHED_VIDEO_BYTES } from './types';
 import { prepareCompatibleCameraVideo } from './prepareCompatibleCameraVideo';
+import { retimeCameraVideo } from './retimeCameraVideo';
+import { createCameraVideoCache } from './cameraVideoCache';
 
 vi.mock('../../utils/zipDownload', () => ({ downloadZip: vi.fn(), releaseArchiveDownload: vi.fn(async () => {}) }));
-vi.mock('./videoInput', () => ({ readVideoTrack: vi.fn(async () => ({ duration: 2 })) }));
+vi.mock('./videoInput', () => ({ readVideoTrack: vi.fn(async () => ({ duration: 2,
+  track: { getDecoderConfig: async () => ({ codec: 'avc1.64001f' }) } })) }));
 vi.mock('./prepareCompatibleCameraVideo', () => ({ prepareCompatibleCameraVideo: vi.fn() }));
+vi.mock('./retimeCameraVideo', () => ({ retimeCameraVideo: vi.fn() }));
 vi.mock('mediabunny', () => ({ BlobSource: vi.fn(), MP4: {}, WEBM: {}, Input: vi.fn() }));
 const source = { url: 'https://media.test/video.mp4', bytes: 3, timestamp: 1, width: 64, height: 80, signal: new AbortController().signal };
 let nextURL: number;
@@ -48,8 +52,9 @@ it('converts an unsupported clip once without another download', async () => {
   vi.mocked(prepareCompatibleCameraVideo).mockResolvedValue(new Blob(['converted']));
   const result = await loadCachedCameraVideo(source, element, { signal: new AbortController().signal, onProgress: vi.fn() });
   expect(prepareCompatibleCameraVideo).toHaveBeenCalledOnce(); expect(downloadZip).toHaveBeenCalledOnce();
-  expect(releaseArchiveDownload).toHaveBeenCalledOnce();
+  expect(releaseArchiveDownload).not.toHaveBeenCalled();
   expect(element.currentTime).toBe(1); await result.dispose();
+  expect(releaseArchiveDownload).toHaveBeenCalledOnce();
 });
 
 it('retries an advertised but undecodable source with the cached compatibility conversion', async () => {
@@ -81,4 +86,32 @@ it('cancels a pending media load and releases the downloaded file instead of han
 it('rejects an oversized video before a network request', async () => {
   await expect(loadCachedCameraVideo({ ...source, bytes: MAX_CACHED_VIDEO_BYTES + 1 }, video(), { signal: new AbortController().signal, onProgress: vi.fn() })).rejects.toThrow('256 MiB');
   expect(downloadZip).not.toHaveBeenCalled();
+});
+
+it.each(['native', 'converted'])('uses declared playback timing for %s playback, leaving the source binding unchanged', async mode => {
+  const retimed = new Blob(['retimed']), binding = { ...source, playbackRate: 30 };
+  vi.mocked(retimeCameraVideo).mockResolvedValue(retimed);
+  vi.mocked(prepareCompatibleCameraVideo).mockResolvedValue(new Blob(['converted']));
+  const element = video();
+  if (mode === 'converted') vi.mocked(element.canPlayType).mockReturnValue('');
+  const result = await loadCachedCameraVideo(binding, element, { signal: new AbortController().signal, onProgress: vi.fn() });
+  expect(result.duration).toBeCloseTo(2 / 30); expect(element.currentTime).toBeCloseTo(1 / 30);
+  expect(binding.timestamp).toBe(1);
+  expect(retimeCameraVideo).toHaveBeenCalledOnce();
+  if (mode === 'converted') expect(prepareCompatibleCameraVideo).toHaveBeenCalledWith(retimed, binding, 2 / 30, expect.any(AbortSignal), expect.any(Function));
+  else expect(prepareCompatibleCameraVideo).not.toHaveBeenCalled();
+  expect(downloadZip).toHaveBeenCalledOnce(); expect(releaseArchiveDownload).not.toHaveBeenCalled();
+  await result.dispose(); expect(releaseArchiveDownload).toHaveBeenCalledOnce();
+});
+
+it('reuses the cached compatibility conversion after navigation instead of downloading or transcoding again', async () => {
+  const cache = createCameraVideoCache(), first = video(), second = video();
+  vi.mocked(first.canPlayType).mockReturnValue(''); vi.mocked(second.canPlayType).mockReturnValue('');
+  vi.mocked(prepareCompatibleCameraVideo).mockResolvedValue(new Blob(['converted']));
+  const options = { signal: new AbortController().signal, onProgress: vi.fn(), cache };
+  const a = await loadCachedCameraVideo(source, first, options); await a.dispose();
+  const b = await loadCachedCameraVideo(source, second, options); await b.dispose();
+  expect(downloadZip).toHaveBeenCalledOnce(); expect(prepareCompatibleCameraVideo).toHaveBeenCalledOnce();
+  expect(second.currentTime).toBe(1); expect(releaseArchiveDownload).not.toHaveBeenCalled();
+  await cache.clear(); expect(releaseArchiveDownload).toHaveBeenCalledOnce();
 });
