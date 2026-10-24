@@ -44,15 +44,6 @@ export const LOAD_JSON_HINT_ROWS: DropZoneHoverCardHintRow[] = [
   { icon: 'mouse-right', label: 'Right-click: download example manifest' },
 ];
 
-export const TOY_HOVER_CARD_TITLE = 'Load random 3D scan';
-export const TOY_HOVER_CARD_SUBTITLE = 'Multiview data from OpsiClear NGS dataset';
-export const TOY_HOVER_CARD_SOURCE = 'huggingface.co/datasets/OpsiClear/NGS';
-export const TOY_HOVER_CARD_INCLUDES = 'Includes: images, masks, sparse reconstruction';
-export const TOY_HINT_ROWS: DropZoneHoverCardHintRow[] = [
-  { icon: 'mouse-left', label: 'Left: load random scan' },
-  { icon: 'mouse-right', label: 'Right-click: open example dataset' },
-];
-
 export function getArchiveFormatsHint(archiveExtensions: readonly string[] = ARCHIVE_EXTENSIONS): string {
   return `${archiveExtensions.join(' / ')} / manifest.json`;
 }

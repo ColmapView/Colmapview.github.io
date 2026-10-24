@@ -15,7 +15,7 @@ import {
   getDesktopDropZoneActionButtonClass,
   getDropZoneInfoLineClass,
   getDropZonePanelOverlayStyle,
-  getTouchDropZoneToyButtonClass,
+  getTouchDropZoneExploreButtonClass,
   getTouchDropZoneUrlButtonClass,
 } from './dropZonePanelViewModel';
 
@@ -33,7 +33,7 @@ describe('drop zone panel view model', () => {
     );
     expect(DROP_ZONE_TOUCH_TITLE).toBe('ColmapView');
     expect(DROP_ZONE_TOUCH_SUBTITLE).toBe('View COLMAP reconstructions and image galleries');
-    expect(DROP_ZONE_TOUCH_FOOTER).toBe('Load a URL or try a sample dataset');
+    expect(DROP_ZONE_TOUCH_FOOTER).toBe('Load a URL or explore public datasets');
   });
 
   it('keeps action labels and tooltips centralized', () => {
@@ -41,7 +41,7 @@ describe('drop zone panel view model', () => {
       loadUrl: 'Load URL',
       loadJson: 'Load manifest',
       loadFromUrl: 'Load from URL',
-      tryToy: 'Try a Toy!',
+      explore: 'Explore',
       dismiss: 'Dismiss',
     });
     expect(DROP_ZONE_BROWSE_LABEL).toBe('Browse for a COLMAP dataset folder');
@@ -81,7 +81,7 @@ describe('drop zone panel view model', () => {
   it('builds touch action button classes by action and loading state', () => {
     expect(getTouchDropZoneUrlButtonClass(false)).toContain(buttonStyles.variants.secondary);
     expect(getTouchDropZoneUrlButtonClass(true)).toContain(buttonStyles.disabled);
-    expect(getTouchDropZoneToyButtonClass(false)).toContain(buttonStyles.variants.primary);
-    expect(getTouchDropZoneToyButtonClass(true)).toContain(buttonStyles.disabled);
+    expect(getTouchDropZoneExploreButtonClass(false)).toContain(buttonStyles.variants.primary);
+    expect(getTouchDropZoneExploreButtonClass(true)).toContain(buttonStyles.disabled);
   });
 });

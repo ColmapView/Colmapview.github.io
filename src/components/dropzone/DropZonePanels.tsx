@@ -15,7 +15,7 @@ import {
 import { publicAsset } from '../../utils/paths';
 import { ProfileDropdown } from './ProfileDropdown';
 import { DatasetAccountButtons } from './DatasetAccountButtons';
-import { LoadJsonHoverCard, LoadUrlHoverCard, ToyHoverCard } from './DropZoneHoverCards';
+import { LoadJsonHoverCard, LoadUrlHoverCard } from './DropZoneHoverCards';
 import {
   DROP_ZONE_ACTION_LABELS,
   DROP_ZONE_BROWSE_BOX_CLASS,
@@ -34,10 +34,11 @@ import {
   DROP_ZONE_TOUCH_SUBTITLE,
   DROP_ZONE_TOUCH_TITLE,
   DROP_ZONE_UPLOAD_CONFIG_TOOLTIP,
+  HUB_CATALOG_URL,
   getDesktopDropZoneActionButtonClass,
   getDropZoneInfoLineClass,
   getDropZonePanelOverlayStyle,
-  getTouchDropZoneToyButtonClass,
+  getTouchDropZoneExploreButtonClass,
   getTouchDropZoneUrlButtonClass,
   type HoveredDropZoneButton,
 } from './dropZonePanelViewModel';
@@ -47,12 +48,10 @@ export interface DesktopDropZonePanelProps {
   onOpenUrlModal: () => void;
   onLoadRemoteDataset: (url: string) => void;
   onOpenManifestFile: () => void;
-  onLoadToy: () => void;
   onBrowse: () => void;
   onUploadConfig: () => void;
   onResetConfig: () => void;
   onDismiss: () => void;
-  onOpenExampleDataset: () => void;
   onDownloadExampleManifest: () => void;
 }
 
@@ -60,7 +59,6 @@ export interface TouchDropZonePanelProps {
   urlLoading: boolean;
   onOpenUrlModal: () => void;
   onLoadRemoteDataset: (url: string) => void;
-  onLoadToy: () => void;
   onDismiss: () => void;
 }
 
@@ -69,12 +67,10 @@ export function DesktopDropZonePanel({
   onOpenUrlModal,
   onLoadRemoteDataset,
   onOpenManifestFile,
-  onLoadToy,
   onBrowse,
   onUploadConfig,
   onResetConfig,
   onDismiss,
-  onOpenExampleDataset,
   onDownloadExampleManifest,
 }: DesktopDropZonePanelProps) {
   const [hoveredButton, setHoveredButton] = useState<HoveredDropZoneButton>(null);
@@ -82,7 +78,6 @@ export function DesktopDropZonePanel({
   const formatInfoId = useId();
   const urlButtonRef = useRef<HTMLButtonElement>(null);
   const manifestButtonRef = useRef<HTMLButtonElement>(null);
-  const toyButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className={DROP_ZONE_DESKTOP_OVERLAY_CLASS} style={getDropZonePanelOverlayStyle()}>
@@ -221,25 +216,16 @@ export function DesktopDropZonePanel({
             </div>
 
             <div className="relative">
-              <button
-                type="button"
-                onClick={onLoadToy}
-                ref={toyButtonRef}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  onOpenExampleDataset();
-                }}
-                onMouseEnter={() => setHoveredButton('toy')}
-                onFocus={() => setHoveredButton('toy')}
-                onBlur={() => setHoveredButton(null)}
-                onMouseLeave={() => setHoveredButton(null)}
-                disabled={urlLoading}
-                className={getDesktopDropZoneActionButtonClass(urlLoading)}
+              <a
+                href={HUB_CATALOG_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Browse public datasets on ColmapView Hub"
+                className={getDesktopDropZoneActionButtonClass(false)}
               >
                 <img src={publicAsset('LOGO.png')} alt="" className={DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS} />
-                {DROP_ZONE_ACTION_LABELS.tryToy}
-              </button>
-              {hoveredButton === 'toy' && <ToyHoverCard anchorRef={toyButtonRef} />}
+                {DROP_ZONE_ACTION_LABELS.explore}
+              </a>
             </div>
           </div>
 
@@ -254,7 +240,6 @@ export function TouchDropZonePanel({
   urlLoading,
   onOpenUrlModal,
   onLoadRemoteDataset,
-  onLoadToy,
   onDismiss,
 }: TouchDropZonePanelProps) {
   return (
@@ -295,15 +280,16 @@ export function TouchDropZonePanel({
             {DROP_ZONE_ACTION_LABELS.loadFromUrl}
           </button>
 
-          <button
-            type="button"
-            onClick={onLoadToy}
-            disabled={urlLoading}
-            className={getTouchDropZoneToyButtonClass(urlLoading)}
+          <a
+            href={HUB_CATALOG_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Browse public datasets on ColmapView Hub"
+            className={getTouchDropZoneExploreButtonClass(false)}
           >
             <img src={publicAsset('LOGO.png')} alt="" className={DROP_ZONE_TOUCH_ACTION_ICON_CLASS} />
-            {DROP_ZONE_ACTION_LABELS.tryToy}
-          </button>
+            {DROP_ZONE_ACTION_LABELS.explore}
+          </a>
         </div>
 
         <p className="text-ds-muted text-xs text-center mt-4">

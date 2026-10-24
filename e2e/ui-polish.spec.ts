@@ -102,7 +102,7 @@ test('short desktop viewport keeps the panel top reachable', async ({ page }) =>
   await page.goto('/');
   const dismiss = page.getByRole('button', { name: 'Dismiss this panel' });
   await expect(dismiss).toBeInViewport();
-  const lastLink = page.getByRole('button', { name: 'Try a Toy!' });
+  const lastLink = page.getByRole('link', { name: 'Explore', exact: true });
   await lastLink.scrollIntoViewIfNeeded();
   await expect(lastLink).toBeInViewport();
   await dismiss.scrollIntoViewIfNeeded();
@@ -117,7 +117,7 @@ test('short touch viewport keeps dismissal reachable', async ({ browser, baseURL
     await page.goto('/?touch=true');
     const dismiss = page.getByRole('button', { name: 'Dismiss', exact: true });
     await expect(dismiss).toBeInViewport();
-    const toy = page.getByRole('button', { name: 'Try a Toy!' });
+    const toy = page.getByRole('link', { name: 'Explore', exact: true });
     await toy.scrollIntoViewIfNeeded();
     await expect(toy).toBeInViewport();
     await dismiss.scrollIntoViewIfNeeded();
@@ -159,7 +159,7 @@ test('startup reflows at a 200-percent equivalent viewport', async ({ browser, b
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(640);
     await page.screenshot({ path: testInfo.outputPath('startup-200-percent.png') });
-    await page.getByRole('button', { name: 'Try a Toy!' }).scrollIntoViewIfNeeded();
+    await page.getByRole('link', { name: 'Explore', exact: true }).scrollIntoViewIfNeeded();
     await dismiss.scrollIntoViewIfNeeded();
     await expect(dismiss).toBeInViewport();
   } finally {

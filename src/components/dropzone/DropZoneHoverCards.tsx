@@ -15,11 +15,6 @@ import {
   LOAD_URL_HOVER_CARD_TITLE,
   LOAD_URL_LOCAL_SERVER_HINT,
   LOAD_URL_SUPPORTED_SOURCES,
-  TOY_HINT_ROWS,
-  TOY_HOVER_CARD_INCLUDES,
-  TOY_HOVER_CARD_SOURCE,
-  TOY_HOVER_CARD_SUBTITLE,
-  TOY_HOVER_CARD_TITLE,
   type DropZoneHoverCardHintIcon,
   type DropZoneHoverCardHintRow,
 } from './dropZoneHoverCardViewModel';
@@ -117,19 +112,6 @@ export function LoadJsonHoverCard({ anchorRef }: DropZoneHoverCardProps) {
         {LOAD_JSON_MANIFEST_EXAMPLE}
       </div>
       <DropZoneHoverCardHintRows rows={LOAD_JSON_HINT_ROWS} />
-    </DropZoneHoverCardShell>
-  );
-}
-
-export function ToyHoverCard({ anchorRef }: DropZoneHoverCardProps) {
-  return (
-    <DropZoneHoverCardShell anchorRef={anchorRef}>
-      <div className={hoverCardStyles.title}>{TOY_HOVER_CARD_TITLE}</div>
-      <div className={hoverCardStyles.subtitle}>{TOY_HOVER_CARD_SUBTITLE}</div>
-      <div className={`${hoverCardStyles.subtitle} text-ds-muted/70`}>{TOY_HOVER_CARD_SOURCE}</div>
-      <div className={`${hoverCardStyles.subtitle} mt-1`}>{TOY_HOVER_CARD_INCLUDES}</div>
-      <div className={`${hoverCardStyles.subtitle} mt-2`}>Use the example to organize your dataset for ColmapView.</div>
-      <DropZoneHoverCardHintRows rows={TOY_HINT_ROWS} />
     </DropZoneHoverCardShell>
   );
 }

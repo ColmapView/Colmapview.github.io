@@ -22,12 +22,10 @@ function createDesktopProps() {
     onOpenUrlModal: vi.fn(),
     onLoadRemoteDataset: vi.fn(),
     onOpenManifestFile: vi.fn(),
-    onLoadToy: vi.fn(),
     onBrowse: vi.fn(),
     onUploadConfig: vi.fn(),
     onResetConfig: vi.fn(),
     onDismiss: vi.fn(),
-    onOpenExampleDataset: vi.fn(),
     onDownloadExampleManifest: vi.fn(),
   };
 }
@@ -35,14 +33,12 @@ function createDesktopProps() {
 describe('DropZone panels', () => {
   it('shows action guidance on keyboard focus and dismisses it with Escape', () => {
     render(<DesktopDropZonePanel {...createDesktopProps()} />);
-    const toy = screen.getByRole('button', { name: 'Try a Toy!' });
-    fireEvent.focus(toy);
-    expect(screen.getByText('Right-click: open example dataset')).toBeVisible();
-    fireEvent.keyDown(toy, { key: 'Escape' });
-    expect(screen.queryByText('Right-click: open example dataset')).not.toBeInTheDocument();
     const manifest = screen.getByRole('button', { name: 'Load manifest' });
     fireEvent.focus(manifest);
     expect(screen.getByText('Right-click: download example manifest')).toBeVisible();
+    fireEvent.keyDown(manifest, { key: 'Escape' });
+    expect(screen.queryByText('Right-click: download example manifest')).not.toBeInTheDocument();
+    fireEvent.focus(manifest);
     fireEvent.blur(manifest);
     expect(screen.queryByText('Right-click: download example manifest')).not.toBeInTheDocument();
   });
@@ -73,13 +69,12 @@ describe('DropZone panels', () => {
     fireEvent.click(screen.getByRole('button', { name: DROP_ZONE_BROWSE_LABEL }));
     fireEvent.click(screen.getByRole('button', { name: /Load URL/i }));
     fireEvent.click(screen.getByRole('button', { name: /Load manifest/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Try a Toy!/i }));
     fireEvent.click(screen.getByRole('button', { name: DROP_ZONE_DISMISS_TOOLTIP }));
 
     expect(props.onBrowse).toHaveBeenCalledTimes(1);
     expect(props.onOpenUrlModal).toHaveBeenCalledTimes(1);
     expect(props.onOpenManifestFile).toHaveBeenCalledTimes(1);
-    expect(props.onLoadToy).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('link', { name: 'Explore' })).toHaveAttribute('href', 'https://colmapview.opsiclear.com/hub/datasets/');
     expect(props.onDismiss).toHaveBeenCalledTimes(1);
   });
 
@@ -98,10 +93,8 @@ describe('DropZone panels', () => {
     const props = createDesktopProps();
     render(<DesktopDropZonePanel {...props} />);
 
-    fireEvent.contextMenu(screen.getByRole('button', { name: /Try a Toy!/i }));
     fireEvent.contextMenu(screen.getByRole('button', { name: /Load manifest/i }));
 
-    expect(props.onOpenExampleDataset).toHaveBeenCalledTimes(1);
     expect(props.onDownloadExampleManifest).toHaveBeenCalledTimes(1);
   });
 
@@ -109,8 +102,6 @@ describe('DropZone panels', () => {
     render(<DesktopDropZonePanel {...createDesktopProps()} />);
     expect(screen.queryByRole('button', { name: 'Open example dataset' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Download example manifest' })).not.toBeInTheDocument();
-    fireEvent.mouseEnter(screen.getByRole('button', { name: /Try a Toy!/i }));
-    expect(screen.getByText('Right-click: open example dataset')).toBeVisible();
     fireEvent.mouseEnter(screen.getByRole('button', { name: /Load manifest/i }));
     expect(screen.getByText('Right-click: download example manifest')).toBeVisible();
   });
@@ -126,7 +117,6 @@ describe('DropZone panels', () => {
 
   it('renders touch actions and routes callbacks', () => {
     const onOpenUrlModal = vi.fn();
-    const onLoadToy = vi.fn();
     const onDismiss = vi.fn();
 
     render(
@@ -134,17 +124,18 @@ describe('DropZone panels', () => {
         urlLoading={false}
         onOpenUrlModal={onOpenUrlModal}
         onLoadRemoteDataset={vi.fn()}
-        onLoadToy={onLoadToy}
         onDismiss={onDismiss}
       />
     );
 
     fireEvent.click(screen.getByRole('button', { name: /Load from URL/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Try a Toy!/i }));
     fireEvent.click(screen.getByRole('button', { name: /Dismiss/i }));
 
     expect(onOpenUrlModal).toHaveBeenCalledTimes(1);
-    expect(onLoadToy).toHaveBeenCalledTimes(1);
+    const explore = screen.getByRole('link', { name: 'Explore' });
+    expect(explore).toHaveAttribute('href', 'https://colmapview.opsiclear.com/hub/datasets/');
+    expect(explore).toHaveAttribute('target', '_blank');
+    expect(explore).toHaveAttribute('rel', 'noopener noreferrer');
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 

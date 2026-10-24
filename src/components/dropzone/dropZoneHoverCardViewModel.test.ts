@@ -12,8 +12,6 @@ import {
   LOAD_URL_HINT_ROWS,
   LOAD_URL_LOCAL_SERVER_HINT,
   LOAD_URL_SUPPORTED_SOURCES,
-  TOY_HINT_ROWS,
-  TOY_HOVER_CARD_SOURCE,
 } from './dropZoneHoverCardViewModel';
 
 describe('drop zone hover card view model', () => {
@@ -48,10 +46,6 @@ describe('drop zone hover card view model', () => {
       { icon: 'mouse-left', label: 'Left: browse manifest file' },
       { icon: 'mouse-right', label: 'Right-click: download example manifest' },
     ]);
-    expect(TOY_HINT_ROWS).toEqual([
-      { icon: 'mouse-left', label: 'Left: load random scan' },
-  { icon: 'mouse-right', label: 'Right-click: open example dataset' },
-    ]);
   });
 
   it('keeps hover card placement stable without dynamic Tailwind z-index classes', () => {
@@ -62,7 +56,4 @@ describe('drop zone hover card view model', () => {
     });
   });
 
-  it('keeps the toy source visible in metadata', () => {
-    expect(TOY_HOVER_CARD_SOURCE).toBe('huggingface.co/datasets/OpsiClear/NGS');
-  });
 });

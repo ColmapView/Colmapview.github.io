@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.2] - 2026-10-24
+
+### Changed
+
+- Replace Try a Toy with Explore, opening the public Hub catalog in a new tab on desktop and touch layouts. Remove the random sample-loading action and its stale hover help.
+- Disclose cookieless measurement on public Hub catalog pages. The viewer and policy pages continue to load no analytics.
+
 ## [0.23.1] - 2026-10-24
 
 ### Fixed

@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { buttonStyles, Z_INDEX } from '../../theme';
 
-export type HoveredDropZoneButton = 'url' | 'json' | 'toy' | null;
+export type HoveredDropZoneButton = 'url' | 'json' | null;
 
 export interface DropZoneInfoLine {
   label?: string;
@@ -27,7 +27,8 @@ export const DROP_ZONE_DISMISS_TOOLTIP = 'Dismiss this panel';
 export const DROP_ZONE_DESKTOP_MESSAGE = 'or drag and drop a COLMAP dataset or image-only folder';
 export const DROP_ZONE_TOUCH_TITLE = 'ColmapView';
 export const DROP_ZONE_TOUCH_SUBTITLE = 'View COLMAP reconstructions and image galleries';
-export const DROP_ZONE_TOUCH_FOOTER = 'Load a URL or try a sample dataset';
+export const DROP_ZONE_TOUCH_FOOTER = 'Load a URL or explore public datasets';
+export const HUB_CATALOG_URL = 'https://colmapview.opsiclear.com/hub/datasets/';
 
 export const DROP_ZONE_INFO_LINES: DropZoneInfoLine[] = [
   { label: 'Drop folder or ZIP file', text: '- subfolders are scanned automatically' },
@@ -44,7 +45,7 @@ export const DROP_ZONE_ACTION_LABELS = {
   // The file behind this button is a manifest (.json is just its encoding).
   loadJson: 'Load manifest',
   loadFromUrl: 'Load from URL',
-  tryToy: 'Try a Toy!',
+  explore: 'Explore',
   dismiss: 'Dismiss',
 } as const;
 
@@ -66,7 +67,7 @@ export function getTouchDropZoneUrlButtonClass(isDisabled: boolean): string {
   );
 }
 
-export function getTouchDropZoneToyButtonClass(isDisabled: boolean): string {
+export function getTouchDropZoneExploreButtonClass(isDisabled: boolean): string {
   return withOptionalDisabledClass(
     `${buttonStyles.base} button-standard px-4 py-2 text-sm ${buttonStyles.variants.primary} active-scale-98`,
     isDisabled,

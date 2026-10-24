@@ -9,7 +9,7 @@ export class DropZonePageObject {
   readonly emptyStatePanel: Locator;
   readonly loadUrlButton: Locator;
   readonly loadJsonButton: Locator;
-  readonly tryToyButton: Locator;
+  readonly exploreLink: Locator;
   readonly urlModal: Locator;
   readonly loadingOverlay: Locator;
   readonly errorToast: Locator;
@@ -20,7 +20,7 @@ export class DropZonePageObject {
     this.emptyStatePanel = page.locator('.startup-panel');
     this.loadUrlButton = page.locator('button:has-text("Load URL")');
     this.loadJsonButton = page.locator('button:has-text("Load manifest")');
-    this.tryToyButton = page.locator('button:has-text("Try a Toy!")');
+    this.exploreLink = page.locator('a:has-text("Explore")');
     this.urlModal = page.locator('[data-testid="url-modal"]');
     this.loadingOverlay = page.locator('[class*="loadingStyles"]');
     this.errorToast = page.locator('[class*="toastStyles"]');
@@ -55,10 +55,10 @@ export class DropZonePageObject {
   }
 
   /**
-   * Click the "Try a Toy!" button
+   * Click the "Explore" link
    */
-  async clickTryToy(): Promise<void> {
-    await this.tryToyButton.click();
+  async clickExplore(): Promise<void> {
+    await this.exploreLink.click();
   }
 
   /**

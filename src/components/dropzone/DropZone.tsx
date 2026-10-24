@@ -4,14 +4,12 @@ import { useUrlLoader } from '../../hooks/useUrlLoader';
 import { runUrlLoadPreparation, type UrlLoadPreparation } from '../../hooks/urlLoaderLoadGuard';
 import { clearPersistedSettings } from '../../store/migration';
 import { importConfigFile } from '../../config/configuration';
-import { getRandomDataset, getDatasetUrl } from '../../constants/exampleDatasets';
 import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles } from '../../theme';
 import { UrlInputModal } from '../modals/UrlInputModal';
 import { publicAsset } from '../../utils/paths';
 import { requestConfirmation } from '../../utils/confirmation';
 import { containsEventTarget } from '../../utils/domTargetGuards';
 import { downloadBlob } from '../../utils/download';
-import { appLogger } from '../../utils/logger';
 import { DesktopDropZonePanel, TouchDropZonePanel } from './DropZonePanels';
 import { getDropZoneProgressFillStyle } from './dropZoneLoadingViewModel';
 import { createExampleManifest, parseManifestContent } from './dropZoneManifestPolicy';
@@ -83,15 +81,6 @@ export function DropZone({ children }: DropZoneProps) {
       e.target.value = '';
     }
   }, [loadFromManifest, prepareUrlLoad]);
-
-  // Handle Try a Toy! button - load random example
-  const handleLucky = useCallback(async () => {
-    await prepareUrlLoad('Starting...', async (_assertCurrent, initialSplatSelectionRevision) => {
-      const dataset = getRandomDataset();
-      appLogger.info(`[Try a Toy] Loading random dataset: ${dataset.name}`);
-      return () => loadFromUrl(getDatasetUrl(dataset.scanId), { initialSplatSelectionRevision });
-    });
-  }, [loadFromUrl, prepareUrlLoad]);
 
   // Download example manifest.json
   const handleDownloadExampleJson = useCallback(() => {
@@ -216,12 +205,10 @@ export function DropZone({ children }: DropZoneProps) {
           onOpenUrlModal={() => setIsUrlModalOpen(true)}
           onLoadRemoteDataset={handleUrlLoad}
           onOpenManifestFile={() => manifestInputRef.current?.click()}
-          onLoadToy={handleLucky}
           onBrowse={handleBrowse}
           onUploadConfig={handleConfigUpload}
           onResetConfig={handleResetConfig}
           onDismiss={() => setIsPanelDismissed(true)}
-          onOpenExampleDataset={() => window.open('https://huggingface.co/datasets/OpsiClear/NGS', '_blank', 'noopener,noreferrer')}
           onDownloadExampleManifest={handleDownloadExampleJson}
         />
       )}
@@ -231,7 +218,6 @@ export function DropZone({ children }: DropZoneProps) {
           urlLoading={urlLoading}
           onOpenUrlModal={() => setIsUrlModalOpen(true)}
           onLoadRemoteDataset={handleUrlLoad}
-          onLoadToy={handleLucky}
           onDismiss={() => setIsPanelDismissed(true)}
         />
       )}
