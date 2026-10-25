@@ -14,6 +14,7 @@ export interface BuildShareableUrlOptions {
   manifestUrlOrManifest: string | ColmapManifest | null;
   viewState: CameraViewState | null;
   config?: ShareConfig | null;
+  sourceInBaseUrl?: boolean;
 }
 
 export function getShareBaseUrl(location: ShareUrlLocation, appVersion: string): string {
@@ -30,8 +31,14 @@ export function buildShareableUrl({
   manifestUrlOrManifest,
   viewState,
   config,
+  sourceInBaseUrl = false,
 }: BuildShareableUrlOptions): string {
   const url = new URL(baseUrl);
+
+  if (sourceInBaseUrl) {
+    if (viewState || config) url.hash = encodeShareData('', viewState, config);
+    return url.toString();
+  }
 
   if (manifestUrlOrManifest) {
     url.hash = encodeShareData(manifestUrlOrManifest, viewState, config);

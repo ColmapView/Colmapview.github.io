@@ -30,6 +30,20 @@ const manifest: ColmapManifest = {
 };
 
 describe('share URL helpers', () => {
+  it('keeps an already resolved short source out of the shared camera/settings fragment', async () => {
+    const url = new URL(buildShareableUrl({
+      baseUrl: 'https://colmapview.opsiclear.com/s/d/AAAAAAAAAAAAAAAA',
+      manifestUrlOrManifest: 'https://example.com/scene.json', sourceInBaseUrl: true,
+      viewState, config: { ui: { backgroundColor: '#111111' } },
+    }));
+    expect(url.pathname).toBe('/s/d/AAAAAAAAAAAAAAAA');
+    expect(url.search).toBe('');
+    const decoded = await decodeShareData(url.hash);
+    expect(decoded?.manifestUrl).toBe('');
+    expect(decoded?.viewState?.position).toEqual(viewState.position);
+    expect(decoded?.config?.ui?.backgroundColor).toBe('#111111');
+  });
+
   it('uses versioned production URLs on GitHub Pages', () => {
     expect(getShareBaseUrl({
       hostname: 'colmapview.github.io',

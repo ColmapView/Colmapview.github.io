@@ -21,6 +21,7 @@ import { decodeShareData } from './hooks/useUrlState';
 import { detectTouchDevice } from './hooks/useIsTouchDevice';
 import { TOUCH_BREAKPOINTS } from './theme/sizing';
 import { appLogger } from './utils/logger';
+import { getViewerStartupUrl, readHubViewerUrl } from './utils/hubViewerLaunch';
 import { CameraDatasetSelectionHost } from './components/CameraDatasetSelectionHost';
 import { runStartupLoadPlan } from './appStartupLoad';
 import { isGoogleDriveOpenWithSearch } from './features/googleDrive/openWith';
@@ -57,7 +58,8 @@ function App() {
     if (hasCheckedUrl.current) return;
     hasCheckedUrl.current = true;
 
-    const search = window.location.search;
+    const startupUrl = getViewerStartupUrl();
+    const search = startupUrl.search;
 
     if (shouldEnableEmbedModeFromSearch(search)) {
       appLogger.info(APP_EMBED_MODE_LOG_MESSAGE);
@@ -76,7 +78,10 @@ function App() {
 
     // Async function to handle URL loading
     const checkUrlAndLoad = async () => {
-      const shareData = await decodeShareData(window.location.hash);
+      const decoded = await decodeShareData(startupUrl.hash);
+      // A fragment can customize the view, but cannot replace the short link's dataset.
+      const shareData = decoded && readHubViewerUrl()
+        ? { ...decoded, manifest: null, manifestUrl: startupUrl.searchParams.get('url') } : decoded;
       await runStartupLoadPlan(getAppStartupLoadPlan({
         shareData,
         legacyManifestUrl: new URLSearchParams(search).get('url'),

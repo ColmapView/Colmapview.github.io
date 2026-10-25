@@ -26,6 +26,9 @@ describe('publication links', () => {
     ['https://colmapview.github.io', '/latest/', 'https://colmapview.github.io/latest/'],
     ['https://colmapview.github.io', '/dev/', 'https://colmapview.github.io/dev/'],
     ['http://localhost:5173', '/', 'http://localhost:5173/'],
+    ['https://colmapview.opsiclear.com', '/s/RoughhewnBiplane', 'https://colmapview.opsiclear.com/'],
+    ['https://colmapview.opsiclear.com', '/s/d/AAAAAAAAAAAAAAAA', 'https://colmapview.opsiclear.com/'],
+    ['https://colmapview.opsiclear.com', '/hub/RoughhewnBiplane', 'https://colmapview.opsiclear.com/'],
   ])('links %s%s datasets to %s', (origin, pathname, expected) => {
     const { hostname } = new URL(origin);
     expect(getPublicationViewerBaseUrl({ origin, hostname, pathname })).toBe(expected);

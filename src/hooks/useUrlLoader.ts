@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { getViewerStartupUrl } from '../utils/hubViewerLaunch';
 import type { ColmapManifest } from '../types/manifest';
 import { useFileDropzone } from './useFileDropzone';
 import { usePointCloudStore, useReconstructionStore } from '../store';
@@ -144,7 +145,7 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
         assertCurrent();
         return callback(...args);
       };
-    const initialHash = applyUrlOverrides ? window.location.hash : '';
+    const initialHash = applyUrlOverrides ? getViewerStartupUrl().hash : '';
     let savedViewerState: PublishedViewerState | null = null;
     let autoSplatSourceId: string | undefined;
     const load: UrlLoadContext = {

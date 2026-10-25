@@ -12,10 +12,11 @@ import { buildPendingFetch, buildFile, buildLoadedFiles } from '../test/builders
 import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { decodeShareData } from '../utils/shareDataCodec';
-import { applySavedViewerState, applyShareConfig, collectShareConfig, decodeSharedViewerOverrides, generateEmbedUrl } from './useUrlState';
+import { applySavedViewerState, applyShareConfig, collectShareConfig, decodeSharedViewerOverrides, generateEmbedUrl, generateShareableUrl } from './useUrlState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
+import { HUB_VIEWER_LAUNCH_ID } from '../utils/hubViewerLaunch';
 
 const manifest: ColmapManifest = {
   version: 1,
@@ -50,9 +51,31 @@ describe('URL state sharing', () => {
   });
 
   afterEach(() => {
+    document.getElementById(HUB_VIEWER_LAUNCH_ID)?.remove();
     useReconstructionStore.getState().clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('shares the same short dataset address with settings, and uses the root for a different source', async () => {
+    window.history.replaceState(null, '', '/s/d/AAAAAAAAAAAAAAAA');
+    const node = document.createElement('script');
+    node.id = HUB_VIEWER_LAUNCH_ID;
+    node.type = 'application/json';
+    const source = 'https://example.com/scene.json';
+    node.textContent = JSON.stringify({ version: 1, viewerUrl: `https://colmapview.opsiclear.com/?url=${encodeURIComponent(source)}` });
+    document.head.append(node);
+    const same = new URL(generateShareableUrl(source, viewState, { ui: { backgroundColor: '#123456' } }));
+    expect(same.pathname).toBe('/s/d/AAAAAAAAAAAAAAAA');
+    expect(same.search).toBe('');
+    expect((await decodeShareData(same.hash))?.manifestUrl).toBe('');
+    const embed = new URL(generateEmbedUrl(source, viewState, {}));
+    expect(embed.pathname).toBe('/');
+    expect(embed.search).toBe('?embed=1');
+    expect((await decodeShareData(embed.hash))?.manifestUrl).toBe(source);
+    const other = new URL(generateEmbedUrl('https://example.com/other.json', viewState, {}));
+    expect(other.pathname).toBe('/');
+    expect((await decodeShareData(other.hash))?.manifestUrl).toBe('https://example.com/other.json');
   });
 
   function savedSplatState(): PublishedViewerState {

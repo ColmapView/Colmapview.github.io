@@ -1,4 +1,5 @@
 import type { SplatRendererRequirement } from './splatFilePolicy';
+import { getViewerStartupUrl } from './hubViewerLaunch';
 
 export const SPLAT_BACKEND_PREFERENCES = ['auto', 'webgpu', 'spark'] as const;
 export type SplatBackendPreference = typeof SPLAT_BACKEND_PREFERENCES[number];
@@ -161,7 +162,7 @@ export function parseSplatBackendPreference(
 
 export function getInitialSplatBackendPreference(): SplatBackendPreference {
   if (typeof window === 'undefined') return 'auto';
-  return parseSplatBackendPreference(window.location.search);
+  return parseSplatBackendPreference(getViewerStartupUrl().search);
 }
 
 export function getBrowserWebGpuCompatibilityBlockReason(

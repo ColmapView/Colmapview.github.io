@@ -34,6 +34,7 @@ import { canUseByteLessSplatLoader, TOUCH_SPLAT_BYTELESS_RETENTION_MIN_BYTES } f
 import { detectTouchDevice } from '../hooks/useIsTouchDevice';
 import { dismissDatasetTimeoutWarnings } from '../hooks/datasetTimeoutWarnings';
 import { updateObservationIntegrityNotification } from './observationIntegrityNotification';
+import { clearHubViewerLaunch, readHubViewerUrl } from '../utils/hubViewerLaunch';
 
 const SPLAT_POINT_CLOUD_DEFAULT_SIZE = 1;
 const SPLAT_POINT_CLOUD_DEFAULT_OPACITY = 0.2;
@@ -199,6 +200,8 @@ export type ReconstructionSourceType = 'local' | 'url' | 'manifest' | 'zip' | nu
  */
 export function hasUrlToLoad(): boolean {
   if (typeof window === 'undefined') return false;
+  const launch = readHubViewerUrl();
+  if (launch) return Boolean(launch.searchParams.get('url'));
 
   // Hash format: #d=...
   const hash = window.location.hash;
@@ -227,6 +230,7 @@ export function clearUrlLoadRequestFromLocation(
 ): void {
   try {
     const url = new URL(win.location.href);
+    if (win === window && clearHubViewerLaunch()) url.pathname = import.meta.env.BASE_URL;
     url.searchParams.delete('url');
     const hashContent = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
     const hashParams = new URLSearchParams(hashContent);
@@ -488,8 +492,13 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
 
   setProgress: (progress) => set({ progress }),
 
-  setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null, imageNameToUrl = null, sourceName = null) =>
-    set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest, imageNameToUrl, sourceName }),
+  setSourceInfo: (sourceType, sourceUrl = null, imageUrlBase = null, maskUrlBase = null, sourceManifest = null, imageNameToUrl = null, sourceName = null) => {
+    // Once another dataset commits, the old short address must not identify it.
+    if (readHubViewerUrl() && (!sourceUrl || get().sourceType !== null && sourceUrl !== get().sourceUrl)) {
+      clearUrlLoadRequestFromLocation();
+    }
+    set({ sourceType, sourceUrl, imageUrlBase, maskUrlBase, sourceManifest, imageNameToUrl, sourceName });
+  },
 
   setRequestedSplatSourceId: (requestedSplatSourceId) => {
     const loadedFiles = get().loadedFiles;
@@ -718,6 +727,7 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
   },
 
   clear: () => {
+    if (readHubViewerUrl()) clearUrlLoadRequestFromLocation();
     get().loadedFiles?.videoFrames?.dispose();
     cancelPendingSplatLoad();
     get().urlLoadController?.abort();

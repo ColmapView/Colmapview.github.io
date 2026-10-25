@@ -1,5 +1,8 @@
-/** Published links follow the current viewer on GitHub; other hosts keep their own page. */
+import { isHubSharePath } from '../../utils/hubViewerLaunch';
+
+/** Published links follow the viewer release, never a previous dataset's short address. */
 export function getPublicationViewerBaseUrl(location: Pick<Location, 'origin' | 'hostname' | 'pathname'>): string {
+  if (isHubSharePath(location.pathname)) return location.origin + '/';
   if (location.hostname !== 'colmapview.github.io') return location.origin + location.pathname;
   return `${location.origin}/${location.pathname.startsWith('/dev/') ? 'dev' : 'latest'}/`;
 }

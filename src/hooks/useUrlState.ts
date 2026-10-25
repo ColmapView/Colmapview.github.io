@@ -14,6 +14,7 @@ import {
   getShareBaseUrl,
 } from '../utils/shareUrl';
 import { appLogger } from '../utils/logger';
+import { getViewerStartupUrl, readHubViewerUrl } from '../utils/hubViewerLaunch';
 import { findSplatSourceById, getShareActiveSplatSourceId } from '../utils/splatFileSourcePolicy';
 import { SHARED_CONFIG_SECTIONS, sanitizeShareConfig, type PublishedViewerState } from '../utils/publishedViewerState';
 import { decodeShareData } from '../utils/shareDataCodec';
@@ -267,7 +268,7 @@ export function useUrlState() {
    * Restore camera state from URL hash
    */
   const restoreFromHash = useCallback(async () => {
-    const hash = window.location.hash;
+    const hash = getViewerStartupUrl().hash;
     if (!hash) return false;
 
     const state = await decodeCameraStateFromHash(hash);
@@ -293,7 +294,7 @@ export function useUrlState() {
   // Handle browser back/forward (popstate)
   useEffect(() => {
     const handlePopState = async () => {
-      const state = await decodeCameraStateFromHash(window.location.hash);
+      const state = await decodeCameraStateFromHash(getViewerStartupUrl().hash);
       if (state) {
         flyToState(state);
         lastEncodedState.current = encodeCameraState(state);
@@ -330,11 +331,18 @@ declare const __APP_VERSION__: string;
 export function generateShareableUrl(
   manifestUrlOrManifest: string | ColmapManifest | null,
   viewState: CameraViewState | null,
-  config?: ShareConfig | null
+  config?: ShareConfig | null,
+  useShortAddress = true,
 ): string {
   const shareConfig = manifestUrlOrManifest && config === undefined ? collectShareConfig() : config;
+  const launch = readHubViewerUrl();
+  const sourceInBaseUrl = Boolean(useShortAddress && launch && typeof manifestUrlOrManifest === 'string'
+    && manifestUrlOrManifest === launch.searchParams.get('url'));
+  const location = launch && !sourceInBaseUrl
+    ? new URL(import.meta.env.BASE_URL, window.location.origin) : window.location;
   return buildShareableUrl({
-    baseUrl: getShareBaseUrl(window.location, __APP_VERSION__),
+    baseUrl: getShareBaseUrl(location, __APP_VERSION__),
+    sourceInBaseUrl,
     manifestUrlOrManifest,
     viewState,
     config: shareConfig,
@@ -351,6 +359,7 @@ export function generateEmbedUrl(
   viewState: CameraViewState | null,
   config?: ShareConfig | null
 ): string {
-  const shareableUrl = generateShareableUrl(manifestUrlOrManifest, viewState, config);
+  // Short-link routes reject cross-site subresources; embeds use the ordinary viewer document.
+  const shareableUrl = generateShareableUrl(manifestUrlOrManifest, viewState, config, false);
   return buildEmbedUrl(shareableUrl);
 }

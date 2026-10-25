@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-25
+
+### Added
+
+- Load Hub shares directly at their short address, without expanding the address bar. Preserve saved camera views, settings, reloads and browser authentication. Shares of the same scene keep its short path; loading another dataset or clearing the scene releases the old address.
+
 ## [0.23.6] - 2026-10-25
 
 ### Changed
