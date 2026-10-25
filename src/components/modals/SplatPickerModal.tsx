@@ -106,7 +106,7 @@ export function SplatPickerModal() {
             disabled={item.tier === 'disabled'}
             className={item.tier === 'disabled' ? SPLAT_PICKER_DISABLED_ROW_CLASS : SPLAT_PICKER_ROW_CLASS}
           >
-            <span className="truncate">{item.name}</span>
+            <span className="truncate" title={item.name}>{item.name}</span>
             {item.sizeLabel && <span className={SPLAT_PICKER_SIZE_CLASS}>{item.sizeLabel}</span>}
             {item.warning && <span className={SPLAT_PICKER_WARNING_CLASS}>{item.warning}</span>}
             {item.disabledReason && (

@@ -103,6 +103,22 @@ export function getSplatPickerItems(
   sources: readonly SplatFileSource[],
   options: { isTouchDevice: boolean; byteLessLoaderAvailable?: boolean }
 ): SplatPickerItem[] {
+  // Use the shortest unique suffix so trainer/seed/time alternatives with the
+  // same filename remain distinguishable without showing an entire source URL.
+  const suffixCounts = new Map<string, number>();
+  const parts = sources.map(source => source.path.split('/'));
+  for (const path of parts) {
+    for (let start = path.length - 1; start >= 0; start--) {
+      const suffix = path.slice(start).join('/');
+      suffixCounts.set(suffix, (suffixCounts.get(suffix) ?? 0) + 1);
+    }
+  }
+  const names = new Map(sources.map((source, index) => {
+    const path = parts[index];
+    let start = path.length - 1;
+    while (start > 0 && suffixCounts.get(path.slice(start).join('/')) !== 1) start--;
+    return [source.path, path.slice(start).join('/')];
+  }));
   const bySize = [...sources].sort((a, b) =>
     getSortableSplatSize(a.size) - getSortableSplatSize(b.size) || a.path.localeCompare(b.path));
   return bySize.map((source) => {
@@ -114,7 +130,7 @@ export function getSplatPickerItems(
     });
     return {
       id: source.id,
-      name: source.path.split('/').pop() || source.path,
+      name: names.get(source.path) || source.path,
       sizeLabel,
       tier,
       warning: hint ? SPLAT_HINT_WARNINGS[hint] : null,

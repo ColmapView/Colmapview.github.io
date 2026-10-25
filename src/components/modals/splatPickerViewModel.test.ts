@@ -26,6 +26,14 @@ describe('formatSplatSize', () => {
 });
 
 describe('getSplatPickerItems', () => {
+  it('distinguishes repeated model filenames by the shortest trainer, seed or time suffix', () => {
+    const paths = ['https://host/data/FastPGSR/seed22/t1/model.ply', 'https://host/data/vanilla/seed22/t1/model.ply',
+      'https://host/data/FastPGSR/seed22/t2/model.ply', 'https://host/data/preview.sog'];
+    const items = getSplatPickerItems(paths.map((path, index) => ({ id: String(index), path, url: path, size: index + 1 })), { isTouchDevice: false });
+    expect(items.map(item => item.name)).toEqual(['FastPGSR/seed22/t1/model.ply', 'vanilla/seed22/t1/model.ply', 't2/model.ply', 'preview.sog']);
+    expect(items.map(item => item.id)).toEqual(['0', '1', '2', '3']);
+  });
+
   it('uses the file basename and a formatted size', () => {
     expect(
       getSplatPickerItems(
