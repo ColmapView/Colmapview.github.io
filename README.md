@@ -209,4 +209,4 @@ If you use COLMAP in your research, please cite their papers:
 
 [AGPL-3.0](LICENSE) with attribution requirement per Section 7(b).
 
-**If you deploy this software**, you must display visible attribution (e.g., "Powered by ColmapView") with a link to this repository. See [NOTICE](NOTICE) for full details.
+**If you deploy this software**, retain the visible attribution "Built with ColmapView by OpsiClear" with a link to this repository. See [NOTICE](NOTICE) for the requirements and third-party notices. Self-hosted fonts retain their SIL Open Font License; their complete copyright and licenses ship in `public/fonts/`.

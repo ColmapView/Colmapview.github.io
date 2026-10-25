@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.3] - 2026-10-24
+
+### Fixed
+
+- Distribute the complete JetBrains Mono copyright and OFL alongside IBM Plex Sans, expose both font licenses on About, and describe self-hosted font downloads in Privacy. Correct stale source and attribution references.
+- Remove automatic Google Analytics and remote Google Fonts links from hosted archive HTML during releases. Keep original source tags and viewer bundles, include OFL notices in the archives, and fail before upload on unrecognized Google integrations.
+- Update Privacy for explicit Hub analytics opt-in, withdrawal, choice retention and public catalog scope.
+
 ## [0.23.2] - 2026-10-24
 
 ### Changed

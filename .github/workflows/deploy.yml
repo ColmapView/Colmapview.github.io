@@ -91,6 +91,9 @@ jobs:
       - name: Create root redirect
         if: steps.target.outputs.is_release == 'true'
         run: node scripts/deployment/build-github-root.mjs
+      - name: Prepare archived pages without Google analytics or font requests
+        if: steps.target.outputs.is_release == 'true'
+        run: node scripts/deployment/prepare-archived-pages.mjs
       - name: Smoke prepared artifacts
         run: npm run test:deployment:browser
         env:

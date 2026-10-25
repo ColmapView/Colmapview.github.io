@@ -79,6 +79,15 @@ Cloudflare Pages may redirect `/about.html` to `/about`, and likewise for Privac
 
 ## Repeatable local and CI checks
 
+Release builds also run `scripts/deployment/prepare-archived-pages.mjs` before any
+upload. It reads the public `gh-pages` tree at one commit, checks every version's
+HTML with bounded requests, and prepares only known Google tag/initializer and
+Google Fonts link removals. Unknown Google integrations fail the release. The
+root upload merges these HTML patches and bundled OFL notices without replacing
+versioned viewer bundles, deleting archives or changing source release tags.
+Older pages that used remote Roboto now use their existing system-font fallback.
+The original source and the privacy patch remain available in this repository.
+
 ```sh
 npm ci
 npx playwright install chromium

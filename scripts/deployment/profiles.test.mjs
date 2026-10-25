@@ -10,6 +10,29 @@ import { fetchVerifiedArtifact, htmlSha256, verifyPolicyHtml } from './artifact-
 import { cloudflareStaticHeaders } from './headers.mjs';
 import { startArtifactServer } from './static-server.mjs';
 import { githubRootTarget, githubShareTarget } from './github-share-redirect.mjs';
+import { archivedPage } from './prepare-archived-pages.mjs';
+
+test('archive privacy patches remove only known analytics and remote font integrations', () => {
+  const content = '<script type="module" src="/v0.3.3/assets/viewer.js"></script><link href="/v0.3.3/assets/style.css" rel="stylesheet">';
+  const html = '<html><head><script async src="https://www.googletagmanager.com/gtag/js?id=G-7K5H83SEMY"></script>'
+    + '<script>window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} '
+    + 'gtag(\'js\', new Date()); gtag(\'config\', \'G-7K5H83SEMY\');</script>'
+    + '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Roboto" rel="stylesheet">'
+    + content + '</head><body><div id="root"></div></body></html>';
+  const clean = archivedPage(html);
+  assert.ok(clean.includes(content));
+  assert.ok(clean.includes('<body><div id="root"></div></body>'));
+  assert.doesNotMatch(clean, /googletagmanager|fonts\.googleapis|gtag\(/);
+  assert.match(clean, /name="colmapview-hosted-privacy-update"/);
+  assert.equal(archivedPage(clean), clean);
+  assert.equal(archivedPage('<head>' + content + '</head>'), '<head>' + content + '</head>');
+  assert.throws(() => archivedPage('<head><script>gtag("config", "unknown"); otherAppCode();</script></head>'), /Unrecognized/);
+  const steps = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8')).jobs.deploy.steps;
+  const preparation = steps.findIndex(step => step.name === 'Prepare archived pages without Google analytics or font requests');
+  assert.ok(preparation > steps.findIndex(step => step.name === 'Create root redirect'));
+  assert.ok(preparation < steps.findIndex(step => step.name === 'Smoke prepared artifacts'));
+  assert.equal(steps[preparation].if, "steps.target.outputs.is_release == 'true'");
+});
 
 test('GitHub root forwarding retains dataset queries and fragments at the fixed latest path', () => {
   for (const suffix of ['', '?url=https%3A%2F%2Fexample.org%2Fscene%3Fa%3D1%26b%3D2#view', '?next=https://evil.example#//evil.example']) {
