@@ -317,7 +317,7 @@ async function discoverRemoteSplatCatalog(
 
 /** Discover selectable tiles without transferring full splat files. */
 export async function discoverManifestSplatCatalog(
-  manifest: ColmapManifest,
+  manifest: ColmapManifest | Pick<ColmapManifest, 'baseUrl' | 'splats' | 'geometryFiles'>,
   deps: DiscoverManifestSplatDeps = {}
 ): Promise<RemoteSplatCandidate[]> {
   if (manifest.splats?.length === 0 || manifest.geometryFiles?.some(file => file.role === 'splat')) return [];

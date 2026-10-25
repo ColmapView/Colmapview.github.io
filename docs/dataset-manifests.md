@@ -205,6 +205,34 @@ For a numeric NPZ trajectory shaped `(frames, vertices, 3)`, use `"pointCloud": 
 
 An optional absolute HTTP(S) `tracksUrl` makes an OpenSfM observation sidecar required. Without it, conventional sibling tracks are optional; failures produce a diagnostic while retaining the source geometry. All metadata/media/cloud requests run in the browser and require source CORS access. Native COLMAP manifests above remain unchanged.
 
+## Camera metadata with Gaussian companions (version 2)
+
+Viewer 0.25.0 adds version 2 of `colmapview-camera-dataset`. It retains the original
+camera metadata and optional XYZ cloud while explicitly listing Gaussian sources:
+
+```json
+{
+  "format": "colmapview-camera-dataset",
+  "version": 2,
+  "metadataUrl": "https://data.example/pinned/mic/transforms_train.json",
+  "splats": ["https://data.example/pinned/trained/mic.ply"],
+  "viewerStatePath": "mic.state.json"
+}
+```
+
+`splats` contains 1–1,024 distinct, absolute HTTP(S) URLs without embedded
+credentials or fragments. Gaussian sources are classified and listed using the
+existing lazy source selector and desktop/touch transfer budgets. They never
+become sparse COLMAP points. Multiple alternatives remain separate sources.
+
+The optional `viewerStatePath` is a required saved-state sidecar when declared,
+relative to the camera manifest's own URL. Its `config.splat.transform` aligns the
+Gaussian coordinates with the unchanged camera world. A missing or invalid
+sidecar prevents committing a misaligned scene. The sidecar may select a source;
+publishers should leave oversized sources lazy instead of forcing a download.
+Metrics, export and sharing keep the camera manifest as the scene URL.
+Version 1 retains its strict contract; older viewers reject version 2.
+
 ## Separate source folders
 
 For a Hub-hosted manifest, set `baseUrl` to its published asset directory and use
