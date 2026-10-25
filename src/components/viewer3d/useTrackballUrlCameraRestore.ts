@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { decodeCameraState } from '../../hooks/useUrlState';
 import { appLogger } from '../../utils/logger';
 import { requestSceneRender } from '../../utils/sceneRenderInvalidation';
+import { getViewerStartupUrl } from '../../utils/hubViewerLaunch';
 import {
   applyTrackballUrlCameraState,
   shouldApplyTrackballUrlCameraState,
@@ -29,7 +30,7 @@ export function useTrackballUrlCameraRestore({
   const hasRestoredFromUrlRef = useRef(false);
 
   useEffect(() => {
-    const hash = window.location.hash;
+    const hash = getViewerStartupUrl().hash;
     if (!shouldStartTrackballUrlCameraRestore({
       hasRestoredFromUrl: hasRestoredFromUrlRef.current,
       hasReconstruction,

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-10-25
+
+### Fixed
+
+- Restore the saved camera from a short link's startup data in the active trackball controller. Supersede the unreleased 0.24.0 candidate before enabling Hub viewer documents.
+
 ## [0.24.0] - 2026-10-25
 
 ### Added

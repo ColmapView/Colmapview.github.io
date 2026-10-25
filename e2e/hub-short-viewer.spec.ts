@@ -1,15 +1,17 @@
 import { test, expect } from './fixtures/test-fixtures';
 import { readFileSync } from 'node:fs';
 import { encodeShareData } from '../src/utils/shareDataCodec';
+import { encodeCameraState } from '../src/utils/urlCameraStateCodec';
+import type { Page } from '@playwright/test';
 
 const shortPath = '/s/d/AAAAAAAAAAAAAAAA';
 const source = 'https://example.com/scene.manifest.json';
 const viewerUrl = `https://colmapview.opsiclear.com/?url=${encodeURIComponent(source)}`;
 
-test.beforeEach(async ({ page, baseURL }) => {
+async function installShortViewer(page: Page, baseURL: string | undefined, launchUrl = viewerUrl) {
   await page.route(`${baseURL}${shortPath}**`, async route => {
     const root = await route.fetch({ url: `${baseURL}/` });
-    const body = (await root.text()).replace('</head>', `<script id="colmapview-hub-launch" type="application/json">${JSON.stringify({ version: 1, viewerUrl })}</script></head>`);
+    const body = (await root.text()).replace('</head>', `<script id="colmapview-hub-launch" type="application/json">${JSON.stringify({ version: 1, viewerUrl: launchUrl })}</script></head>`);
     await route.fulfill({ response: root, body });
   });
   await page.route('https://example.com/**', route => {
@@ -23,9 +25,11 @@ test.beforeEach(async ({ page, baseURL }) => {
     }
     return route.abort();
   });
-});
+}
 
-async function sceneCount(page: import('@playwright/test').Page) {
+test.beforeEach(async ({ page, baseURL }) => { await installShortViewer(page, baseURL); });
+
+async function sceneCount(page: Page) {
   return page.evaluate(async () => {
     const modulePath = '/src/store/reconstructionStore.ts';
     const { useReconstructionStore } = await import(modulePath) as typeof import('../src/store/reconstructionStore');
@@ -35,6 +39,7 @@ async function sceneCount(page: import('@playwright/test').Page) {
 
 test('loads and reloads the native viewer at the short address', async ({ page }) => {
   await page.goto(shortPath);
+  await expect(page.locator('meta[name="colmapview-hub-launch"]')).toHaveAttribute('content', '1');
   await expect.poll(() => sceneCount(page)).toBeGreaterThan(0);
   expect(new URL(page.url()).pathname).toBe(shortPath);
   expect(new URL(page.url()).search).toBe('');
@@ -42,6 +47,26 @@ test('loads and reloads the native viewer at the short address', async ({ page }
   await page.reload();
   await expect.poll(() => sceneCount(page)).toBeGreaterThan(0);
   expect(new URL(page.url()).pathname).toBe(shortPath);
+});
+
+test('restores the saved camera and a newer visitor view through short-address reloads', async ({ page, baseURL }) => {
+  const state = (offset: number) => ({ position: [10 + offset, 20, 40] as [number, number, number],
+    target: [10 + offset, 20, 30] as [number, number, number], quaternion: [0, 0, 0, 1] as [number, number, number, number], distance: 10 });
+  await installShortViewer(page, baseURL, `${viewerUrl}#${encodeCameraState(state(0))}`);
+  const target = () => page.evaluate(async () => {
+    const path = '/src/store/stores/cameraStore.ts';
+    const { useCameraStore } = await import(path) as typeof import('../src/store/stores/cameraStore');
+    return useCameraStore.getState().currentViewState?.target.map(Math.round);
+  });
+  await page.goto(shortPath);
+  await expect.poll(target, { timeout: 15000 }).toEqual([10, 20, 30]);
+  await page.reload();
+  await expect.poll(target, { timeout: 15000 }).toEqual([10, 20, 30]);
+  await page.goto(`${shortPath}#${encodeCameraState(state(30))}`);
+  await page.reload();
+  await expect.poll(target, { timeout: 15000 }).toEqual([40, 20, 30]);
+  expect(new URL(page.url()).pathname).toBe(shortPath);
+  expect(new URL(page.url()).search).toBe('');
 });
 
 test('pins the short dataset while restoring fragment settings and clears to the landing page', async ({ page }) => {
