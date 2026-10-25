@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.5] - 2026-10-25
+
+### Changed
+
+- Disclose the Hub's upcoming consent-based analytics cookies, session and interaction measurement, consent renewal, withdrawal, browser privacy choices, retention and international transfers. Earlier cookieless consent does not authorize the expanded measurement. The viewer and policy pages continue to load no analytics.
+
 ## [0.23.4] - 2026-10-24
 
 ### Fixed

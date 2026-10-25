@@ -1,7 +1,7 @@
 {
   "name": "colmapview",
   "private": true,
-  "version": "0.23.4",
+  "version": "0.23.5",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
