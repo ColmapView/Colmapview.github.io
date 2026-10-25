@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import pkg from './package.json';
 import { resolveViteLocalAliasPolicy } from './viteLocalAliasPolicy';
 import { videoDecoderAsset } from './viteVideoDecoderAsset';
+import { licenseNotices } from './viteLicenseNotices';
 
 export default defineConfig(({ mode }) => {
   const googleDriveClientId = process.env.VITE_GOOGLE_DRIVE_CLIENT_ID
@@ -19,7 +20,7 @@ export default defineConfig(({ mode }) => {
   const topLevelThreePath = path.resolve(__dirname, 'node_modules/three').replace(/\\/g, '/');
 
   return {
-    plugins: [react(), videoDecoderAsset()],
+    plugins: [react(), videoDecoderAsset(), licenseNotices(__dirname)],
     worker: { format: 'es' },
 
     test: {
@@ -85,6 +86,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
+      license: { fileName: 'licenses/dependencies.json' },
       sourcemap: false,
       target: 'esnext',
       // Spark 2.2 is an optional lazy chunk of roughly 2.6 MB minified.

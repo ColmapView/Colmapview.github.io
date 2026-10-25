@@ -50,13 +50,21 @@ This software includes or depends on the following third-party components:
   Font binaries are redistributed from the Fontsource packages without changes.
   The fonts retain their OFL license; the application's AGPL does not replace it.
 - Mediabunny 1.62.1 (MPL-2.0) - https://github.com/Vanilagy/mediabunny
+  Corresponding source: https://github.com/Vanilagy/mediabunny/tree/v1.62.1
 - FFmpeg.wasm JavaScript interface 0.12.15 (MIT License) and single-thread core
   0.12.10 (GPL-2.0-or-later), used in a separate, on-demand browser Worker.
-  Source, build instructions and component licenses:
-  https://github.com/ffmpegwasm/ffmpeg.wasm
+  Core 0.12.10 source and complete Docker build instructions (including the
+  pinned FFmpeg and supporting library source locations):
+  https://github.com/ffmpegwasm/ffmpeg.wasm/tree/71aa99d37c02a7b4c435275ca9ef50e612f6efa1
   https://ffmpegwasm.netlify.app/docs/overview/#licensing
 
-See package.json for a complete list of dependencies and their licenses.
+Every production build emits licenses/dependencies.md with the bundled
+dependencies' versions, copyright notices and full license texts. The About
+page links to it. Separately copied font notices remain in public/fonts/.
+public/licenses/supplements.json records reviewed notice sources for packages
+whose npm tarballs omit license files. Builds reject unreviewed missing notices
+and require supplement review when one of those package versions changes.
+See package.json and package-lock.json for the dependency inventory.
 
 ================================================================================
 CONTACT

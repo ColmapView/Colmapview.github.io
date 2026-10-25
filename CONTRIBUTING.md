@@ -60,4 +60,13 @@ See `playwright.config.ts` for the WebGPU projects. Hardware and bicycle tests r
 
 Update `CHANGELOG.md` and set both package versions with `npm version X.Y.Z --no-git-tag-version`. Run the checks, commit the release, then create a matching `vX.Y.Z` tag. The [dual-host deployment guide](docs/dual-hosting.md) owns host configuration, publication and verification details.
 
+Production builds emit `licenses/dependencies.md` using Vite's module inventory.
+`viteLicenseNotices.ts` completes missing notices from reviewed upstream copies in
+`public/licenses/supplements.json` and includes separately copied archive/vendor
+code. A dependency update that changes a supplemented version requires checking
+its upstream license and updating the recorded version and source. Missing text
+fails the build. Keep complete font copyrights and OFL copies in `public/fonts/`;
+the font distribution tests compare them with the installed packages. Builds do
+not fetch licenses from the network.
+
 Pushes to `main` publish `/dev/`. Version tags publish `/vX.Y.Z/`, update `/latest/`, and publish the configured custom viewer after validation. A tag that disagrees with `package.json` is rejected.

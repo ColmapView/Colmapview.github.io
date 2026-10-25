@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.4] - 2026-10-24
+
+### Fixed
+
+- Distribute full dependency licenses with every production build and link them from About. Complete omitted npm license files from reviewed upstream copies, include separately copied archive and vendor code, and reject missing or stale supplements before publication.
+- Pin the native FFmpeg core source and Docker build instructions to its actual release commit. Keep dataset, font and dependency licenses separate from the viewer's AGPL.
+
 ## [0.23.3] - 2026-10-24
+
+Prepared and superseded by 0.23.4 before deployment.
 
 ### Fixed
 
