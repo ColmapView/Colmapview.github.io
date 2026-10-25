@@ -8,6 +8,8 @@ for (const software of [false, true]) {
     });
     const root = baseURL + '/e2e/fixtures/video-frames/';
     const bytes = (await stat('e2e/fixtures/video-frames/colors.mp4')).size;
+    await page.route(root + 'cameras.txt', route => route.fulfill({ body: '1 PINHOLE 64 80 64 64 32 40\n2 PINHOLE 64 80 64 64 32 40\n' }));
+    await page.route(root + 'images.txt', route => route.fulfill({ body: '1 1 0 0 0 0 0 0 1 a.png\n\n2 1 0 0 0 1 0 0 2 b.png\n\n' }));
     await page.route('**/camera-video.manifest.json', route => route.fulfill({ json: {
       version: 4, name: 'Camera video fixture', baseUrl: root,
       files: { cameras: 'cameras.txt', images: 'images.txt' }, splats: [],
@@ -29,6 +31,25 @@ for (const software of [false, true]) {
     const red = await pixel(first), green = await pixel(second);
     expect(red[0]).toBeGreaterThan(200); expect(red[1]).toBeLessThan(20);
     expect(green[1]).toBeGreaterThan(90); expect(green[0]).toBeLessThan(20);
+    await page.clock.install();
+    await page.evaluate(async () => {
+      const module = '/src/store/index.ts';
+      const { useReconstructionStore } = await import(module) as typeof import('../src/store');
+      useReconstructionStore.getState().loadedFiles!.videoFrames!.clear();
+    });
+    await page.getByTestId('image-gallery-toolbar-slot').hover();
+    await page.getByRole('combobox', { name: 'Camera filter' }).selectOption('1');
+    await expect(first).toBeVisible();
+    await page.getByTestId('image-gallery-toolbar-slot').hover();
+    await page.getByRole('combobox', { name: 'Camera filter' }).selectOption('all');
+    await page.clock.runFor(1000);
+    await expect(second).toBeVisible();
+    expect(await pixel(second)).toEqual(green);
+    expect(await page.evaluate(async () => {
+      const module = '/src/store/index.ts';
+      const { useReconstructionStore } = await import(module) as typeof import('../src/store');
+      return useReconstructionStore.getState().loadedFiles!.videoFrames!.getStats().count;
+    })).toBe(0);
     expect(errors).toEqual([]);
   });
 }

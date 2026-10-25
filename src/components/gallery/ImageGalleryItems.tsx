@@ -79,8 +79,10 @@ export const GalleryItem = memo(function GalleryItem({
   const { multiCamera } = useImageGalleryItemStoreFacade();
   const canLoadThumbnail = !isScrolling && !skipImages && !isSettling && !isResizing;
   const isGeneratedMaskedImage = thumbnailDisplayMode === 'maskedImage' || thumbnailDisplayMode === 'inverseMaskedImage';
-  const imageSrc = useThumbnail(img.file, img.name, canLoadThumbnail && thumbnailDisplayMode !== 'mask' && !isGeneratedMaskedImage);
-  const maskSrc = useThumbnail(img.maskFile, `mask:${img.name}`, canLoadThumbnail && thumbnailDisplayMode !== 'image' && !isGeneratedMaskedImage);
+  const imageSrc = useThumbnail(img.file, img.name, canLoadThumbnail && thumbnailDisplayMode !== 'mask' && !isGeneratedMaskedImage,
+    { retainCached: !skipImages && thumbnailDisplayMode !== 'mask' && !isGeneratedMaskedImage });
+  const maskSrc = useThumbnail(img.maskFile, `mask:${img.name}`, canLoadThumbnail && thumbnailDisplayMode !== 'image' && !isGeneratedMaskedImage,
+    { retainCached: !skipImages && thumbnailDisplayMode !== 'image' && !isGeneratedMaskedImage });
   const maskedImageSrc = useMaskedThumbnail(
     img.file,
     img.maskFile,
@@ -195,8 +197,10 @@ export const ListItem = memo(function ListItem({
   const { multiCamera } = useImageGalleryItemStoreFacade();
   const canLoadThumbnail = !isScrolling && !skipImages && !isSettling && !isResizing;
   const isGeneratedMaskedImage = thumbnailDisplayMode === 'maskedImage' || thumbnailDisplayMode === 'inverseMaskedImage';
-  const imageSrc = useThumbnail(img.file, img.name, canLoadThumbnail && thumbnailDisplayMode !== 'mask' && !isGeneratedMaskedImage);
-  const maskSrc = useThumbnail(img.maskFile, `mask:${img.name}`, canLoadThumbnail && thumbnailDisplayMode !== 'image' && !isGeneratedMaskedImage);
+  const imageSrc = useThumbnail(img.file, img.name, canLoadThumbnail && thumbnailDisplayMode !== 'mask' && !isGeneratedMaskedImage,
+    { retainCached: !skipImages && thumbnailDisplayMode !== 'mask' && !isGeneratedMaskedImage });
+  const maskSrc = useThumbnail(img.maskFile, `mask:${img.name}`, canLoadThumbnail && thumbnailDisplayMode !== 'image' && !isGeneratedMaskedImage,
+    { retainCached: !skipImages && thumbnailDisplayMode !== 'image' && !isGeneratedMaskedImage });
   const maskedImageSrc = useMaskedThumbnail(
     img.file,
     img.maskFile,

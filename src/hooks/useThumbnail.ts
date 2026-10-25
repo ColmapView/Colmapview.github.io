@@ -94,12 +94,15 @@ export function prefetchThumbnails(
  * @param imageFile - The image file to load
  * @param imageName - Unique identifier for caching
  * @param enabled - Whether to load the thumbnail
+ * @param options.retainCached - Keep an existing thumbnail visible while new loads are paused
  * @returns The thumbnail URL or null
  */
 export function useThumbnail(
   imageFile: File | undefined,
   imageName: string,
-  enabled: boolean
+  enabled: boolean,
+  { retainCached = false }: { retainCached?: boolean } = {}
 ): string | null {
-  return thumbnailCache.useCache(imageFile, imageName, enabled);
+  const cached = retainCached && thumbnailCache.getCached(imageName) !== null;
+  return thumbnailCache.useCache(imageFile, imageName, enabled || cached);
 }

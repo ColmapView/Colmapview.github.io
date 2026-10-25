@@ -110,6 +110,10 @@ Frames are requested asynchronously through the existing gallery, camera-plane,
 detail and export image access. Concurrent requests for one registered image
 coalesce. A selected camera takes priority over queued background work. The
 64 MiB frame cache evicts older PNG files; moving away cancels unneeded work.
+Small thumbnails of the matching frames are kept separately for the open dataset.
+Returning to the gallery reuses them after full-resolution frame eviction.
+Scrolling pauses new loads while keeping cached thumbnails visible; loading a
+different dataset clears them.
 Each read releases its demuxer, compressed cache and decoder, and replacing or
 clearing the scene aborts pending reads and clears retained frames.
 

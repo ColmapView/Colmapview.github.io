@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DatasetAccessOptions } from '../../dataset/types';
 import type { Reconstruction } from '../../types/colmap';
+import { getCachedThumbnailUrl } from '../../hooks/useThumbnail';
 import type { GalleryThumbnailDisplayMode, ImageData, ViewMode } from './useImageGalleryViewModel';
 import {
   collectVisibleImageNames,
@@ -49,6 +50,7 @@ export function useImageGalleryVisibleImageFetch({
 }: UseImageGalleryVisibleImageFetchOptions) {
   const shouldFetchImages = thumbnailDisplayMode !== 'mask' && dataset.hasImages();
   const shouldFetchMasks = thumbnailDisplayMode !== 'image' && dataset.hasMasks();
+  const needsSourcePixels = thumbnailDisplayMode === 'maskedImage' || thumbnailDisplayMode === 'inverseMaskedImage';
   const enabled = reconstruction !== null && !debouncedIsScrolling && !isSettling
     && (shouldFetchImages || shouldFetchMasks);
   const visibleItems = enabled
@@ -63,8 +65,8 @@ export function useImageGalleryVisibleImageFetch({
     visibleIndexes: visibleItems.map(item => item.index),
     hasCachedImage: () => false,
   }).sort());
-  const identity = useMemo(() => ({ dataset, reconstruction, visibleNamesKey, shouldFetchImages, shouldFetchMasks }),
-    [dataset, reconstruction, visibleNamesKey, shouldFetchImages, shouldFetchMasks]);
+  const identity = useMemo(() => ({ dataset, reconstruction, visibleNamesKey, shouldFetchImages, shouldFetchMasks, needsSourcePixels }),
+    [dataset, reconstruction, visibleNamesKey, shouldFetchImages, shouldFetchMasks, needsSourcePixels]);
   const [failures, setFailures] = useState(() => ({ identity, keys: new Set<string>() }));
   if (failures.identity !== identity) setFailures({ identity, keys: new Set() });
   const [attempt, setAttempt] = useState(0);
@@ -105,11 +107,11 @@ export function useImageGalleryVisibleImageFetch({
     // Snapshot reads do not affect recency. Acquire every retained visible File
     // before missing batches can evict an older, still-visible image/mask pair.
     for (const name of visibleNames) {
-      if (shouldFetchImages) {
+      if (shouldFetchImages && (needsSourcePixels || getCachedThumbnailUrl(name) === null)) {
         if (dataset.getImageSync(name) === undefined) imageNames.push(name);
         else cachedConsumers.push(fetchFile(name, false));
       }
-      if (shouldFetchMasks) {
+      if (shouldFetchMasks && (needsSourcePixels || getCachedThumbnailUrl(`mask:${name}`) === null)) {
         if (dataset.getMaskSync(name) === undefined) maskNames.push(name);
         else cachedConsumers.push(fetchFile(name, true));
       }
@@ -152,6 +154,7 @@ export function useImageGalleryVisibleImageFetch({
     visibleNamesKey,
     shouldFetchImages,
     shouldFetchMasks,
+    needsSourcePixels,
     refreshImageCacheVersion,
     identity,
     attempt,

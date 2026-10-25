@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildFile, buildReconstruction } from '../../test/builders';
 import { useImageGalleryVisibleImageFetch } from './useImageGalleryVisibleImageFetch';
 import { createUrlFileCache } from '../../dataset/urlFileCache';
@@ -9,6 +9,9 @@ import type { DatasetAccessOptions } from '../../dataset/types';
 type HookOptions = Parameters<typeof useImageGalleryVisibleImageFetch>[0];
 
 const reconstruction = buildReconstruction();
+const { cachedThumbnails } = vi.hoisted(() => ({ cachedThumbnails: new Map<string, string>() }));
+vi.mock('../../hooks/useThumbnail', () => ({ getCachedThumbnailUrl: (name: string) => cachedThumbnails.get(name) ?? null }));
+beforeEach(() => cachedThumbnails.clear());
 
 function createVirtualizer(visibleIndexes: number[]) {
   return {
@@ -64,6 +67,27 @@ function createOptions(overrides: Partial<HookOptions> = {}): HookOptions {
 }
 
 describe('useImageGalleryVisibleImageFetch', () => {
+  it('reuses matching-frame thumbnails after full-resolution files have been evicted', () => {
+    cachedThumbnails.set('cached.jpg', 'blob:matching-frame');
+    const dataset = createDataset();
+    renderHook(useImageGalleryVisibleImageFetch, { initialProps: createOptions({ dataset,
+      rows: [[{ name: 'cached.jpg' }]], images: [{ name: 'cached.jpg' }], rowVirtualizer: createVirtualizer([0]) }) });
+    expect(dataset.getImage).not.toHaveBeenCalled();
+  });
+
+  it('reuses mask thumbnails but still requests source pixels when composing a masked preview', async () => {
+    cachedThumbnails.set('cached.jpg', 'blob:matching-frame');
+    cachedThumbnails.set('mask:cached.jpg', 'blob:mask');
+    const dataset = createDataset({ hasMasks: true });
+    const options = createOptions({ dataset, thumbnailDisplayMode: 'hoverMask',
+      rows: [[{ name: 'cached.jpg' }]], images: [{ name: 'cached.jpg' }], rowVirtualizer: createVirtualizer([0]) });
+    const { rerender } = renderHook(useImageGalleryVisibleImageFetch, { initialProps: options });
+    expect(dataset.getImage).not.toHaveBeenCalled();
+    expect(dataset.getMask).not.toHaveBeenCalled();
+    rerender({ ...options, thumbnailDisplayMode: 'maskedImage' });
+    await waitFor(() => expect(dataset.getImage).toHaveBeenCalledOnce());
+    await waitFor(() => expect(dataset.getMask).toHaveBeenCalledOnce());
+  });
   it('publishes masks cached by another consumer without restarting on the refreshed snapshot', async () => {
     const dataset = createDataset({ hasImages: false, hasMasks: true, cachedMaskNames: ['cached.jpg'] });
     const options = createOptions({ dataset, thumbnailDisplayMode: 'image', rows: [[{ name: 'cached.jpg' }]],

@@ -63,7 +63,7 @@ The 305 additional camera-only pairs are now discoverable from their physical li
 | [Uniiii/eth3d_v2](https://huggingface.co/datasets/Uniiii/eth3d_v2) | 38 | Flattened courtyard photo collection recovered; distorted and undistorted branches remain distinct. |
 | [Zqlin/TwinWorld_Datasets](https://huggingface.co/datasets/Zqlin/TwinWorld_Datasets) | 3 | All three original RGB files downloaded; native archive and pinned HF URL load/export checks preserve their bytes. |
 | [dynamic-maps/hard-intersection-multimodal-sample](https://huggingface.co/datasets/dynamic-maps/hard-intersection-multimodal-sample) | 448 | All registered names match the supplied listing. |
-| [nyuvideolab/danceNet3D](https://huggingface.co/datasets/nyuvideolab/danceNet3D) | 29 | Native poses load; no standalone RGB files are listed in this source. Video/shard frame extraction is not implemented. |
+| [nyuvideolab/danceNet3D](https://huggingface.co/datasets/nyuvideolab/danceNet3D) | 29 | Hub manifests map camera videos to their exact selected frames. Matching frames and gallery thumbnails are cached on demand; the source does not supply standalone RGB files. |
 | [Bugjudger/HDR_Pretrain](https://huggingface.co/datasets/Bugjudger/HDR_Pretrain) | 35 | All registered names match listed LDR images. No depth support was added. |
 | [yutofurutani/WildCity](https://huggingface.co/datasets/yutofurutani/WildCity) | 50 | All registered names match the listing. The final text observation terminator is repaired on export. |
 

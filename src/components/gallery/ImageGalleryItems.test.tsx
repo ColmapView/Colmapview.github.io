@@ -204,8 +204,8 @@ describe('ImageGallery list item', () => {
 
     expect(screen.getByAltText('frame.jpg mask')).toHaveAttribute('src', 'mask-url');
     expect(screen.queryByAltText('frame.jpg')).toBeNull();
-    expect(useThumbnailMock).toHaveBeenCalledWith(imageFile, 'frame.jpg', false);
-    expect(useThumbnailMock).toHaveBeenCalledWith(maskFile, 'mask:frame.jpg', true);
+    expect(useThumbnailMock).toHaveBeenCalledWith(imageFile, 'frame.jpg', false, { retainCached: false });
+    expect(useThumbnailMock).toHaveBeenCalledWith(maskFile, 'mask:frame.jpg', true, { retainCached: true });
   });
 
   it('renders the generated masked thumbnail in masked image display mode', () => {
@@ -224,8 +224,8 @@ describe('ImageGallery list item', () => {
     const thumbnail = screen.getByAltText('frame.jpg');
     expect(thumbnail).toHaveAttribute('src', 'masked-url');
     expect(screen.queryByAltText('frame.jpg mask')).toBeNull();
-    expect(useThumbnailMock).toHaveBeenCalledWith(imageFile, 'frame.jpg', false);
-    expect(useThumbnailMock).toHaveBeenCalledWith(maskFile, 'mask:frame.jpg', false);
+    expect(useThumbnailMock).toHaveBeenCalledWith(imageFile, 'frame.jpg', false, { retainCached: false });
+    expect(useThumbnailMock).toHaveBeenCalledWith(maskFile, 'mask:frame.jpg', false, { retainCached: false });
     expect(useMaskedThumbnailMock).toHaveBeenCalledWith(imageFile, maskFile, 'frame.jpg', true, false);
   });
 
@@ -245,8 +245,8 @@ describe('ImageGallery list item', () => {
     const thumbnail = screen.getByAltText('frame.jpg');
     expect(thumbnail).toHaveAttribute('src', 'inverse-masked-url');
     expect(screen.queryByAltText('frame.jpg mask')).toBeNull();
-    expect(useThumbnailMock).toHaveBeenCalledWith(imageFile, 'frame.jpg', false);
-    expect(useThumbnailMock).toHaveBeenCalledWith(maskFile, 'mask:frame.jpg', false);
+    expect(useThumbnailMock).toHaveBeenCalledWith(imageFile, 'frame.jpg', false, { retainCached: false });
+    expect(useThumbnailMock).toHaveBeenCalledWith(maskFile, 'mask:frame.jpg', false, { retainCached: false });
     expect(useMaskedThumbnailMock).toHaveBeenCalledWith(imageFile, maskFile, 'frame.jpg', true, true);
   });
 
