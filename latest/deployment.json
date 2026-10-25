@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "sourceSha": "bd2128c259cdd3bfbc491d74b8823ec155a136e2",
-  "version": "0.25.1",
-  "release": "v0.25.1",
+  "sourceSha": "8e9e1d7a5aca381e8194dc9d2a9dcacfb72fac3e",
+  "version": "0.25.2",
+  "release": "v0.25.2",
   "profile": "github",
   "base": "/latest/",
-  "indexHtmlSha256": "ff049eccf5e75e681ba4e6ea8785de6e27b7db950154fa3fa787ac3d277cd553",
+  "indexHtmlSha256": "12d27e38b2b5b95626af349d3764f7fb428438d3b40e5e6f3afbb12c50878ee8",
   "googleDrive": {
     "enabled": false,
     "allowedOrigin": null
