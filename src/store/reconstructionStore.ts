@@ -195,7 +195,7 @@ export type ReconstructionSourceType = 'local' | 'url' | 'manifest' | 'zip' | nu
 
 /**
  * Check if the current URL contains parameters that will trigger URL loading.
- * Checks for hash format (#d=...) and legacy query format (?url=...).
+ * Checks Hub startup data, hash format (#d=...) and legacy query format (?url=...).
  * Also detects inline manifest format (flag bit 2 set in #d=... data).
  */
 export function hasUrlToLoad(): boolean {
@@ -221,7 +221,8 @@ export function hasUrlToLoad(): boolean {
 /**
  * Inverse of hasUrlToLoad(): strip the auto-load request from the current URL so
  * hasUrlToLoad() returns false. Removes the legacy `?url=` query param and the
- * `#d=` share-data hash param (leaving any other hash params intact). Used when the
+ * `#d=` share-data hash param and raw Drive launch parameters (leaving other hash
+ * params intact). A Hub launch is released to the viewer root. Used when the
  * user declines a crash-loop reload — without this the DropZone landing panels stay
  * gated behind a load request that will never run, showing a permanent "Loading…".
  */
@@ -232,6 +233,8 @@ export function clearUrlLoadRequestFromLocation(
     const url = new URL(win.location.href);
     if (win === window && clearHubViewerLaunch()) url.pathname = import.meta.env.BASE_URL;
     url.searchParams.delete('url');
+    url.searchParams.delete('drive');
+    url.searchParams.delete('state');
     const hashContent = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
     const hashParams = new URLSearchParams(hashContent);
     if (hashParams.has('d')) {

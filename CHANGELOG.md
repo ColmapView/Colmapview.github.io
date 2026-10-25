@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-10-25
+
+### Fixed
+
+- Keep a short link's dataset pinned when visitor query parameters contain a separate Drive launch request. Supersede the unreleased 0.24.1 candidate before Hub rollout.
+
 ## [0.24.1] - 2026-10-25
 
 ### Fixed

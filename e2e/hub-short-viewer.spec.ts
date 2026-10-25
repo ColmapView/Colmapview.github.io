@@ -74,7 +74,8 @@ test('pins the short dataset while restoring fragment settings and clears to the
     { ui: { backgroundColor: '#123456' }, camera: { selectedImageId: 2 } });
   const hostile: string[] = [];
   await page.route('https://attacker.example/**', route => { hostile.push(route.request().url()); return route.abort(); });
-  await page.goto(`${shortPath}?url=https://attacker.example/query.json#${hash}`);
+  const driveState = encodeURIComponent(JSON.stringify({ action: 'open', ids: ['unrelated-file'] }));
+  await page.goto(`${shortPath}?url=https://attacker.example/query.json&drive=open&state=${driveState}#${hash}`);
   await expect.poll(() => sceneCount(page)).toBeGreaterThan(0);
   expect(hostile).toEqual([]);
   const color = await page.evaluate(async () => {

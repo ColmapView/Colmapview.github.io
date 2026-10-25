@@ -50,7 +50,7 @@ function App() {
   const { loadFromUrl, loadFromManifest } = useUrlLoadActions({ applyUrlOverrides: true });
   const hasCheckedUrl = useRef(false);
   // Capture before child effects remove Drive's raw launch state from the address bar.
-  const [driveOpenWith] = useState(() => isGoogleDriveOpenWithSearch(window.location.search));
+  const [driveOpenWith] = useState(() => isGoogleDriveOpenWithSearch(getViewerStartupUrl().search));
 
   // Check for URL parameter on mount
   useEffect(() => {

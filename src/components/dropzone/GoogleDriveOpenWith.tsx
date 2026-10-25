@@ -7,6 +7,7 @@ import { googleDriveOpenWithHandoff, googleDriveOpenWithViewerUrl, parseGoogleDr
 import { getButtonClass } from '../../theme';
 import { AccountDialog } from '../ui/AccountDialog';
 import { DatasetAccountDialog } from './DatasetAccountDialog';
+import { getViewerStartupUrl } from '../../utils/hubViewerLaunch';
 
 interface GoogleDriveOpenWithProps extends StartupLoaders {
   onOpenUrlModal: () => void;
@@ -16,7 +17,7 @@ interface GoogleDriveOpenWithProps extends StartupLoaders {
 /** Keep Drive's selected file and sign in directly with Google before opening it. */
 export function GoogleDriveOpenWith({ loadFromUrl, loadFromManifest, onOpenUrlModal, onLoadRemoteDataset }: GoogleDriveOpenWithProps) {
   const id = useId();
-  const [request] = useState(() => parseGoogleDriveOpenWith(window.location.search));
+  const [request] = useState(() => parseGoogleDriveOpenWith(getViewerStartupUrl().search));
   const [dismissed, setDismissed] = useState(false);
   const prepared = useRef(false);
   const hosting = getGoogleDriveHostingConfig();

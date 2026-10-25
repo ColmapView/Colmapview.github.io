@@ -44,10 +44,11 @@ it('does not interpret bootstrap data on ordinary viewer pages', () => {
 });
 
 it('clears the launch and returns to the landing address when a share load is cancelled', () => {
-  launch(target);
+  launch(target, '/s/d/AAAAAAAAAAAAAAAA?drive=open&state=unrelated&embed=1');
   clearUrlLoadRequestFromLocation();
   expect(readHubViewerUrl()).toBeNull();
   expect(window.location.pathname).toBe('/');
+  expect(window.location.search).toBe('?embed=1');
   expect(hasUrlToLoad()).toBe(false);
 });
 
