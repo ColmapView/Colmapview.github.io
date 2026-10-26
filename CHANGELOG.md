@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.4] - 2026-10-26
+
+### Changed
+
+- Keep GitHub visitors on the GitHub viewer when opening datasets through Explore Hub. Preserve the choice through catalog navigation without cookies or arbitrary return URLs.
+- Remove the Explore Hub underline on desktop and touch layouts.
+- Generate smaller Hub previews in the browser: 320 × 168 low-quality JPEGs capped at 16 KiB, with image metadata removed.
+
 ## [0.25.3] - 2026-10-25
 
 ### Changed

@@ -130,7 +130,8 @@ test.describe('Hugging Face dataset publication', () => {
       const bitmap = await createImageBitmap(blob);
       try { return [bitmap.width, bitmap.height]; } finally { bitmap.close(); }
     }, requests[0].thumbnailBase64);
-    expect(dimensions).toEqual([600, 315]);
+    expect(dimensions).toEqual([320, 168]);
+    expect(atob(requests[0].thumbnailBase64).length).toBeLessThanOrEqual(16 * 1024);
     await dialog.getByRole('button', { name: 'Share on Hub', exact: true }).click();
     const listingDialog = page.getByRole('dialog', { name: 'Share on Hub', exact: true });
     await expect(listingDialog.getByLabel('Dataset title')).toHaveValue('scene');

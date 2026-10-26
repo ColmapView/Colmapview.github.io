@@ -13,6 +13,7 @@ import {
   UploadIcon,
 } from '../../icons';
 import { publicAsset } from '../../utils/paths';
+import { getHubCatalogUrl } from '../../features/colmapviewHub/config';
 import { ProfileDropdown } from './ProfileDropdown';
 import { DatasetAccountButtons } from './DatasetAccountButtons';
 import { LoadJsonHoverCard, LoadUrlHoverCard } from './DropZoneHoverCards';
@@ -34,7 +35,6 @@ import {
   DROP_ZONE_TOUCH_SUBTITLE,
   DROP_ZONE_TOUCH_TITLE,
   DROP_ZONE_UPLOAD_CONFIG_TOOLTIP,
-  HUB_CATALOG_URL,
   getDesktopDropZoneActionButtonClass,
   getDropZoneInfoLineClass,
   getDropZonePanelOverlayStyle,
@@ -217,11 +217,11 @@ export function DesktopDropZonePanel({
 
             <div className="relative">
               <a
-                href={HUB_CATALOG_URL}
+                href={getHubCatalogUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Browse public datasets on ColmapView Hub"
-                className={getDesktopDropZoneActionButtonClass(false)}
+                className={`${getDesktopDropZoneActionButtonClass(false)} no-underline`}
               >
                 <img src={publicAsset('LOGO.png')} alt="" className={DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS} />
                 {DROP_ZONE_ACTION_LABELS.explore}
@@ -281,11 +281,11 @@ export function TouchDropZonePanel({
           </button>
 
           <a
-            href={HUB_CATALOG_URL}
+            href={getHubCatalogUrl()}
             target="_blank"
             rel="noopener noreferrer"
             title="Browse public datasets on ColmapView Hub"
-            className={getTouchDropZoneExploreButtonClass(false)}
+            className={`${getTouchDropZoneExploreButtonClass(false)} no-underline`}
           >
             <img src={publicAsset('LOGO.png')} alt="" className={DROP_ZONE_TOUCH_ACTION_ICON_CLASS} />
             {DROP_ZONE_ACTION_LABELS.explore}

@@ -22,8 +22,14 @@ test.describe('DropZone', () => {
       const catalog = 'https://colmapview.opsiclear.com/hub/datasets/';
       await context.route(catalog, route => route.fulfill({ contentType: 'text/html', body: '<title>Public datasets</title>' }));
       await page.goto(`/?touch=${touch}`);
+      const explore = page.getByRole('link', { name: 'Explore Hub', exact: true });
+      await expect(explore).toHaveCSS('text-decoration-line', 'none');
+      await explore.hover();
+      await expect(explore).toHaveCSS('text-decoration-line', 'none');
+      await explore.focus();
+      await expect(explore).toHaveCSS('text-decoration-line', 'none');
       const opened = page.waitForEvent('popup');
-      await page.getByRole('link', { name: 'Explore Hub', exact: true }).click();
+      await explore.click();
       const hub = await opened;
       await expect(hub).toHaveURL(catalog);
       await expect(hub).toHaveTitle('Public datasets');

@@ -1,8 +1,8 @@
 import { bytesToBase64 } from '../../utils/base64';
 
-export const HUB_PREVIEW_WIDTH = 600;
-export const HUB_PREVIEW_HEIGHT = 315;
-const MAX_PREVIEW_BYTES = 64 * 1024;
+export const HUB_PREVIEW_WIDTH = 320;
+export const HUB_PREVIEW_HEIGHT = 168;
+const MAX_PREVIEW_BYTES = 16 * 1024;
 
 /** The centered source rectangle that fills the target without letterboxing. */
 export function coverCrop(width: number, height: number, targetWidth = HUB_PREVIEW_WIDTH, targetHeight = HUB_PREVIEW_HEIGHT) {
@@ -40,7 +40,7 @@ export function stripJpegMetadata(bytes: Uint8Array): Uint8Array {
   return result;
 }
 
-/** The card image: the upload's preview cropped to fill 600 × 315, as a JPEG of at most 64 KiB. */
+/** The card image: the upload's preview cropped to fill 320 × 168, as a JPEG of at most 16 KiB. */
 export async function makeHubThumbnail(preview: Blob): Promise<string> {
   const bitmap = await createImageBitmap(preview);
   const canvas = document.createElement('canvas');
@@ -53,7 +53,7 @@ export async function makeHubThumbnail(preview: Blob): Promise<string> {
     context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
     const crop = coverCrop(bitmap.width, bitmap.height);
     context.drawImage(bitmap, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
-    for (const quality of [0.7, 0.6, 0.5, 0.4, 0.3]) {
+    for (const quality of [0.45, 0.35, 0.25, 0.15]) {
       const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
       if (!blob) continue;
       const bytes = stripJpegMetadata(new Uint8Array(await blob.arrayBuffer()));

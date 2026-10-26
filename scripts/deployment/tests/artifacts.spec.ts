@@ -234,6 +234,10 @@ for (const directory of profiles) {
           expect(response?.headers()['cache-control']).toBe('public, no-cache, no-transform');
         }
         await expect(page.getByRole('button', { name: 'Browse for a COLMAP dataset folder', exact: true })).toBeVisible();
+        const explore = page.getByRole('link', { name: 'Explore Hub', exact: true });
+        await expect(explore).toHaveAttribute('href', 'https://colmapview.opsiclear.com/hub/datasets/'
+          + (origin === GITHUB_ORIGIN ? '?viewerHost=github' : ''));
+        await expect(explore).toHaveCSS('text-decoration-line', 'none');
         await expect(page.getByRole('button', { name: 'Google Drive account', exact: true })).toHaveCount(enabled ? 1 : 0);
         await expect(page.getByRole('button', { name: 'Publish to Google Drive', exact: true })).toHaveCount(0);
         await page.getByRole('button', { name: 'Dismiss this panel', exact: true }).click();

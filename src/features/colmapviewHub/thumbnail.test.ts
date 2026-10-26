@@ -18,7 +18,7 @@ describe('coverCrop', () => {
   it('crops the sides of a wide image', () => {
     const crop = coverCrop(1200, 300);
     expect(crop.height).toBeCloseTo(300);
-    expect(crop.width).toBeCloseTo(300 * 600 / 315);
+    expect(crop.width).toBeCloseTo(300 * 320 / 168);
     expect(crop.x).toBeCloseTo((1200 - crop.width) / 2);
     expect(crop.y).toBeCloseTo(0);
   });
@@ -26,7 +26,7 @@ describe('coverCrop', () => {
   it('crops the top and bottom of a tall image', () => {
     const crop = coverCrop(300, 1200);
     expect(crop.width).toBe(300);
-    expect(crop.height).toBeCloseTo(300 * 315 / 600);
+    expect(crop.height).toBeCloseTo(300 * 168 / 320);
     expect(crop.y).toBeCloseTo((1200 - crop.height) / 2);
   });
 
@@ -66,7 +66,7 @@ describe('bytesToBase64', () => {
 describe('makeHubThumbnail', () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-  it('fills a white 600 × 315 canvas, draws the crop over it, and sends the first encoding that fits 64 KiB once stripped', async () => {
+  it('fills a white 320 × 168 canvas, draws the crop over it, and sends the first encoding that fits 16 KiB once stripped', async () => {
     const bitmap = { width: 1200, height: 300, close: vi.fn() };
     const calls: string[] = [];
     const drawImage = vi.fn(() => { calls.push('draw'); });
@@ -77,19 +77,19 @@ describe('makeHubThumbnail', () => {
       // EXIF and the comment add 35 bytes: neither encoding fits with them, and only the second fits without them.
       toBlob(done: BlobCallback, type: string, quality: number) {
         encodings.push([type, quality, this.width, this.height]);
-        done(new NodeBlob([padded(quality > 0.65 ? 64 * 1024 + 1 : 64 * 1024, exif, comment)]) as unknown as Blob);
+        done(new NodeBlob([padded(quality > 0.4 ? 16 * 1024 + 1 : 16 * 1024, exif, comment)]) as unknown as Blob);
       },
     };
     vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap));
     vi.spyOn(document, 'createElement').mockReturnValue(canvas as unknown as HTMLElement);
     const sent = await makeHubThumbnail(new Blob());
     const crop = coverCrop(1200, 300);
-    expect(context.fillRect).toHaveBeenCalledExactlyOnceWith(0, 0, 600, 315);
+    expect(context.fillRect).toHaveBeenCalledExactlyOnceWith(0, 0, 320, 168);
     expect(calls).toEqual(['fill #ffffff', 'draw']);
-    expect(drawImage).toHaveBeenCalledExactlyOnceWith(bitmap, crop.x, crop.y, crop.width, crop.height, 0, 0, 600, 315);
-    expect(encodings).toEqual([['image/jpeg', 0.7, 600, 315], ['image/jpeg', 0.6, 600, 315]]);
-    expect(sent).toBe(bytesToBase64(padded(64 * 1024)));
-    expect(atob(sent)).toHaveLength(64 * 1024);
+    expect(drawImage).toHaveBeenCalledExactlyOnceWith(bitmap, crop.x, crop.y, crop.width, crop.height, 0, 0, 320, 168);
+    expect(encodings).toEqual([['image/jpeg', 0.45, 320, 168], ['image/jpeg', 0.35, 320, 168]]);
+    expect(sent).toBe(bytesToBase64(padded(16 * 1024)));
+    expect(atob(sent)).toHaveLength(16 * 1024);
     expect(bitmap.close).toHaveBeenCalledOnce();
     expect(canvas).toMatchObject({ width: 1, height: 1 });
   });

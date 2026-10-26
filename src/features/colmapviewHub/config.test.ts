@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { getHubBaseUrl } from './config';
+import { getHubBaseUrl, getHubCatalogUrl } from './config';
 
 const production = { protocol: 'https:', hostname: 'colmapview.opsiclear.com' };
+
+describe('getHubCatalogUrl', () => {
+  it('requests the GitHub viewer for Explore Hub on the exact GitHub origin', () => {
+    expect(getHubCatalogUrl({ origin: 'https://colmapview.github.io' }))
+      .toBe('https://colmapview.opsiclear.com/hub/datasets/?viewerHost=github');
+  });
+
+  it.each(['https://colmapview.opsiclear.com', 'http://localhost:5173',
+    'https://colmapview.github.io.evil.example', 'https://colmapview-preview.pages.dev'])(
+    'keeps the normal catalog destination on %s', origin => {
+      expect(getHubCatalogUrl({ origin })).toBe('https://colmapview.opsiclear.com/hub/datasets/');
+    });
+});
 
 describe('getHubBaseUrl', () => {
   it('uses VITE_HUB_BASE_URL first, trimmed and without a trailing slash', () => {

@@ -19,6 +19,14 @@ The application enforces the origin restriction before Drive SDK, API, Picker or
 
 ## One-time hosting setup
 
+**Explore Hub** from the GitHub viewer adds `viewerHost=github` to its public Hub
+catalog link. Dataset cards, full metadata and asynchronously loaded results keep
+that choice and open the GitHub `/latest/` viewer with the exact dataset and saved
+view state. The hint is restricted to that fixed viewer destination and creates no
+cookie or stored user profile. Direct Hub visits keep their normal short-address
+viewer behavior; copied canonical share links remain independent of this browse
+preference. Drive links still use the GitHub viewer's explicit custom-host handoff.
+
 **Confirmed 2026-10-06 UTC, live baseline `c517`:** the owner's Cloudflare account controls `opsiclear.com`; Pages projects `colmapview-opsiclear` and `colmapview-preview` exist with production branch `main`. The custom domain/CNAME is associated, Cloudflare reports **Active**, and public DNS A records resolve. The custom viewer and canonical policy pages return HTTP 200. The HTML-only `no-transform` fix is deployed: public HTTP and fresh Chromium checks match the prepared artifact's exact HTML checksum, with no idle analytics or provider traffic.
 
 The separate Google project `colmapview-prod-20261006` has Drive+Picker enabled, a Web client registered for exactly `https://colmapview.opsiclear.com`, and a browser key restricted to those APIs with referrers `https://colmapview.opsiclear.com/*` and `https://docs.google.com/*`. It declares only `drive.file` and is **External / Production**. Verification Center explicitly says scope verification is not required because no sensitive or restricted scopes are requested. Canonical Branding URLs `/about`, `/privacy` and `/terms` are saved. After Publish branding, Google confirms **branding is verified and being shown to users**. Google consent uses the available owner support identity `opsiclear@gmail.com`; public support/privacy remains `info@opsiclear.com`. The separate development project remains Testing.

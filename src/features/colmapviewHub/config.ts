@@ -1,6 +1,13 @@
 const PRODUCTION_HUB = 'https://colmapview.opsiclear.com/hub';
 const HUB_HOSTS = new Set(['colmapview.opsiclear.com', 'colmapview.github.io']);
 
+/** Keep catalog launches on the GitHub viewer when Explore Hub starts there. */
+export function getHubCatalogUrl(location: Pick<Location, 'origin'> = window.location): string {
+  const url = new URL(PRODUCTION_HUB + '/datasets/');
+  if (location.origin === 'https://colmapview.github.io') url.searchParams.set('viewerHost', 'github');
+  return url.href;
+}
+
 /**
  * Where this viewer creates Hub links: VITE_HUB_BASE_URL when set (development and e2e), otherwise
  * the production Hub on the two production hosts. Anywhere else the Hub is off: no disclosure, no request, no Hub UI.
