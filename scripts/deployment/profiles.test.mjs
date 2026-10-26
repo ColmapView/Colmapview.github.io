@@ -9,7 +9,7 @@ import { CUSTOM_ORIGIN, FIXTURE_GOOGLE_CONFIG, WRANGLER_VERSION, previewAliasUrl
 import { fetchVerifiedArtifact, htmlSha256, verifyPolicyHtml } from './artifact-verification.mjs';
 import { cloudflareStaticHeaders } from './headers.mjs';
 import { startArtifactServer } from './static-server.mjs';
-import { githubRootTarget, githubHubTarget, githubShareTarget } from './github-share-redirect.mjs';
+import { githubRootTarget, githubShareTarget } from './github-share-redirect.mjs';
 import { archivedPage } from './prepare-archived-pages.mjs';
 
 test('archive privacy patches remove only known analytics and remote font integrations', () => {
@@ -57,42 +57,19 @@ test('GitHub short links forward only recognized IDs to the fixed Hub host', () 
   }
 });
 
-test('GitHub Hub entry points preserve catalog filters and select only the GitHub viewer', () => {
-  for (const pathname of ['/hub', '/hub/', '/hub/index.html', '/hub/datasets', '/hub/datasets/', '/hub/datasets/index.html']) {
-    const search = '?q=two+words&dataset=hf-scene&photos=available&licenseCategory=commercial&sort=new&page=2'
-      + '&viewerHost=https://evil.example&url=https://private.example/&code=secret&state=secret&next=https://evil.example';
-    const target = new URL(githubHubTarget({ pathname, search, hash: '#delete-key' }));
-    assert.equal(target.origin, 'https://colmapview.opsiclear.com');
-    assert.equal(target.pathname, '/hub/datasets/');
-    assert.deepEqual(Object.fromEntries(target.searchParams), { q: 'two words', dataset: 'hf-scene', licenseCategory: 'commercial',
-      sort: 'new', photos: 'available', page: '2', viewerHost: 'github' });
-    assert.equal(target.hash, '');
-  }
-  assert.equal(githubHubTarget({ pathname: '/hub/' }), 'https://colmapview.opsiclear.com/hub/datasets/?viewerHost=github');
-  for (const pathname of ['/hub/manage/HappyTree', '/hub/HappyTree', '/hub/datasets/api/entries', '/hub/datasets/individual/index.json',
-    '/hub/other', '/hubx/', '/latest/hub/', '/unknown', '//evil.example/hub/']) {
-    assert.equal(githubHubTarget({ pathname, search: '?next=https://evil.example' }), null, pathname);
-  }
-});
-
 test('GitHub root routing is built before smoke checks and publishes the tested artifact', () => {
   const steps = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8')).jobs.deploy.steps;
   const build = steps.findIndex(step => step.name === 'Create root redirect');
   assert.ok(build >= 0 && build < steps.findIndex(step => step.name === 'Smoke prepared artifacts'));
   assert.equal(steps[build].run, 'node scripts/deployment/build-github-root.mjs');
-  const output = '.tmp/deployment-root-test';
+  const output = mkdtempSync('.tmp/deployment-root-test-');
   const result = spawnSync(process.execPath, ['scripts/deployment/build-github-root.mjs', `--out=${output}`]);
   assert.equal(result.status, 0, result.stderr.toString());
   const index = readFileSync(`${output}/index.html`, 'utf8');
   assert.match(index, /<noscript><meta http-equiv="refresh" content="0; url=\/latest\/">/);
   assert.match(index, /src="\/share-redirect.js\?v=[a-f0-9]{12}"/);
   assert.match(readFileSync(`${output}/404.html`, 'utf8'), /src="\/share-redirect.js\?v=[a-f0-9]{12}"/);
-  for (const directory of ['hub', 'hub/datasets']) {
-    const hub = readFileSync(`${output}/${directory}/index.html`, 'utf8');
-    assert.match(hub, /<noscript><meta http-equiv="refresh" content="0; url=https:\/\/colmapview.opsiclear.com\/hub\/datasets\/\?viewerHost=github">/);
-    assert.match(hub, /name="referrer" content="no-referrer"/);
-    assert.match(hub, /src="\/share-redirect.js\?v=[a-f0-9]{12}"/);
-  }
+  assert.equal(readdirSync(output).includes('hub'), false, 'Root releases preserve the separately published gallery.');
   assert.equal(readFileSync(`${output}/share-redirect.js`, 'utf8'), readFileSync('scripts/deployment/github-share-redirect.mjs', 'utf8'));
   assert.equal(steps.find(step => step.name === 'Deploy root').with.publish_dir, './.tmp/deployment/root');
 });

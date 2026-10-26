@@ -1,11 +1,10 @@
 const PRODUCTION_HUB = 'https://colmapview.opsiclear.com/hub';
 const HUB_HOSTS = new Set(['colmapview.opsiclear.com', 'colmapview.github.io']);
 
-/** Keep catalog launches on the GitHub viewer when Explore Hub starts there. */
+/** Browse the gallery on the same production host; backend writes stay on Cloudflare. */
 export function getHubCatalogUrl(location: Pick<Location, 'origin'> = window.location): string {
-  const url = new URL(PRODUCTION_HUB + '/datasets/');
-  if (location.origin === 'https://colmapview.github.io') url.searchParams.set('viewerHost', 'github');
-  return url.href;
+  return location.origin === 'https://colmapview.github.io'
+    ? location.origin + '/hub/datasets/' : PRODUCTION_HUB + '/datasets/';
 }
 
 /**

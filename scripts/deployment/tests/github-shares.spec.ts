@@ -19,32 +19,6 @@ test('retains an encoded dataset query and view fragment when opening the Pages 
   await expect(page.getByRole('heading', { name: 'Latest viewer' })).toBeVisible();
 });
 
-for (const entry of ['/hub/', '/hub/datasets/']) {
-  test(`serves ${entry} and opens the public catalog with GitHub viewer selection`, async ({ page }) => {
-    const response = await page.request.get(`${server.origin}${entry}`);
-    expect(response.status()).toBe(200);
-    const target = 'https://colmapview.opsiclear.com/hub/datasets/?q=two+words&photos=available&viewerHost=github';
-    await page.route(target, route => route.fulfill({ contentType: 'text/html', body: '<h1>Hub catalog</h1>' }));
-    await page.goto(`${server.origin}${entry}?q=two%20words&photos=available&viewerHost=custom&url=private&code=secret#delete-key`);
-    await expect(page).toHaveURL(target);
-    await expect(page.getByRole('heading', { name: 'Hub catalog' })).toBeVisible();
-  });
-}
-
-test.describe('GitHub Hub entry point without JavaScript', () => {
-  test.use({ javaScriptEnabled: false });
-  test('opens the fixed catalog and retains a usable fallback link', async ({ page }) => {
-    const target = 'https://colmapview.opsiclear.com/hub/datasets/?viewerHost=github';
-    const response = await page.request.get(`${server.origin}/hub/`);
-    expect(response.status()).toBe(200);
-    expect(await response.text()).toContain(`<a href="${target}">ColmapView Hub</a>`);
-    await page.route(target, route => route.fulfill({ contentType: 'text/html', body: '<h1>Hub catalog</h1>' }));
-    await page.goto(`${server.origin}/hub/`);
-    await expect(page).toHaveURL(target);
-    await expect(page.getByRole('heading', { name: 'Hub catalog' })).toBeVisible();
-  });
-});
-
 for (const id of ['RoughhewnBiplane', 'roughhewnbiplane', 'CalmRiver-AAAAAAAAAAAAAAAA']) {
   test(`opens a GitHub Pages share address for ${id}`, async ({ page }) => {
     const target = `https://colmapview.opsiclear.com/s/${id}`;

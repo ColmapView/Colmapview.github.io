@@ -1,19 +1,6 @@
-/** Root dataset queries stay on Pages; Hub and share entry points use the fixed Hub host. */
+/** Root dataset queries stay on Pages; recognized share IDs use the fixed Hub backend. */
 export function githubRootTarget({ pathname, search = '', hash = '' }) {
   return pathname === '/' ? `/latest/${search}${hash}` : null;
-}
-
-export function githubHubTarget({ pathname, search = '' }) {
-  if (!/^\/hub(?:\/datasets)?(?:\/|\/index\.html)?$/.test(pathname)) return null;
-  const target = new URL('https://colmapview.opsiclear.com/hub/datasets/');
-  const params = new URLSearchParams(search);
-  for (const key of ['q', 'dataset', 'licenseCategory', 'sort', 'kind', 'provider', 'license', 'status',
-    'data', 'photos', 'delivery', 'viewer', 'seed', 'page']) {
-    const value = params.get(key);
-    if (value) target.searchParams.set(key, value);
-  }
-  target.searchParams.set('viewerHost', 'github');
-  return target.href;
 }
 
 export function githubShareTarget(pathname) {
@@ -26,6 +13,6 @@ export function githubShareTarget(pathname) {
 }
 
 if (typeof window !== 'undefined') {
-  const target = githubRootTarget(window.location) ?? githubHubTarget(window.location) ?? githubShareTarget(window.location.pathname);
+  const target = githubRootTarget(window.location) ?? githubShareTarget(window.location.pathname);
   if (target) window.location.replace(target);
 }

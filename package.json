@@ -1,7 +1,7 @@
 {
   "name": "colmapview",
   "private": true,
-  "version": "0.25.6",
+  "version": "0.25.7",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -25,7 +25,7 @@
     "test:e2e:headed": "npm run test:e2e -- --headed",
     "test:e2e:debug": "npm run test:e2e -- --debug",
     "build:deployment": "node scripts/deployment/build-profile.mjs",
-    "test:deployment:config": "node --test scripts/deployment/profiles.test.mjs",
+    "test:deployment:config": "node --test scripts/deployment/profiles.test.mjs scripts/deployment/hub-site.test.mjs",
     "test:deployment:browser": "playwright test --config=scripts/deployment/playwright.config.ts",
     "test:deployment": "npm run test:deployment:config && npm run typecheck && node scripts/deployment/build-fixtures.mjs && npm run test:deployment:browser",
     "test:pycolmap": "node scripts/run-pycolmap-tests.mjs",

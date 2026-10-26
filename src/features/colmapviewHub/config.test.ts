@@ -4,9 +4,9 @@ import { getHubBaseUrl, getHubCatalogUrl } from './config';
 const production = { protocol: 'https:', hostname: 'colmapview.opsiclear.com' };
 
 describe('getHubCatalogUrl', () => {
-  it('requests the GitHub viewer for Explore Hub on the exact GitHub origin', () => {
+  it('opens the GitHub gallery for Explore Hub on the exact GitHub origin', () => {
     expect(getHubCatalogUrl({ origin: 'https://colmapview.github.io' }))
-      .toBe('https://colmapview.opsiclear.com/hub/datasets/?viewerHost=github');
+      .toBe('https://colmapview.github.io/hub/datasets/');
   });
 
   it.each(['https://colmapview.opsiclear.com', 'http://localhost:5173',

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.7] - 2026-10-26
+
+### Changed
+
+- Open a real Hub gallery on both GitHub Pages and OpsiClear. Explore Hub stays on the current production host, and root releases preserve the separately published Hub pages.
+- Add a verified public-frontend deployment workflow, with browser checks and separate read/write jobs. Keep publication, private shares and provider sign-in handling on the existing backend/viewer paths. Clarify per-host Hub analytics consent and cookies in the privacy policy.
+
 ## [0.25.6] - 2026-10-26
 
 ### Fixed
