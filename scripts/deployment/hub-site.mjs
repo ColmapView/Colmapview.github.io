@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { safeOutputDirectory } from './profiles.mjs';
 
 export const HUB_ORIGIN = 'https://colmapview.opsiclear.com';
-export const HUB_FILES = ['index.html', 'datasets/index.html', 'datasets/entry/index.html'];
+export const HUB_FILES = ['index.html', 'entry/index.html', 'datasets/index.html', 'datasets/entry/index.html'];
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 export function validateHubManifest(value) {
-  assert.equal(value.schemaVersion, 1);
+  assert.equal(value.schemaVersion, 2);
   assert.match(value.version, /^\d+\.\d+\.\d+$/);
   assert.match(value.source, /^[a-f0-9]{40}$/);
   assert.equal(value.dirty, false, 'Only committed Hub builds can be published.');
@@ -22,6 +22,12 @@ export function validateHubManifest(value) {
     assert.ok(Number.isSafeInteger(file.bytes) && file.bytes > 100 && file.bytes <= 1024 * 1024);
   }
   return value;
+}
+
+export function sameHubFrontend(current, next) {
+  const files = value => validateHubManifest(value).files.map(file => [file.path, file.sha256, file.bytes])
+    .sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(files(current)) === JSON.stringify(files(next));
 }
 
 async function bounded(response, max) {
@@ -44,9 +50,16 @@ function validateHtml(bytes, file) {
   assert.equal(bytes.length, file.bytes);
   assert.equal(sha256(bytes), file.sha256, 'Hub HTML digest mismatch.');
   const html = bytes.toString('utf8');
-  assert.ok(html.startsWith('<!doctype html>') && html.includes('data-hub-frontend="github"'));
+  assert.ok(html.startsWith('<!doctype html>'));
+  if (file.path.startsWith('datasets/')) {
+    assert.ok(html.includes('data-hub-redirect="true"') && html.includes('href="/hub/"'));
+    assert.ok(!html.includes('data-hub-public-catalog') && !html.includes('data-hub-frontend'));
+  } else {
+    assert.ok(html.includes('data-hub-frontend="github"'));
+    assert.doesNotMatch(html, /http-equiv=["']refresh/i);
+  }
   assert.ok(html.includes('http-equiv="Content-Security-Policy"'));
-  assert.doesNotMatch(html, /http-equiv=["']refresh|share-redirect\.js/i);
+  assert.doesNotMatch(html, /share-redirect\.js/i);
 }
 
 /** Fixed public origin, no credentials or redirects; data is never evaluated by this tool. */
@@ -81,16 +94,50 @@ export async function verifyHub(output) {
   return manifest;
 }
 
+/** Merge only a previously tested public artifact; the release publisher never runs its code. */
+export async function mergeHubRoot(output, root) {
+  await verifyHub(output);
+  for (const file of ['deployment.json', ...HUB_FILES]) {
+    const target = path.join(root, 'hub', file);
+    await mkdir(path.dirname(target), { recursive: true });
+    await copyFile(path.join(output, file), target);
+  }
+}
+
+export async function verifyLiveHub(output, fetcher = fetch) {
+  const expected = await verifyHub(output);
+  const base = 'https://colmapview.github.io/hub/';
+  const get = pathname => fetcher(base + pathname, { redirect: 'error', credentials: 'omit',
+    cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+  const actual = validateHubManifest(JSON.parse(await bounded(await get('deployment.json'), 16 * 1024)));
+  assert.deepEqual(actual, expected, 'Published Hub metadata differs from the tested artifact.');
+  for (const file of expected.files) validateHtml(await bounded(await get(file.path.replace(/index\.html$/, '')), file.bytes), file);
+}
+
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   const output = safeOutputDirectory(process.argv.find(arg => arg.startsWith('--out='))?.slice(6) || '.tmp/deployment/hub');
-  const manifest = process.argv.includes('--verify') ? await verifyHub(output) : await downloadHub(output);
+  const merge = process.argv.find(arg => arg.startsWith('--merge-root='))?.slice(13);
+  const live = process.argv.includes('--live');
+  const manifest = process.argv.includes('--verify') || merge || live ? await verifyHub(output) : await downloadHub(output);
+  if (merge) await mergeHubRoot(output, safeOutputDirectory(merge));
+  if (live) {
+    const deadline = Date.now() + 180_000;
+    for (;;) {
+      try { await verifyLiveHub(output); break; }
+      catch (error) {
+        if (Date.now() >= deadline) throw error;
+        console.log('Waiting for the tested Hub pages to reach GitHub Pages.');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+      }
+    }
+  }
   if (process.argv.includes('--check-current')) {
     let changed = true;
     try {
       const current = JSON.parse(await bounded(await fetch('https://colmapview.github.io/hub/deployment.json', {
         redirect: 'error', credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(15_000),
       }), 16 * 1024));
-      changed = JSON.stringify(validateHubManifest(current)) !== JSON.stringify(manifest);
+      changed = !sameHubFrontend(current, manifest);
     } catch { /* Missing/invalid previous publication needs replacement. */ }
     assert.ok(process.env.GITHUB_OUTPUT);
     await appendFile(process.env.GITHUB_OUTPUT, `changed=${changed}\n`);

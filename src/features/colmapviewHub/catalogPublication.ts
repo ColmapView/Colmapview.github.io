@@ -37,7 +37,9 @@ export async function publishHubDataset(input: { viewerUrl: string; metadata: Hu
   if (value.status === 'pending') return { status: 'pending', id: value.id,
     message: 'Submitted for review. It will appear on Hub after its source is verified.' };
   const share = new URL(`/s/${value.id}`, base).href;
-  const catalog = `${base}/datasets/#shared-datasets`;
-  if (value.status !== 'published' || value.shareUrl !== share || value.catalogUrl !== catalog) throw new Error('Hub returned an invalid publication.');
+  const catalog = `${base}/#shared-datasets`;
+  // Archived viewers still require the original API receipt; normalize either known route.
+  if (value.status !== 'published' || value.shareUrl !== share
+    || ![catalog, `${base}/datasets/#shared-datasets`].includes(String(value.catalogUrl))) throw new Error('Hub returned an invalid publication.');
   return { status: 'published', id: value.id, shareUrl: share, catalogUrl: catalog };
 }

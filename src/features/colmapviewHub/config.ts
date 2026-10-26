@@ -4,7 +4,7 @@ const HUB_HOSTS = new Set(['colmapview.opsiclear.com', 'colmapview.github.io']);
 /** Browse the gallery on the same production host; backend writes stay on Cloudflare. */
 export function getHubCatalogUrl(location: Pick<Location, 'origin'> = window.location): string {
   return location.origin === 'https://colmapview.github.io'
-    ? location.origin + '/hub/datasets/' : PRODUCTION_HUB + '/datasets/';
+    ? location.origin + '/hub/' : PRODUCTION_HUB + '/';
 }
 
 /**

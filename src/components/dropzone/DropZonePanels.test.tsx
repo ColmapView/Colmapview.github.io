@@ -74,7 +74,7 @@ describe('DropZone panels', () => {
     expect(props.onBrowse).toHaveBeenCalledTimes(1);
     expect(props.onOpenUrlModal).toHaveBeenCalledTimes(1);
     expect(props.onOpenManifestFile).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('link', { name: 'Explore Hub' })).toHaveAttribute('href', 'https://colmapview.opsiclear.com/hub/datasets/');
+    expect(screen.getByRole('link', { name: 'Explore Hub' })).toHaveAttribute('href', 'https://colmapview.opsiclear.com/hub/');
     expect(props.onDismiss).toHaveBeenCalledTimes(1);
   });
 
@@ -133,7 +133,7 @@ describe('DropZone panels', () => {
 
     expect(onOpenUrlModal).toHaveBeenCalledTimes(1);
     const explore = screen.getByRole('link', { name: 'Explore Hub' });
-    expect(explore).toHaveAttribute('href', 'https://colmapview.opsiclear.com/hub/datasets/');
+    expect(explore).toHaveAttribute('href', 'https://colmapview.opsiclear.com/hub/');
     expect(explore).toHaveAttribute('target', '_blank');
     expect(explore).toHaveAttribute('rel', 'noopener noreferrer');
     expect(onDismiss).toHaveBeenCalledTimes(1);

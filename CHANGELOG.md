@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.8] - 2026-10-26
+
+### Changed
+
+- Retire `/hub/datasets/` as the gallery address. Explore Hub opens `/hub/` on the current host; old gallery and metadata bookmarks use compatibility redirects.
+- Accept compatible publication receipts and open the canonical gallery after sharing, including when talking to an older Hub release.
+- Test the public Hub frontend in the read-only release validation job, then merge its verified files into root publication and verify the live result. Skip independent frontend publication when its files have not changed.
+- Update Hub privacy wording for the cookie-path migration and keep ambient cookies out of share creation requests.
+
 ## [0.25.7] - 2026-10-26
 
 ### Changed

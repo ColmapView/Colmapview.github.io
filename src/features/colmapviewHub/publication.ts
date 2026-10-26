@@ -67,7 +67,7 @@ function transportError(error: unknown): HubRequestError {
 export async function requestHubLink(baseUrl: string, payload: HubLinkPayload): Promise<{ url: string; managementUrl: string }> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/api/links`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    response = await fetch(`${baseUrl}/api/links`, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: timeoutSignal(15000) });
   } catch (error) { throw transportError(error); }
   // A body that stops arriving is a transport failure like a failed fetch, so Retry replays the same secret and payload.

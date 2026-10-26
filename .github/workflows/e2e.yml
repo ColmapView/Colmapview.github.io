@@ -46,6 +46,22 @@ jobs:
       - run: npx playwright install --with-deps chromium
       # Synthetic public identifiers only; no account or provider access required.
       - run: npm run test:deployment
+      - name: Prepare public Hub frontend for root release
+        if: github.ref_type == 'tag'
+        run: node scripts/deployment/hub-site.mjs
+      - name: Test public Hub frontend on the GitHub origin
+        if: github.ref_type == 'tag'
+        run: npx playwright test --config scripts/deployment/playwright.config.ts hub-site.spec.ts
+        env:
+          HUB_SITE_SMOKE: '1'
+      - name: Upload verified public Hub frontend
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v6
+        with:
+          name: public-hub-pages
+          path: .tmp/deployment/hub
+          if-no-files-found: error
+          retention-days: 2
       - name: Upload production artifact smoke report
         if: always()
         uses: actions/upload-artifact@v6

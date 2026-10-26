@@ -319,6 +319,7 @@ describe('requestHubLink', () => {
     const [url, init] = fetch.mock.calls[0];
     expect(url).toBe(`${HUB}/api/links`);
     expect(init.method).toBe('POST');
+    expect(init.credentials).toBe('omit');
     expect(JSON.parse(String(init.body))).toEqual(local);
   });
 });

@@ -6,13 +6,13 @@ const production = { protocol: 'https:', hostname: 'colmapview.opsiclear.com' };
 describe('getHubCatalogUrl', () => {
   it('opens the GitHub gallery for Explore Hub on the exact GitHub origin', () => {
     expect(getHubCatalogUrl({ origin: 'https://colmapview.github.io' }))
-      .toBe('https://colmapview.github.io/hub/datasets/');
+      .toBe('https://colmapview.github.io/hub/');
   });
 
   it.each(['https://colmapview.opsiclear.com', 'http://localhost:5173',
     'https://colmapview.github.io.evil.example', 'https://colmapview-preview.pages.dev'])(
     'keeps the normal catalog destination on %s', origin => {
-      expect(getHubCatalogUrl({ origin })).toBe('https://colmapview.opsiclear.com/hub/datasets/');
+      expect(getHubCatalogUrl({ origin })).toBe('https://colmapview.opsiclear.com/hub/');
     });
 });
 

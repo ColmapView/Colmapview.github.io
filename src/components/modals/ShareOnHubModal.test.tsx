@@ -51,6 +51,19 @@ describe('Share on Hub', () => {
     expect(viewer.searchParams.getAll('url')).toEqual([source]); expect(viewer.hash).not.toContain('d=');
     expect(posts[0]).not.toHaveProperty('license');
     expect(screen.getByLabelText('Hub dataset link')).toHaveValue(`https://hub.invalid/s/${id}`);
+    expect(screen.getByRole('link', { name: 'View on Hub ↗' })).toHaveAttribute('href', `${base}/#shared-datasets`);
+  });
+  it.each([`${base}/#shared-datasets`, `${base}/datasets/#shared-datasets`])('opens the canonical gallery for the known receipt %s', async catalogUrl => {
+    result.catalogUrl = catalogUrl;
+    render(<ShareOnHubModal isOpen onClose={vi.fn()} />);
+    await confirmAndShare(); await screen.findByText('Shared on Hub.');
+    expect(screen.getByRole('link', { name: 'View on Hub ↗' })).toHaveAttribute('href', `${base}/#shared-datasets`);
+  });
+  it('rejects a publication receipt pointing outside the known gallery routes', async () => {
+    result.catalogUrl = 'https://other.invalid/hub/#shared-datasets';
+    render(<ShareOnHubModal isOpen onClose={vi.fn()} />);
+    await confirmAndShare(); await screen.findByText('Hub returned an invalid publication.');
+    expect(screen.queryByRole('link', { name: 'View on Hub ↗' })).not.toBeInTheDocument();
   });
   it('explains that local files must be uploaded first', async () => {
     useReconstructionStore.setState({ sourceType: 'local', sourceUrl: null });

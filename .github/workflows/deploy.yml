@@ -91,6 +91,15 @@ jobs:
       - name: Create root redirect
         if: steps.target.outputs.is_release == 'true'
         run: node scripts/deployment/build-github-root.mjs
+      - name: Download verified public Hub frontend
+        if: steps.target.outputs.is_release == 'true'
+        uses: actions/download-artifact@v6
+        with:
+          name: public-hub-pages
+          path: .tmp/deployment/hub
+      - name: Merge verified public Hub frontend into root
+        if: steps.target.outputs.is_release == 'true'
+        run: node scripts/deployment/hub-site.mjs --verify --merge-root=.tmp/deployment/root
       - name: Prepare archived pages without Google analytics or font requests
         if: steps.target.outputs.is_release == 'true'
         run: node scripts/deployment/prepare-archived-pages.mjs
@@ -141,6 +150,9 @@ jobs:
       - name: Check live custom artifact
         if: steps.config.outputs.custom_enabled == 'true'
         run: node scripts/deployment/check-live.mjs https://colmapview.opsiclear.com/ custom --manifest=.tmp/deployment/custom/deployment.json
+      - name: Check live Hub artifact
+        if: steps.target.outputs.is_release == 'true'
+        run: node scripts/deployment/hub-site.mjs --verify --live
       - name: Record successful deployment
         run: |
           if [[ "$CUSTOM_ENABLED" == "true" ]]; then

@@ -57,6 +57,22 @@ test('GitHub short links forward only recognized IDs to the fixed Hub host', () 
   }
 });
 
+test('root releases merge the public Hub only after read-only verification and before publication', () => {
+  const validation = yaml.load(readFileSync('.github/workflows/e2e.yml', 'utf8'));
+  assert.equal(validation.permissions.contents, 'read');
+  const checks = validation.jobs.artifacts.steps;
+  const download = checks.findIndex(step => step.name === 'Prepare public Hub frontend for root release');
+  const browser = checks.findIndex(step => step.name === 'Test public Hub frontend on the GitHub origin');
+  const upload = checks.findIndex(step => step.name === 'Upload verified public Hub frontend');
+  assert.ok(download >= 0 && download < browser && browser < upload);
+  assert.equal(checks[upload].with.name, 'public-hub-pages');
+  const deploy = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8')).jobs.deploy.steps;
+  const merge = deploy.findIndex(step => step.name === 'Merge verified public Hub frontend into root');
+  assert.ok(merge > deploy.findIndex(step => step.name === 'Download verified public Hub frontend'));
+  assert.ok(merge < deploy.findIndex(step => step.name === 'Smoke prepared artifacts'));
+  assert.match(deploy[merge].run, /--verify --merge-root=/);
+});
+
 test('GitHub root routing is built before smoke checks and publishes the tested artifact', () => {
   const steps = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8')).jobs.deploy.steps;
   const build = steps.findIndex(step => step.name === 'Create root redirect');
@@ -69,7 +85,7 @@ test('GitHub root routing is built before smoke checks and publishes the tested 
   assert.match(index, /<noscript><meta http-equiv="refresh" content="0; url=\/latest\/">/);
   assert.match(index, /src="\/share-redirect.js\?v=[a-f0-9]{12}"/);
   assert.match(readFileSync(`${output}/404.html`, 'utf8'), /src="\/share-redirect.js\?v=[a-f0-9]{12}"/);
-  assert.equal(readdirSync(output).includes('hub'), false, 'Root releases preserve the separately published gallery.');
+  assert.equal(readdirSync(output).includes('hub'), false, 'The base root build waits for the separately verified Hub artifact.');
   assert.equal(readFileSync(`${output}/share-redirect.js`, 'utf8'), readFileSync('scripts/deployment/github-share-redirect.mjs', 'utf8'));
   assert.equal(steps.find(step => step.name === 'Deploy root').with.publish_dir, './.tmp/deployment/root');
 });
