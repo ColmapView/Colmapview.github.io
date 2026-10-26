@@ -41,7 +41,7 @@ describe('drop zone panel view model', () => {
       loadUrl: 'Load URL',
       loadJson: 'Load manifest',
       loadFromUrl: 'Load from URL',
-      explore: 'Explore',
+      explore: 'Explore Hub',
       dismiss: 'Dismiss',
     });
     expect(DROP_ZONE_BROWSE_LABEL).toBe('Browse for a COLMAP dataset folder');

@@ -11,25 +11,25 @@ test.describe('DropZone', () => {
     expect(await dropZone.isEmptyStateVisible()).toBe(true);
   });
 
-  test('should show Load URL, Load manifest, and Explore link', async ({ page }) => {
+  test('should show Load URL, Load manifest, and Explore Hub link', async ({ page }) => {
     await expect(page.locator('button:has-text("Load URL")')).toBeVisible();
     await expect(page.locator('button:has-text("Load manifest")')).toBeVisible();
-    await expect(page.locator('a:has-text("Explore")')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Explore Hub', exact: true })).toBeVisible();
   });
 
   for (const touch of [false, true]) {
-    test(`Explore opens the public catalog in a new tab with touch=${touch}`, async ({ page, context }) => {
+    test(`Explore Hub opens the public catalog in a new tab with touch=${touch}`, async ({ page, context }) => {
       const catalog = 'https://colmapview.opsiclear.com/hub/datasets/';
       await context.route(catalog, route => route.fulfill({ contentType: 'text/html', body: '<title>Public datasets</title>' }));
       await page.goto(`/?touch=${touch}`);
       const opened = page.waitForEvent('popup');
-      await page.getByRole('link', { name: 'Explore', exact: true }).click();
+      await page.getByRole('link', { name: 'Explore Hub', exact: true }).click();
       const hub = await opened;
       await expect(hub).toHaveURL(catalog);
       await expect(hub).toHaveTitle('Public datasets');
       expect(await hub.evaluate(() => window.opener)).toBeNull();
       await hub.close();
-      await expect(page.getByRole('link', { name: 'Explore', exact: true })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Explore Hub', exact: true })).toBeVisible();
     });
   }
 

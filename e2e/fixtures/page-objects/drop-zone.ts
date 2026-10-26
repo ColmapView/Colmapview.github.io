@@ -20,7 +20,7 @@ export class DropZonePageObject {
     this.emptyStatePanel = page.locator('.startup-panel');
     this.loadUrlButton = page.locator('button:has-text("Load URL")');
     this.loadJsonButton = page.locator('button:has-text("Load manifest")');
-    this.exploreLink = page.locator('a:has-text("Explore")');
+    this.exploreLink = page.getByRole('link', { name: 'Explore Hub', exact: true });
     this.urlModal = page.locator('[data-testid="url-modal"]');
     this.loadingOverlay = page.locator('[class*="loadingStyles"]');
     this.errorToast = page.locator('[class*="toastStyles"]');
@@ -55,7 +55,7 @@ export class DropZonePageObject {
   }
 
   /**
-   * Click the "Explore" link
+   * Click the "Explore Hub" link
    */
   async clickExplore(): Promise<void> {
     await this.exploreLink.click();

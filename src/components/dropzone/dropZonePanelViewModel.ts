@@ -45,7 +45,7 @@ export const DROP_ZONE_ACTION_LABELS = {
   // The file behind this button is a manifest (.json is just its encoding).
   loadJson: 'Load manifest',
   loadFromUrl: 'Load from URL',
-  explore: 'Explore',
+  explore: 'Explore Hub',
   dismiss: 'Dismiss',
 } as const;
 
