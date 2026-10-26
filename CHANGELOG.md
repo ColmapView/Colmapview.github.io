@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.9] - 2026-10-26
+
+### Fixed
+
+- Update mouse and touch Explore Hub browser checks to the canonical gallery address. Keep their requests mocked when a destination changes so stale tests cannot fall through to production.
+
 ## [0.25.8] - 2026-10-26
 
 ### Changed

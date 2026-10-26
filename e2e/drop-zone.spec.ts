@@ -19,8 +19,12 @@ test.describe('DropZone', () => {
 
   for (const touch of [false, true]) {
     test(`Explore Hub opens the public catalog in a new tab with touch=${touch}`, async ({ page, context }) => {
-      const catalog = 'https://colmapview.opsiclear.com/hub/datasets/';
-      await context.route(catalog, route => route.fulfill({ contentType: 'text/html', body: '<title>Public datasets</title>' }));
+      const catalog = 'https://colmapview.opsiclear.com/hub/';
+      // A changed destination must fail locally rather than fall through to production.
+      await context.route('https://colmapview.opsiclear.com/**', route => route.fulfill({
+        status: route.request().url() === catalog ? 200 : 404,
+        contentType: 'text/html', body: '<title>Public datasets</title>',
+      }));
       await page.goto(`/?touch=${touch}`);
       const explore = page.getByRole('link', { name: 'Explore Hub', exact: true });
       await expect(explore).toHaveCSS('text-decoration-line', 'none');
