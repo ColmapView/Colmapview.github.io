@@ -13,7 +13,15 @@ ColmapView is served from these hosts. A release tag builds the GitHub profile a
 
 Keep GitHub Pages' **Custom domain** empty and do not add `CNAME` to the repository or its Pages branch. Associate `colmapview.opsiclear.com` with a separate Cloudflare Pages project. Assigning that domain to GitHub Pages would make it GitHub's canonical custom address; this setup keeps two independently served applications. Browsers treat the hosts as separate sites: local preferences, loaded scenes and account sessions are not shared between them.
 
-Upload share links use `https://colmapview.opsiclear.com/s/<id>`, which supplies social preview metadata and opens the viewer URL saved in the record. Both hosted viewers can create and use these links. Browser visits to `https://colmapview.github.io/s/<id>` also work: the root GitHub Pages 404 handler forwards only valid share IDs to the fixed Hub host, discarding unrelated query and fragment state. The Hub then opens the recorded destination. GitHub aliases require JavaScript; share the canonical custom-host address for social previews. The root redirect, 404 handler and script are built and tested before release publication. Drive authentication remains restricted to the custom viewer.
+Upload share links use `https://colmapview.opsiclear.com/s/<id>`, which supplies social preview metadata and opens the viewer URL saved in the record. Both hosted viewers can create and use these links. Browser visits to `https://colmapview.github.io/s/<id>` also work: the root GitHub Pages 404 handler forwards only valid share IDs to the fixed Hub host, discarding unrelated query and fragment state. The Hub then opens the recorded destination. GitHub share aliases require JavaScript; share the canonical custom-host address for social previews. The root redirect, 404 handler and script are built and tested before release publication. Drive authentication remains restricted to the custom viewer.
+
+`https://colmapview.github.io/hub/` and `/hub/datasets/` are static entry pages
+published with the GitHub root on release tags. They open the Cloudflare Hub
+catalog with `viewerHost=github`, preserving recognized catalog filters and
+pagination. Dataset launches then return to the GitHub viewer. Unrelated query
+parameters and URL fragments are discarded; these pages accept no custom return
+host. Without JavaScript, a fixed redirect and visible link still open the
+catalog. The Hub API, catalog and database remain on Cloudflare.
 
 The application enforces the origin restriction before Drive SDK, API, Picker or upload access. The GitHub build explicitly sets `VITE_GOOGLE_DRIVE_ENABLED=false` and clears all Drive configuration. Custom production sets it to `true` with `VITE_GOOGLE_DRIVE_ALLOWED_ORIGIN=https://colmapview.opsiclear.com`. Copying that build to a Pages preview or GitHub origin does not enable Drive there. A pasted valid Drive file link on a disabled host offers **Use Google Drive**; following it carries only the canonical file ID and optional resource key, and does not grant private-file access.
 

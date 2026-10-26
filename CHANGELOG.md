@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.6] - 2026-10-26
+
+### Fixed
+
+- Publish working GitHub Pages `/hub/` and `/hub/datasets/` entry points. Open the public catalog with GitHub viewer selection, retain catalog filters, and discard unrelated URL state. Keep a usable fallback when JavaScript is disabled.
+
 ## [0.25.5] - 2026-10-26
 
 ### Changed

@@ -30,8 +30,9 @@ export async function startArtifactServer(directory, base = '/', { githubPages40
     try {
       const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
       if (!pathname.startsWith(base)) { response.writeHead(404); response.end(); return; }
-      const relative = pathname.slice(base.length) || 'index.html';
-      let filename = path.resolve(root, relative);
+      const relative = pathname.slice(base.length);
+      let filename = path.resolve(root, relative || 'index.html');
+      if (relative.endsWith('/')) filename = path.join(filename, 'index.html');
       if (!filename.startsWith(`${root}${path.sep}`)) { response.writeHead(404); response.end(); return; }
       let body;
       try { body = await readFile(filename); }
