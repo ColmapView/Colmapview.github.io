@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "version": "0.19.1",
+  "source": "ea47fc5dfbb9d14b43d479a55a449a01418d03aa",
+  "dirty": false,
+  "files": [
+    {
+      "path": "index.html",
+      "artifact": "/hub/assets/github/c8d7bf0a792eca7fb4cb7689e071cef245c993522f03a4ff0f108c7cc120e0a9.html",
+      "sha256": "c8d7bf0a792eca7fb4cb7689e071cef245c993522f03a4ff0f108c7cc120e0a9",
+      "bytes": 31853
+    },
+    {
+      "path": "datasets/index.html",
+      "artifact": "/hub/assets/github/c8d7bf0a792eca7fb4cb7689e071cef245c993522f03a4ff0f108c7cc120e0a9.html",
+      "sha256": "c8d7bf0a792eca7fb4cb7689e071cef245c993522f03a4ff0f108c7cc120e0a9",
+      "bytes": 31853
+    },
+    {
+      "path": "datasets/entry/index.html",
+      "artifact": "/hub/assets/github/81dc44db6bec10e3eb6f70760e2c024b9b55f3a82f5d6b54d8ec3510e9065406.html",
+      "sha256": "81dc44db6bec10e3eb6f70760e2c024b9b55f3a82f5d6b54d8ec3510e9065406",
+      "bytes": 6296
+    }
+  ]
+}
