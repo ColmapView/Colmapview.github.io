@@ -1,26 +1,32 @@
 {
-  "schemaVersion": 1,
-  "version": "0.19.1",
-  "source": "ea47fc5dfbb9d14b43d479a55a449a01418d03aa",
+  "schemaVersion": 2,
+  "version": "0.20.1",
+  "source": "308245ded377ec01a02eb2570cd97d0b5cdb0b2a",
   "dirty": false,
   "files": [
     {
       "path": "index.html",
-      "artifact": "/hub/assets/github/c8d7bf0a792eca7fb4cb7689e071cef245c993522f03a4ff0f108c7cc120e0a9.html",
-      "sha256": "c8d7bf0a792eca7fb4cb7689e071cef245c993522f03a4ff0f108c7cc120e0a9",
-      "bytes": 31853
+      "artifact": "/hub/assets/github/f2d93da896cb6cf2f52901638c36d2a4179717049c8d0aa34a39ded15cf4466e.html",
+      "sha256": "f2d93da896cb6cf2f52901638c36d2a4179717049c8d0aa34a39ded15cf4466e",
+      "bytes": 31781
+    },
+    {
+      "path": "entry/index.html",
+      "artifact": "/hub/assets/github/6ba86d1c920b6f23d1e862e16e123b7ea696089729ebfad7315e2c88fa09145d.html",
+      "sha256": "6ba86d1c920b6f23d1e862e16e123b7ea696089729ebfad7315e2c88fa09145d",
+      "bytes": 6269
     },
     {
       "path": "datasets/index.html",
-      "artifact": "/hub/assets/github/c8d7bf0a792eca7fb4cb7689e071cef245c993522f03a4ff0f108c7cc120e0a9.html",
-      "sha256": "c8d7bf0a792eca7fb4cb7689e071cef245c993522f03a4ff0f108c7cc120e0a9",
-      "bytes": 31853
+      "artifact": "/hub/assets/github/751da0e1d5b7a1fe1940c0d475b918e36780de8df08822fa4b9e44bb280ffcf2.html",
+      "sha256": "751da0e1d5b7a1fe1940c0d475b918e36780de8df08822fa4b9e44bb280ffcf2",
+      "bytes": 741
     },
     {
       "path": "datasets/entry/index.html",
-      "artifact": "/hub/assets/github/81dc44db6bec10e3eb6f70760e2c024b9b55f3a82f5d6b54d8ec3510e9065406.html",
-      "sha256": "81dc44db6bec10e3eb6f70760e2c024b9b55f3a82f5d6b54d8ec3510e9065406",
-      "bytes": 6296
+      "artifact": "/hub/assets/github/751da0e1d5b7a1fe1940c0d475b918e36780de8df08822fa4b9e44bb280ffcf2.html",
+      "sha256": "751da0e1d5b7a1fe1940c0d475b918e36780de8df08822fa4b9e44bb280ffcf2",
+      "bytes": 741
     }
   ]
 }
