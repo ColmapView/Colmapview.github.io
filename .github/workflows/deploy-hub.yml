@@ -1,0 +1,80 @@
+name: Deploy GitHub Hub frontend
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      changed: ${{ steps.site.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Verify publication contract
+        run: node --test scripts/deployment/hub-site.test.mjs
+      - name: Download committed public Hub pages
+        id: site
+        run: node scripts/deployment/hub-site.mjs --check-current
+      - run: npm ci
+        if: steps.site.outputs.changed == 'true'
+      - run: npx playwright install --with-deps chromium
+        if: steps.site.outputs.changed == 'true'
+      - name: Test gallery on the GitHub origin
+        if: steps.site.outputs.changed == 'true'
+        run: npx playwright test --config scripts/deployment/playwright.config.ts hub-site.spec.ts
+        env:
+          HUB_SITE_SMOKE: '1'
+      - uses: actions/upload-artifact@v4
+        if: steps.site.outputs.changed == 'true'
+        with:
+          name: public-hub-pages
+          path: .tmp/deployment/hub
+          retention-days: 2
+          if-no-files-found: error
+
+  publish:
+    needs: prepare
+    if: needs.prepare.outputs.changed == 'true'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-hub-pages
+          path: .tmp/deployment/hub
+      - name: Verify exact files without executing the artifact
+        run: node scripts/deployment/hub-site.mjs --verify
+      - name: Publish only the Hub frontend
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .tmp/deployment/hub
+          destination_dir: hub
+          keep_files: true
+          allow_empty_commit: false
+          commit_message: Update public Hub frontend
