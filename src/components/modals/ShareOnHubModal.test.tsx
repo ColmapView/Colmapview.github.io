@@ -1,3 +1,4 @@
+// @vitest-environment-options {"url":"https://colmapview.github.io/latest/"}
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShareOnHubModal } from './ShareOnHubModal';
@@ -58,6 +59,16 @@ describe('Share on Hub', () => {
     render(<ShareOnHubModal isOpen onClose={vi.fn()} />);
     await confirmAndShare(); await screen.findByText('Shared on Hub.');
     expect(screen.getByRole('link', { name: 'View on Hub ↗' })).toHaveAttribute('href', `${base}/#shared-datasets`);
+  });
+  it('keeps the GitHub frontend after validating a production backend publication receipt', async () => {
+    const backend = 'https://colmapview.opsiclear.com/hub';
+    vi.stubEnv('VITE_HUB_BASE_URL', backend);
+    result.shareUrl = `https://colmapview.opsiclear.com/s/${id}`;
+    result.catalogUrl = `${backend}/datasets/#shared-datasets`;
+    render(<ShareOnHubModal isOpen onClose={vi.fn()} />);
+    await confirmAndShare(); await screen.findByText('Shared on Hub.');
+    expect(screen.getByRole('link', { name: 'View on Hub ↗' })).toHaveAttribute('href', 'https://colmapview.github.io/hub/#shared-datasets');
+    expect(screen.getByLabelText('Hub dataset link')).toHaveValue(`https://colmapview.opsiclear.com/s/${id}`);
   });
   it('rejects a publication receipt pointing outside the known gallery routes', async () => {
     result.catalogUrl = 'https://other.invalid/hub/#shared-datasets';

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.10] - 2026-10-26
+
+### Fixed
+
+- Keep View on Hub on the GitHub gallery after publishing from the GitHub viewer. Preserve strict backend receipt validation, canonical share URLs and configured development Hub destinations.
+
 ## [0.25.9] - 2026-10-26
 
 ### Fixed

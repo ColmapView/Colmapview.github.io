@@ -14,6 +14,11 @@ describe('getHubCatalogUrl', () => {
     'keeps the normal catalog destination on %s', origin => {
       expect(getHubCatalogUrl({ origin })).toBe('https://colmapview.opsiclear.com/hub/');
     });
+
+  it.each(['https://colmapview.github.io', 'https://colmapview.opsiclear.com', 'http://localhost:5173'])(
+    'keeps an explicitly configured development Hub when publishing from %s', origin => {
+      expect(getHubCatalogUrl({ origin }, 'http://localhost:5201/hub')).toBe('http://localhost:5201/hub/');
+    });
 });
 
 describe('getHubBaseUrl', () => {
