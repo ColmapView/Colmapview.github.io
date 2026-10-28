@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Remove temporary Hub frontend download and root-publication fixtures after deployment tests.
+
 ## [0.25.11] - 2026-10-28
 
 ### Added

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { HUB_FILES, HUB_ORIGIN, downloadHub, mergeHubRoot, sameHubFrontend, sha256, validateHubManifest, verifyHub, verifyLiveHub } from './hub-site.mjs';
 
 const html = Buffer.from('<!doctype html><html data-hub-frontend="github" data-hub-public-catalog="true"><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'"></head><body>Public gallery</body></html>');
@@ -25,9 +25,10 @@ test('backend-only releases do not republish identical frontend files', () => {
   assert.equal(sameHubFrontend(manifest(), newer), false);
 });
 
-test('download uses fixed public paths without credentials or redirects, then verifies exact bytes and files', async () => {
+test('download uses fixed public paths without credentials or redirects, then verifies exact bytes and files', async t => {
   await mkdir('.tmp', { recursive: true });
   const output = await mkdtemp('.tmp/hub-site-test-');
+  t.after(() => rm(output, { recursive: true, force: true }));
   const fetcher = async (url, options) => {
     assert.equal(options.redirect, 'error'); assert.equal(options.credentials, 'omit');
     if (url === `${HUB_ORIGIN}/hub/assets/github/site.json`) return Response.json(manifest());
@@ -46,6 +47,7 @@ test('download uses fixed public paths without credentials or redirects, then ve
   await assert.rejects(verifyLiveHub(output, async url => url.endsWith('deployment.json')
     ? Response.json(manifest()) : new Response('Old deployment')));
   const root = await mkdtemp('.tmp/hub-root-test-');
+  t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(`${root}/index.html`, 'Existing viewer root');
   await mergeHubRoot(output, root);
   assert.equal(await readFile(`${root}/index.html`, 'utf8'), 'Existing viewer root');
