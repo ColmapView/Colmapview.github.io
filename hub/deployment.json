@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
-  "version": "0.20.3",
-  "source": "3783ff9ccb00e459d7b0ee6ba4eca47105905b1d",
+  "version": "0.20.4",
+  "source": "70a90b4dfa8b04cfd6045a4dd35dab8be725b81d",
   "dirty": false,
   "files": [
     {
       "path": "index.html",
-      "artifact": "/hub/assets/github/b9b1800088ddf1aca9228ff8e109a39d356b2e479296794b409c41ab712029b2.html",
-      "sha256": "b9b1800088ddf1aca9228ff8e109a39d356b2e479296794b409c41ab712029b2",
-      "bytes": 31994
+      "artifact": "/hub/assets/github/6f402b68f17becff9ad9e40795989174ee742212cc3d3f7f4d7d4c9a4ff1fbbc.html",
+      "sha256": "6f402b68f17becff9ad9e40795989174ee742212cc3d3f7f4d7d4c9a4ff1fbbc",
+      "bytes": 32039
     },
     {
       "path": "entry/index.html",
-      "artifact": "/hub/assets/github/733a83e6d300aa1a3670bd0fd622ae177f45fd731515e071474855d2f3724ed0.html",
-      "sha256": "733a83e6d300aa1a3670bd0fd622ae177f45fd731515e071474855d2f3724ed0",
+      "artifact": "/hub/assets/github/1640407139c28faa8770c6ae375855aa63b9a785d764c7e059ca4e53d11a1d94.html",
+      "sha256": "1640407139c28faa8770c6ae375855aa63b9a785d764c7e059ca4e53d11a1d94",
       "bytes": 6338
     },
     {
