@@ -3,8 +3,8 @@ export interface HfConfig { clientId: string; redirectUri: string; readOnly?: bo
 /** The privacy policy promises that the account control states the access it requests. */
 export function describeHfAccess(config: HfConfig): string {
   return config.readOnly
-    ? 'Allows reading your repositories, including private datasets.'
-    : 'Allows reading private repositories and creating datasets.';
+    ? 'Allows reading private datasets and gated datasets you can access.'
+    : 'Allows reading private and approved gated datasets, and creating datasets.';
 }
 
 export type HfConfiguration =

@@ -12,6 +12,7 @@ import { detectTouchDevice } from './useIsTouchDevice';
 import { anySignal } from '../utils/abortSignals';
 import { getManifestMediaArchives, type ManifestMediaArchives } from './urlLoaderMediaArchives';
 import { closeZipArchive, setActiveZipArchive } from '../utils/zipArchiveState';
+import { withManifestAccess } from '../utils/manifestAccess';
 
 export { OPTIONAL_VIEWER_SETTINGS_TIMEOUT_MS } from './urlLoaderViewerState';
 
@@ -111,15 +112,16 @@ export async function loadManifestSource(
   const log = deps.log ?? appLogger.info;
   const assertCurrent = () => { deps.signal?.throwIfAborted(); deps.assertCurrent?.(); };
   assertCurrent();
+  const fetchImpl = withManifestAccess(manifest, deps.fetchImpl ?? ((url, init) => fetchDatasetResource(url, undefined, init)));
+  const mediaFetchImpl = withManifestAccess(manifest, deps.mediaFetchImpl ?? ((url, init) => fetchDatasetResource(url, undefined, init)));
   const fetchColmapFiles = deps.fetchColmapFiles
     ?? ((targetManifest: ColmapManifest) => fetchManifestColmapFiles(targetManifest, {
-      fetchImpl: deps.fetchImpl,
-      mediaFetchImpl: deps.mediaFetchImpl ?? ((url, init) => fetchDatasetResource(url, undefined, init)),
+      fetchImpl,
+      mediaFetchImpl,
       signal: deps.signal,
       log: (message) => log(message),
       setUrlProgress: deps.setUrlProgress,
     }));
-  const fetchImpl = deps.fetchImpl ?? ((url, init) => fetchDatasetResource(url, undefined, init));
   const discoveryController = new AbortController();
   const discoverySignal = deps.signal ? anySignal([deps.signal, discoveryController.signal]) : discoveryController.signal;
   let lastDiscoveryAnswer = 0;

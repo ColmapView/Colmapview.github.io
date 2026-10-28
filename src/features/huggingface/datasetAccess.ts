@@ -1,5 +1,5 @@
 import { hfAuth, type HfAuthState } from './auth';
-import { HfError } from './http';
+import { HfAccessDeniedError, HfError } from './http';
 import { huggingFaceDatasetReadRepoId } from '../../utils/huggingFaceUrl';
 import { appLogger } from '../../utils/logger';
 
@@ -24,8 +24,8 @@ const MISSING_OR_PRIVATE = 'Hugging Face dataset not found, or it is private. Ch
 const isGated = (response: Response) => response.headers.get('X-Error-Code') === 'GatedRepo';
 
 function signedOutDenial(response: Response): HfError {
-  return new HfError(isGated(response)
-    ? 'This Hugging Face dataset is gated: only accounts its owner has approved can open its files.'
+  return new HfAccessDeniedError(isGated(response)
+    ? 'This public Hugging Face dataset is gated. Sign in with an approved account to load it. If needed, request access on Hugging Face first.'
     : MISSING_OR_PRIVATE, response.status, false, { provider: 'hf' });
 }
 
@@ -44,6 +44,10 @@ export async function fetchHuggingFaceDatasetRequest(url: string, init: RequestI
     // Browser fetch strips Authorization when Hub storage redirects to another origin.
     const response = await fetch(url, { ...request, headers, cache: 'no-store' });
     init.signal?.throwIfAborted();
+    if ([401, 403].includes(response.status) && isGated(response)) {
+      discard(response);
+      throw new HfAccessDeniedError('This Hugging Face dataset is gated. Your account needs publisher approval and gated-dataset permission. Check access on Hugging Face, then reconnect and retry.', response.status, false, { provider: 'hf' });
+    }
     if (response.status === 401) {
       discard(response);
       if (hfAuth.getSnapshot() === connection && hfAuth.getReadAccessToken() === token) hfAuth.expire();
@@ -52,8 +56,7 @@ export async function fetchHuggingFaceDatasetRequest(url: string, init: RequestI
     if (response.status === 403) {
       discard(response);
       // Without the gated-repos scope, an account its owner approved is refused too.
-      throw new HfError(isGated(response) ? 'This Hugging Face dataset is gated, and this sign-in cannot open its files.'
-        : 'This Hugging Face account cannot read the dataset. Check repository and organization permissions.', 403, false, { provider: 'hf' });
+      throw new HfError('This Hugging Face account cannot read the dataset. Check repository and organization permissions.', 403, false, { provider: 'hf' });
     }
     if (response.ok && hfAuth.getSnapshot() === connection) {
       const repos = privateRepos.get(connection) ?? new Set<string>();

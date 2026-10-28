@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.11] - 2026-10-28
+
+### Added
+
+- Optional repository-scoped manifest access requirements for gated and private Hugging Face datasets, with a design guide and validated example.
+
+### Fixed
+
+- Explain gated access in the connection dialog while preserving valid sessions when a dataset requires publisher approval. Keep credentials in tab memory and preserve the current scene when required reads fail.
+
 ## [0.25.10] - 2026-10-26
 
 ### Fixed

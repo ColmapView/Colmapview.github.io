@@ -11,6 +11,9 @@ export class HfError extends Error {
   }
 }
 
+/** Repository permissions refused a read; distinct from an expired OAuth session. */
+export class HfAccessDeniedError extends HfError {}
+
 export function errorStatus(error: unknown): number | undefined {
   if (error instanceof HfError) return error.status;
   if (typeof error === 'object' && error !== null && 'statusCode' in error && typeof error.statusCode === 'number') return error.statusCode;

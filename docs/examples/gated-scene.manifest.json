@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "Gated scene template: replace owner, dataset and revision",
+  "baseUrl": "https://huggingface.co/datasets/owner/dataset/resolve/PINNED_REVISION/scene/",
+  "access": [
+    { "provider": "huggingface", "repository": "owner/dataset", "requirement": "gated" }
+  ],
+  "files": {
+    "cameras": "sparse/0/cameras.bin",
+    "images": "sparse/0/images.bin",
+    "points3D": "sparse/0/points3D.bin"
+  },
+  "imagesPath": "images/"
+}

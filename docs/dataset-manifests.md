@@ -2,9 +2,13 @@
 
 Use a version 1 manifest to bind one named scene to its exact camera model, poses,
 points, photographs, masks and splats. The manifest can live on the Hub while the
-large source files stay at their original public URLs. The existing format supports
+large source files stay at their original source URLs. The existing format supports
 COLMAP binary/text models, camera-only models and a camera model with an XYZ PLY;
 these layouts do not need a new manifest version.
+
+Optional repository-scoped `access` declarations explain gated or private source
+requirements without storing credentials. See [Manifest access requirements](manifest-access.md)
+for the contract, login behavior, publication boundaries and a JSON template.
 
 ## Video frame numbers (version 5)
 

@@ -431,7 +431,7 @@ describe('Dataset provider account icons', () => {
     const connect = vi.spyOn(hfAuth, 'connect').mockResolvedValue(undefined);
     render(<DatasetAccountButtons {...createProps()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Hugging Face account' }));
-    expect(screen.getByText('Allows reading your repositories, including private datasets.')).toBeVisible();
+    expect(screen.getByText('Allows reading private datasets and gated datasets you can access.')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Sign in with Hugging Face' }));
     expect(connect).toHaveBeenCalledExactlyOnceWith({
       clientId: 'hf-test-client', redirectUri: `${window.location.origin}/hf-callback.html`, readOnly: true,
@@ -570,7 +570,7 @@ describe('Dataset provider account icons', () => {
       vi.stubEnv('VITE_HF_AUTH_ENABLED', 'true');
       vi.stubEnv('VITE_HF_OAUTH_CLIENT_ID', 'hf-test-client');
       vi.stubEnv('VITE_HF_OAUTH_REDIRECT_URI', `${window.location.origin}/hf-callback.html`);
-    }, description: 'Sign in to open private datasets. Allows reading your repositories, including private datasets.' },
+    }, description: 'Sign in to open private datasets. Allows reading private datasets and gated datasets you can access.' },
     { state: 'connected', setup: () => {
       vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue({ status: 'connected', identity: { username: 'test-user' }, error: null });
     }, description: 'Load a public or private dataset.' },

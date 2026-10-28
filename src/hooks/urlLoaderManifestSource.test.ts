@@ -34,6 +34,19 @@ function makeFiles(): Map<string, File> {
   ]);
 }
 
+it('uses declared access on a model denial before replacing the existing scene', async () => {
+  const deps = { ...makeDeps(), fetchColmapFiles: undefined,
+    fetchImpl: vi.fn(async () => new Response('', { status: 403 })) };
+  await expect(loadManifestSource({ ...manifest,
+    baseUrl: 'https://huggingface.co/datasets/owner/data/resolve/main/',
+    access: [{ provider: 'huggingface', repository: 'owner/data', requirement: 'gated' }],
+  }, { type: 'url', sourceUrl: 'https://catalog.test/scene.json' }, deps)).rejects.toMatchObject({
+    access: { provider: 'hf' }, message: expect.stringContaining('approved account'),
+  });
+  expect(deps.processFiles).not.toHaveBeenCalled();
+  expect(deps.setSourceInfo).not.toHaveBeenCalled();
+});
+
 type ProcessOptions = { onSceneReplaced?: () => void; beforeSceneCommit?: () => Promise<void> };
 
 function makeDeps(files = makeFiles()) {

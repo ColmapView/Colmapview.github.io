@@ -80,6 +80,8 @@ The toolbar's **Align** button holds everything that works out *where the scene 
 
 For scenes with separate model, photo, mask or XYZ cloud folders, use an [explicit dataset manifest](docs/dataset-manifests.md).
 
+For gated or private sources, see [manifest access requirements](docs/manifest-access.md) and the [gated-scene template](docs/examples/gated-scene.manifest.json).
+
 Subfolders are scanned automatically (`sparse/0/`, `sparse/`, or any subfolder). A ZIP archive works in place of a folder, and a folder of images alone loads as a gallery with no reconstruction.
 
 ## Interface Tour

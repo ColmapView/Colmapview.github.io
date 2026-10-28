@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { formatManifestValidationIssues, validateColmapManifest } from './manifestValidation';
 
 const manifest = {
@@ -12,6 +13,21 @@ const manifest = {
 };
 
 describe('manifest validation helpers', () => {
+  it('keeps the documented gated-scene template valid', () => {
+    const example = JSON.parse(readFileSync('docs/examples/gated-scene.manifest.json', 'utf8'));
+    expect(validateColmapManifest(example).success).toBe(true);
+  });
+  it('validates optional repository-scoped access hints without changing legacy manifests', () => {
+    const access = [{ provider: 'huggingface', repository: 'owner/dataset', requirement: 'gated' }];
+    const parsed = validateColmapManifest({ ...manifest, access });
+    expect(parsed.success && parsed.manifest.access).toEqual(access);
+    expect(validateColmapManifest(manifest).success).toBe(true);
+    for (const invalid of [[], [...access, ...access], [{ ...access[0], token: 'secret' }],
+      [{ ...access[0], repository: 'https://evil.example/a' }], [{ ...access[0], provider: 'unknown' }],
+      [{ ...access[0], requirement: 'public' }]]) {
+      expect(validateColmapManifest({ ...manifest, access: invalid }).success).toBe(false);
+    }
+  });
   it('supports v5 presentation-frame indices or times, without changing v4 timestamp parsing', () => {
     const source = { url: 'camera.mp4', bytes: 300000000 };
     const value = { ...manifest, version: 5, videoImages: {

@@ -190,6 +190,14 @@ describe('Hugging Face private dataset reads', () => {
   it('names a gated dataset to a signed-out reader', async () => {
     request.mockImplementation(async () => new Response(null, { status: 401, headers: { 'X-Error-Code': 'GatedRepo' } }));
     await expect(fetchDatasetResource(root + 'sparse/0/cameras.bin')).rejects.toThrow('gated');
+    await expect(fetchDatasetResource(root + 'sparse/0/cameras.bin')).rejects.toMatchObject({ access: { provider: 'hf' } });
+  });
+
+  it('keeps a signed-in session when a gate returns 401 rather than an expired-token response', async () => {
+    connected();
+    request.mockResolvedValue(new Response(null, { status: 401, headers: { 'X-Error-Code': 'GatedRepo' } }));
+    await expect(fetchDatasetResource(root + 'sparse/0/cameras.bin')).rejects.toMatchObject({ access: { provider: 'hf' } });
+    expect(hfAuth.expire).not.toHaveBeenCalled();
   });
 
   it('names a gated dataset to a signed-in reader its owner has not approved', async () => {

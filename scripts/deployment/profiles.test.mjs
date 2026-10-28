@@ -73,12 +73,13 @@ test('root releases merge the public Hub only after read-only verification and b
   assert.match(deploy[merge].run, /--verify --merge-root=/);
 });
 
-test('GitHub root routing is built before smoke checks and publishes the tested artifact', () => {
+test('GitHub root routing is built before smoke checks and publishes the tested artifact', t => {
   const steps = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8')).jobs.deploy.steps;
   const build = steps.findIndex(step => step.name === 'Create root redirect');
   assert.ok(build >= 0 && build < steps.findIndex(step => step.name === 'Smoke prepared artifacts'));
   assert.equal(steps[build].run, 'node scripts/deployment/build-github-root.mjs');
   const output = mkdtempSync('.tmp/deployment-root-test-');
+  t.after(() => rmSync(output, { recursive: true, force: true }));
   const result = spawnSync(process.execPath, ['scripts/deployment/build-github-root.mjs', `--out=${output}`]);
   assert.equal(result.status, 0, result.stderr.toString());
   const index = readFileSync(`${output}/index.html`, 'utf8');

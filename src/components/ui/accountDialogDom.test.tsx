@@ -48,7 +48,7 @@ describe.each(['landing', 'toolbar'] as const)('%s account dialog DOM', surface 
       ? state.status === 'connected' ? 'Load a public or private dataset.' : 'Sign in to open private datasets.'
       : state.status === 'connected' ? 'Load private datasets with this account.' : 'Sign in to open private datasets.';
     expect(dialog).toHaveAccessibleDescription(state.status === 'connected'
-      ? description : `${description} Allows reading your repositories, including private datasets.`);
+      ? description : `${description} Allows reading private datasets and gated datasets you can access.`);
     expect(dialog.outerHTML).toMatchSnapshot();
   });
 
@@ -57,7 +57,7 @@ describe.each(['landing', 'toolbar'] as const)('%s account dialog DOM', surface 
     try {
       vi.spyOn(hfAuth, 'getSnapshot').mockReturnValue(states[0][1]);
       const dialog = open();
-      expect(screen.getByText('Allows reading private repositories and creating datasets.')).toBeVisible();
+      expect(screen.getByText('Allows reading private and approved gated datasets, and creating datasets.')).toBeVisible();
       expect(dialog.outerHTML).toMatchSnapshot();
     } finally { config.readOnly = true; }
   });

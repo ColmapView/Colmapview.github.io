@@ -2,7 +2,7 @@
 
 See [browser connections](account-sessions.md) for token lifetime, reconnect behavior and dated live checks.
 
-Public dataset links work without signing in. To open a private dataset:
+Ungated public dataset links work without signing in. To open a private or gated dataset, connect an account with access:
 
 1. Select the **🤗 Hugging Face** account icon next to **Upload configuration** in **Load Dataset**.
 2. Select **Sign in with Hugging Face** and approve the requested access: repository read access and, where publishing is enabled, permission to create datasets and write to the ones ColmapView creates. For an organization-owned dataset, also authorize that organization; your account must already be allowed to read the repo.
@@ -40,3 +40,5 @@ This configuration requests `openid profile read-repos`. When `VITE_HF_PUBLISH_E
 Restart Vite after changing environment variables. For GitHub Pages, set repository variable **`HF_AUTH_ENABLED=true`** for release builds (`/latest/` and versioned directories) or **`HF_DEV_AUTH_ENABLED=true`** for `/dev/` builds, together with `HF_OAUTH_CLIENT_ID`/`HF_OAUTH_REDIRECT_URI` or `HF_DEV_OAUTH_CLIENT_ID`/`HF_DEV_OAUTH_REDIRECT_URI`. `HF_PUBLISH_ENABLED` and `HF_DEV_PUBLISH_ENABLED` control publication independently. Publishing also enables sign-in, so the `*_AUTH_ENABLED` flags matter only for read-only viewing while publishing is off. Settings take effect on the next build. The custom host uses its own `CUSTOM_HF_*` settings (see [dual hosting](dual-hosting.md)); isolated previews never enable sign-in.
 
 If repository access is denied, check the connected account, its repo membership, and any organization permission granted in the consent screen. Signed out, Hugging Face answers for a missing repository exactly as for a private one, so also check the URL. Gated datasets are reported as gated. Expired or rejected credentials require signing in again; credentials are never embedded in a pasted URL.
+
+Public gated datasets prompt sign-in when required files refuse anonymous access. The account needs publisher approval. The existing repository-read grant includes gated access. Tokens stay in tab memory and go directly to HF, never the Hub Worker.

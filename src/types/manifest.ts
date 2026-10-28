@@ -35,11 +35,21 @@ export type ManifestVideoImage = {
   playbackRate?: number;
 } & ({ timestamp: number; frameIndex?: never } | { frameIndex: number; timestamp?: never });
 
+/** Advisory repository access requirements, never credentials or authorization. */
+export interface ManifestAccess {
+  provider: 'huggingface';
+  /** Dataset repository ID, not a URL or a model repository. */
+  repository: string;
+  requirement: 'gated' | 'private';
+}
+
 export interface ColmapManifest {
   /** Versions 1–4 retain their contracts; version 5 adds presentation-frame indices. */
   version: number;
   /** Optional name for the reconstruction */
   name?: string;
+  /** Optional hints scoped to exact repositories; omission means unknown, not public. */
+  access?: ManifestAccess[];
   /** Base URL prefix for all relative file paths */
   baseUrl: string;
   /** Optional saved ColmapView presentation, relative to baseUrl. */
@@ -138,6 +148,12 @@ const videoImagesSchema = <T extends z.ZodType>(binding: T) => z.record(z.string
 
 const manifestShape = {
   name: z.string().optional(),
+  access: z.array(z.object({
+    provider: z.literal('huggingface'),
+    repository: z.string().max(193).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/),
+    requirement: z.enum(['gated', 'private']),
+  }).strict()).min(1).max(16).refine(items => new Set(items.map(item => item.repository)).size === items.length,
+    { message: 'Declare each repository once.' }).optional(),
   baseUrl: z.string().url(),
   viewerStatePath: z.string().min(1).max(4096).optional(),
   files: z.object({
