@@ -44,7 +44,8 @@ test('GitHub gallery stays on GitHub with live search, metadata, images and GitH
   const search = page.getByRole('searchbox', { name: 'Search datasets' });
   await search.fill('colmapview_nonexistent_scene_qzx');
   await search.press('Enter');
-  await expect(page.locator('#catalog-count')).toHaveText('No matching datasets');
+  await expect(page.locator('#catalog-count')).toHaveAccessibleName('No matching datasets');
+  await expect(page.getByText('No datasets match these filters.', { exact: true })).toBeVisible();
   expect(new URL(page.url()).origin).toBe(github);
   await page.getByRole('link', { name: 'Reset', exact: true }).click();
   await expect(cards.first()).toBeVisible();

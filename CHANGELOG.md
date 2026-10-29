@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Check Hub empty-result semantics independently of its compact visible count wording in publication smoke tests.
 - Let Hub publication proceed during viewer validation while preserving release order and preventing stale Hub files from replacing newer publications.
 - Remove temporary Hub frontend download and root-publication fixtures after deployment tests.
 
