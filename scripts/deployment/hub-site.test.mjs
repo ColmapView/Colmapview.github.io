@@ -1,7 +1,9 @@
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { HUB_FILES, HUB_ORIGIN, downloadHub, mergeHubRoot, sameHubFrontend, sha256, validateHubManifest, verifyHub, verifyLiveHub } from './hub-site.mjs';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { HUB_FILES, HUB_ORIGIN, downloadHub, mergeHubRoot, preservePublishedHub, sameHubFrontend, sha256, validateHubManifest, verifyHub, verifyLiveHub } from './hub-site.mjs';
 
 const html = Buffer.from('<!doctype html><html data-hub-frontend="github" data-hub-public-catalog="true"><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'"></head><body>Public gallery</body></html>');
 const redirect = Buffer.from('<!doctype html><html data-hub-redirect="true"><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'"></head><body><a href="/hub/">Hub</a></body></html>');
@@ -60,4 +62,60 @@ test('download uses fixed public paths without credentials or redirects, then ve
   await assert.rejects(verifyHub(output), /Unexpected Hub export/);
   await assert.rejects(downloadHub(output, async url => url.endsWith('site.json')
     ? Response.json(manifest()) : new Response(Buffer.alloc(html.length + 1))), /size limit/);
+});
+
+
+test('root releases preserve published Hub bytes and fail closed on unsafe or unavailable Git objects', async t => {
+  await mkdir('.tmp', { recursive: true });
+  const output = await mkdtemp('.tmp/hub-preserve-test-');
+  t.after(() => rm(output, { recursive: true, force: true }));
+  await downloadHub(output, async url => url.endsWith('site.json') ? Response.json(manifest())
+    : new Response(bytesFor(manifest().files.find(f => url.endsWith(f.artifact)).path)));
+  const newer = manifest(); newer.version = '0.20.1'; newer.source = 'b'.repeat(40);
+  const updated = Buffer.from(html.toString().replace('Public gallery', 'New gallery'));
+  for (const file of newer.files.filter(f => !f.path.startsWith('datasets/'))) {
+    file.bytes = updated.length; file.sha256 = sha256(updated); file.artifact = `/hub/assets/github/${file.sha256}.html`;
+  }
+  const ok = stdout => ({ status: 0, stdout: Buffer.from(stdout) });
+  const git = args => {
+    if (args[0] === 'ls-remote') {
+      assert.deepEqual(args, ['ls-remote', '--exit-code', '--refs', 'origin', 'refs/heads/gh-pages']);
+      return ok('a'.repeat(40) + '\trefs/heads/gh-pages\n');
+    }
+    if (args[0] === 'fetch') {
+      assert.deepEqual(args, ['fetch', '--no-tags', '--depth=1', 'origin', 'refs/heads/gh-pages']);
+      return ok('');
+    }
+    if (args[0] === 'ls-tree') {
+      const name = args.at(-1);
+      return ok(`${name === 'hub' ? '040000 tree' : '100644 blob'} ${'a'.repeat(40)}\t${name}\n`);
+    }
+    assert.equal(args[0], 'show');
+    const file = args[1].slice('FETCH_HEAD:hub/'.length);
+    return ok(file === 'deployment.json' ? JSON.stringify(newer) : file.startsWith('datasets/') ? redirect : updated);
+  };
+  assert.equal(await preservePublishedHub(output, () => ({ status: 2 })), false);
+  assert.equal(await preservePublishedHub(output, args => args[0] === 'ls-tree' ? ok('') : git(args)), false);
+  for (const status of [1, 128, null]) await assert.rejects(preservePublishedHub(output, () => ({ status })), /failed/);
+  await assert.rejects(preservePublishedHub(output, args => args[0] === 'show' ? ok('invalid') : git(args)));
+  for (const entry of ['', `120000 blob ${'a'.repeat(40)}\thub/deployment.json\n`]) {
+    await assert.rejects(preservePublishedHub(output, args => args[0] === 'ls-tree' && args.at(-1) !== 'hub' ? ok(entry) : git(args)), /unsafe/);
+  }
+  await assert.rejects(preservePublishedHub(output, args => args[0] === 'show' && !args[1].endsWith('deployment.json') ? ok(html) : git(args)));
+  assert.deepEqual(await verifyHub(output), manifest(), 'failed reads leave the verified candidate intact');
+  assert.equal(await preservePublishedHub(output, git), true);
+  assert.deepEqual(await verifyHub(output), newer);
+  assert.deepEqual(await readFile(`${output}/index.html`), updated);
+  // Exercise the real Git tree/blob format, including a local fetch, without touching any remote service.
+  const repository = await mkdtemp('.tmp/hub-git-test-');
+  t.after(() => rm(repository, { recursive: true, force: true }));
+  await cp(output, `${repository}/hub`, { recursive: true });
+  const realGit = args => spawnSync('git', args, { cwd: repository, windowsHide: true });
+  for (const args of [
+    ['init'], ['add', 'hub'],
+    ['-c', 'user.name=Deployment test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'Published Hub'],
+    ['branch', 'gh-pages'], ['remote', 'add', 'origin', path.resolve(repository)],
+  ]) assert.equal(realGit(args).status, 0);
+  assert.equal(await preservePublishedHub(output, realGit), true);
+  assert.deepEqual(await verifyHub(output), newer);
 });

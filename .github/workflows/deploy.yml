@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: pages-deploy
+  group: viewer-deploy
   cancel-in-progress: false
   # Wait in line. With the default single pending slot, a later push cancels a waiting tag deploy.
   queue: max
@@ -25,6 +25,10 @@ jobs:
       contents: read
 
   deploy:
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+      queue: max
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -99,7 +103,7 @@ jobs:
           path: .tmp/deployment/hub
       - name: Merge verified public Hub frontend into root
         if: steps.target.outputs.is_release == 'true'
-        run: node scripts/deployment/hub-site.mjs --verify --merge-root=.tmp/deployment/root
+        run: node scripts/deployment/hub-site.mjs --verify --merge-root=.tmp/deployment/root --preserve-published
       - name: Prepare archived pages without Google analytics or font requests
         if: steps.target.outputs.is_release == 'true'
         run: node scripts/deployment/prepare-archived-pages.mjs

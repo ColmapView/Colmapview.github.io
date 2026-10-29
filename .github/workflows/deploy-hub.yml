@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages-deploy
+  group: hub-frontend
   cancel-in-progress: false
   queue: max
 
@@ -50,6 +50,10 @@ jobs:
           if-no-files-found: error
 
   publish:
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+      queue: max
     needs: prepare
     if: needs.prepare.outputs.changed == 'true'
     permissions:

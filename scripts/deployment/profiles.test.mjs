@@ -71,6 +71,7 @@ test('root releases merge the public Hub only after read-only verification and b
   assert.ok(merge > deploy.findIndex(step => step.name === 'Download verified public Hub frontend'));
   assert.ok(merge < deploy.findIndex(step => step.name === 'Smoke prepared artifacts'));
   assert.match(deploy[merge].run, /--verify --merge-root=/);
+  assert.match(deploy[merge].run, /--preserve-published/);
 });
 
 test('GitHub root routing is built before smoke checks and publishes the tested artifact', t => {
@@ -256,45 +257,47 @@ test('publication gate check rejects renamed, removed, moved, conditional or byp
   }
 });
 
-/**
- * Deploy runs wait in one queue. By default GitHub keeps one pending run per group and cancels it when another
- * arrives, so a later push to main could drop a waiting tag deploy: the only run that updates the custom host.
- */
-function assertDeployRunsQueue(workflow, validation) {
-  const { concurrency } = workflow;
-  assert.ok(concurrency !== null && typeof concurrency === 'object', 'deploy.yml must declare concurrency as a mapping with queue: max');
-  assert.equal(concurrency.group, 'pages-deploy', 'every deploy.yml run must share the pages-deploy group so gh-pages pushes take turns');
-  assert.equal(concurrency.queue, 'max', 'deploy.yml runs must wait in line (queue: max) so a later push never cancels a waiting deploy');
-  assert.ok([undefined, false].includes(concurrency['cancel-in-progress']), 'deploy.yml must never cancel a deploy in progress');
-  for (const [name, job] of Object.entries(workflow.jobs)) {
-    assert.equal(job.concurrency, undefined, `deploy.yml job ${name} must not add a concurrency group with its own single pending slot`);
-  }
-  // Every deploy run calls the validation workflow, which may cancel only an older run of the same ref.
-  const inner = validation.concurrency;
-  if (inner !== null && typeof inner === 'object' && ![undefined, false].includes(inner['cancel-in-progress'])) {
-    assert.match(String(inner.group), /\$\{\{\s*github\.ref\s*\}\}/, 'e2e.yml may cancel in progress only within one ref');
-  }
+function assertDeployRunsQueue(workflow, validation, hub) {
+  const queue = (value, group) => {
+    assert.ok(value && typeof value === 'object', 'concurrency must be a mapping');
+    assert.equal(value.group, group);
+    assert.equal(value.queue, 'max');
+    assert.equal(value['cancel-in-progress'], false);
+  };
+  queue(workflow.concurrency, 'viewer-deploy');
+  queue(hub.concurrency, 'hub-frontend');
+  queue(workflow.jobs.deploy.concurrency, 'pages-deploy');
+  queue(hub.jobs.publish.concurrency, 'pages-deploy');
+  assert.equal(workflow.jobs.validate.concurrency, undefined);
+  assert.equal(hub.jobs.prepare.concurrency, undefined);
+  assert.equal(workflow.jobs.deploy.needs, 'validate');
+  assert.equal(hub.jobs.publish.needs, 'prepare');
+  assert.match(validation.concurrency.group, /github\.ref/);
 }
 
-test('deploy runs queue in one group, so no later push cancels a waiting tag deploy', () => {
-  const workflow = yaml.load(readFileSync('.github/workflows/deploy.yml', 'utf8'));
-  const validation = yaml.load(readFileSync('.github/workflows/e2e.yml', 'utf8'));
-  assertDeployRunsQueue(workflow, validation);
+test('independent validation queues share a non-cancelling Pages writer lock', () => {
+  const load = file => yaml.load(readFileSync(`.github/workflows/${file}.yml`, 'utf8'));
+  const original = [load('deploy'), load('e2e'), load('deploy-hub')];
+  assertDeployRunsQueue(...original);
   const variants = [
-    [deploy => { delete deploy.concurrency.queue; }, /queue: max/],
-    [deploy => { deploy.concurrency.queue = 'single'; }, /queue: max/],
-    [deploy => { deploy.concurrency = 'pages-deploy'; }, /mapping/],
-    [deploy => { deploy.concurrency.group = 'pages-deploy-${{ github.ref }}'; }, /share the pages-deploy group/],
-    [deploy => { deploy.concurrency['cancel-in-progress'] = true; }, /never cancel/],
-    [deploy => { deploy.concurrency['cancel-in-progress'] = "${{ github.ref_type != 'tag' }}"; }, /never cancel/],
-    [deploy => { deploy.jobs.deploy.concurrency = { group: 'pages-publish' }; }, /job deploy must not add/],
-    [(deploy, e2e) => { e2e.concurrency.group = 'validation-${{ github.workflow }}'; }, /within one ref/],
+    d => { delete d.concurrency.queue; },
+    d => { d.concurrency = 'viewer-deploy'; },
+    d => { d.concurrency.group = 'pages-deploy'; },
+    d => { d.concurrency['cancel-in-progress'] = true; },
+    d => { delete d.jobs.deploy.concurrency; },
+    d => { d.jobs.deploy.concurrency.queue = 'single'; },
+    d => { d.jobs.deploy.concurrency.group += '-${{ github.ref }}'; },
+    d => { d.jobs.deploy.concurrency['cancel-in-progress'] = true; },
+    d => { d.jobs.validate.concurrency = { group: 'pages-deploy' }; },
+    (d, e, h) => { h.concurrency.group = 'pages-deploy'; },
+    (d, e, h) => { h.jobs.publish.concurrency.group = 'other'; },
+    (d, e, h) => { h.jobs.prepare.concurrency = { group: 'pages-deploy' }; },
+    (d, e) => { e.concurrency.group = 'validation'; },
   ];
-  for (const [mutate, error] of variants) {
-    const deploy = structuredClone(workflow);
-    const e2e = structuredClone(validation);
-    mutate(deploy, e2e);
-    assert.throws(() => assertDeployRunsQueue(deploy, e2e), error);
+  for (const mutate of variants) {
+    const copies = original.map(value => structuredClone(value));
+    mutate(...copies);
+    assert.throws(() => assertDeployRunsQueue(...copies));
   }
 });
 

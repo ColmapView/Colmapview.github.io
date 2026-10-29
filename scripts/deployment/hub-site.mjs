@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFile, copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -94,6 +95,43 @@ export async function verifyHub(output) {
   return manifest;
 }
 
+/** Read only fixed Git objects, never published code. Any transport or malformed-tree error stops publication. */
+export async function preservePublishedHub(output, git = args => spawnSync('git', args, {
+  maxBuffer: 2 * 1024 * 1024, timeout: 60_000, windowsHide: true,
+})) {
+  await verifyHub(output);
+  const run = (args, absent = false) => {
+    const result = git(args);
+    if (absent && !result.error && result.status === 2) return null;
+    assert.ok(!result.error && result.status === 0, `Cannot read published Hub: git ${args[0]} failed.`);
+    return Buffer.from(result.stdout);
+  };
+  if (run(['ls-remote', '--exit-code', '--refs', 'origin', 'refs/heads/gh-pages'], true) === null) return false;
+  run(['fetch', '--no-tags', '--depth=1', 'origin', 'refs/heads/gh-pages']);
+  const tree = run(['ls-tree', 'FETCH_HEAD', '--', 'hub']).toString('utf8');
+  if (!tree) return false; // First Hub publication uses the read-only-tested artifact.
+  assert.match(tree, /^040000 tree [a-f0-9]{40,64}\thub\n$/);
+  const read = (file, limit) => {
+    const object = `hub/${file}`;
+    const entry = run(['ls-tree', 'FETCH_HEAD', '--', object]).toString('utf8');
+    assert.ok(entry.startsWith('100644 blob ') && entry.endsWith(`\t${object}\n`), `Missing or unsafe published Hub file: ${file}`);
+    const bytes = run(['show', `FETCH_HEAD:${object}`]);
+    assert.ok(bytes.length <= limit, 'Published Hub file exceeds its size limit.');
+    return bytes;
+  };
+  const raw = read('deployment.json', 16 * 1024);
+  const manifest = validateHubManifest(JSON.parse(raw));
+  const files = new Map([['deployment.json', raw]]);
+  for (const file of manifest.files) {
+    const bytes = read(file.path, file.bytes);
+    validateHtml(bytes, file);
+    files.set(file.path, bytes);
+  }
+  // Replace the expected artifact only after every published blob passes verification.
+  for (const [file, bytes] of files) await writeFile(path.join(output, file), bytes);
+  return true;
+}
+
 /** Merge only a previously tested public artifact; the release publisher never runs its code. */
 export async function mergeHubRoot(output, root) {
   await verifyHub(output);
@@ -118,7 +156,12 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const output = safeOutputDirectory(process.argv.find(arg => arg.startsWith('--out='))?.slice(6) || '.tmp/deployment/hub');
   const merge = process.argv.find(arg => arg.startsWith('--merge-root='))?.slice(13);
   const live = process.argv.includes('--live');
-  const manifest = process.argv.includes('--verify') || merge || live ? await verifyHub(output) : await downloadHub(output);
+  let manifest = process.argv.includes('--verify') || merge || live ? await verifyHub(output) : await downloadHub(output);
+  if (process.argv.includes('--preserve-published')) {
+    assert.ok(merge, '--preserve-published requires --merge-root.');
+    await preservePublishedHub(output);
+    manifest = await verifyHub(output);
+  }
   if (merge) await mergeHubRoot(output, safeOutputDirectory(merge));
   if (live) {
     const deadline = Date.now() + 180_000;

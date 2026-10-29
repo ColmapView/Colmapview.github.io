@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Let Hub publication proceed during viewer validation while preserving release order and preventing stale Hub files from replacing newer publications.
 - Remove temporary Hub frontend download and root-publication fixtures after deployment tests.
 
 ## [0.25.11] - 2026-10-28
