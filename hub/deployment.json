@@ -1,14 +1,14 @@
 {
   "schemaVersion": 2,
-  "version": "0.20.11",
-  "source": "fbc575b556c208d204e89db1bde278d218ec1518",
+  "version": "0.20.12",
+  "source": "7fcd1fefdf132daae8ffb31ca81079e160519e13",
   "dirty": false,
   "files": [
     {
       "path": "index.html",
-      "artifact": "/hub/assets/github/e32fff7f2aa00a0376dd4a11a7fca11ebae2a9668e985640bad1c13d902a0a06.html",
-      "sha256": "e32fff7f2aa00a0376dd4a11a7fca11ebae2a9668e985640bad1c13d902a0a06",
-      "bytes": 33440
+      "artifact": "/hub/assets/github/d7756ea3e6fd71cc1fdc7bde60229633c83c783a603073fa3f5185b1fcb22ac6.html",
+      "sha256": "d7756ea3e6fd71cc1fdc7bde60229633c83c783a603073fa3f5185b1fcb22ac6",
+      "bytes": 33509
     },
     {
       "path": "entry/index.html",
