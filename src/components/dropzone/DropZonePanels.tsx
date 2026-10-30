@@ -220,7 +220,7 @@ export function DesktopDropZonePanel({
                 href={getHubCatalogUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Browse public datasets on ColmapView Hub"
+                title="Browse public datasets on Spatial Hub"
                 className={`${getDesktopDropZoneActionButtonClass(false)} no-underline`}
               >
                 <img src={publicAsset('LOGO.png')} alt="" className={DROP_ZONE_DESKTOP_ACTION_BUTTON_ICON_CLASS} />
@@ -284,7 +284,7 @@ export function TouchDropZonePanel({
             href={getHubCatalogUrl()}
             target="_blank"
             rel="noopener noreferrer"
-            title="Browse public datasets on ColmapView Hub"
+            title="Browse public datasets on Spatial Hub"
             className={`${getTouchDropZoneExploreButtonClass(false)} no-underline`}
           >
             <img src={publicAsset('LOGO.png')} alt="" className={DROP_ZONE_TOUCH_ACTION_ICON_CLASS} />

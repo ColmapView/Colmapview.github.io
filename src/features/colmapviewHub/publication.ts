@@ -54,13 +54,13 @@ export class HubRequestError extends Error {
 const RETRYABLE = new Set<HubFailureKind>(['network', 'timeout', 'rate-limited', 'unavailable', 'preview']);
 const READY_TOAST = 'Hub link ready. Reopen the upload dialog to copy it.';
 const FAILED_TOAST = 'Hub link not created. Reopen the upload dialog to retry.';
-const INVALID_LINK = 'ColmapView Hub returned an invalid link.';
+const INVALID_LINK = 'Spatial Hub returned an invalid link.';
 const SOURCE_CHANGED = "The dataset changed, so its preview can't be captured. Upload again to create a Hub link.";
 
 /** A failure to reach the Hub or to receive its answer: a timeout, or a network error. */
 function transportError(error: unknown): HubRequestError {
   const timedOut = error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError');
-  return timedOut ? new HubRequestError("ColmapView Hub didn't respond.", 'timeout') : new HubRequestError("Couldn't reach ColmapView Hub.", 'network');
+  return timedOut ? new HubRequestError("Spatial Hub didn't respond.", 'timeout') : new HubRequestError("Couldn't reach Spatial Hub.", 'network');
 }
 
 /** POST /api/links with typed failures. Management stays under the configured Hub; short shares use its origin. */
@@ -85,11 +85,11 @@ export async function requestHubLink(baseUrl: string, payload: HubLinkPayload): 
     const waitMs = deadline !== null && deadline > now ? Math.max(1000, deadline - now) : 60_000;
     throw new HubRequestError(`Too many requests from your network; try again in ${Math.ceil(waitMs / 60_000)} min.`, 'rate-limited', waitMs);
   }
-  if (response.status >= 500) throw new HubRequestError('ColmapView Hub is unavailable.', 'unavailable');
+  if (response.status >= 500) throw new HubRequestError('Spatial Hub is unavailable.', 'unavailable');
   if (bodyError !== undefined) throw transportError(bodyError);
   if (!response.ok) {
     const message = field('error');
-    throw new HubRequestError(typeof message === 'string' && message ? message : 'ColmapView Hub rejected this link.', 'rejected');
+    throw new HubRequestError(typeof message === 'string' && message ? message : 'Spatial Hub rejected this link.', 'rejected');
   }
   const [url, managementPath] = [field('url'), field('managementPath')];
   if (typeof url !== 'string' || typeof managementPath !== 'string') throw new HubRequestError(INVALID_LINK, 'rejected');
@@ -200,7 +200,7 @@ export function createHubPublication(provider: HubProvider, deps: Dependencies =
       hubShareLinks.set(provider, { url: link.url, source: current.source, readyAt: now() });
     } catch (error) {
       const failure = error instanceof HubRequestError ? error
-        : new HubRequestError(error instanceof Error && error.message ? error.message : 'ColmapView Hub could not save this link.', 'rejected');
+        : new HubRequestError(error instanceof Error && error.message ? error.message : 'Spatial Hub could not save this link.', 'rejected');
       const retryable = RETRYABLE.has(failure.kind) && (failure.kind !== 'preview' || Boolean(current.capture));
       set({ phase: 'failed', viewerUrl, bucketAccess: current.bucketAccess, error: failure.message, retryable,
         ...(failure.retryAfterMs ? { coolingDown: true } : {}) });

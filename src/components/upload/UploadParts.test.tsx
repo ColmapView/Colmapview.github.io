@@ -75,7 +75,7 @@ describe('PreviousUpload', () => {
   });
 
   it('keeps a failure with Retry, and shows nothing before any upload or when the Hub is off', () => {
-    render(<PreviousUpload hub={hub({ phase: 'failed', viewerUrl, error: 'ColmapView Hub is unavailable.', retryable: true })} />);
+    render(<PreviousUpload hub={hub({ phase: 'failed', viewerUrl, error: 'Spatial Hub is unavailable.', retryable: true })} />);
     expect(screen.getByRole('button', { name: 'Retry Hub link' })).toBeVisible();
     expect(screen.getByLabelText('Share link')).toHaveValue(viewerUrl);
     cleanup();

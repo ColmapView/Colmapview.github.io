@@ -87,7 +87,7 @@ test.describe('Hugging Face dataset publication', () => {
     await expect(dialog.getByText(/public, discoverable dataset/)).toBeVisible();
     await dialog.screenshot({ path: test.info().outputPath('publication-form.png') });
     expect(hub.writes).toHaveLength(0);
-    await expect(dialog.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Also creates a short Spatial Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.', { exact: true })).toBeVisible();
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
     await expect(dialog.getByRole('region', { name: 'Published dataset' })).toBeVisible({ timeout: 45000 });
     await expect(dialog.getByRole('button', { name: 'Share on Hub', exact: true })).toBeVisible();
@@ -224,7 +224,7 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByLabel('Repository name', { exact: true }).fill('scene');
     await expect(dialog.getByRole('checkbox', { name: 'List on Hub', exact: true })).toHaveCount(0);
     await dialog.getByRole('combobox', { name: 'Access' }).selectOption('private');
-    await expect(dialog.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Also creates an unguessable Spatial Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.', { exact: true })).toBeVisible();
     await expect(dialog.getByText(/keep their metadata/)).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Save private dataset', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Check previous upload and retry' })).toBeVisible({ timeout: 45000 });
@@ -313,7 +313,7 @@ test.describe('Hugging Face dataset publication', () => {
     await dialog.getByRole('combobox', { name: 'Images' }).selectOption('jpeg');
     await dialog.getByRole('button', { name: 'Publish public dataset', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Retry Hub link', exact: true })).toBeVisible({ timeout: 45000 });
-    await expect(dialog.getByRole('alert')).toHaveText('Hub link not created: ColmapView Hub is unavailable. The link above still works.');
+    await expect(dialog.getByRole('alert')).toHaveText('Hub link not created: Spatial Hub is unavailable. The link above still works.');
     // Archive and repository sidecars can use separate data batches before the final metadata commit.
     const dataCommit = hub.commits.at(-2)!.id;
     await expect(dialog.getByLabel('Share link', { exact: true })).toHaveValue(`${new URL('/', baseURL).href}?url=https://huggingface.co/datasets/publisher/scene/resolve/${dataCommit}/dataset.zip`);

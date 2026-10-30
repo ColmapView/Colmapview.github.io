@@ -11,7 +11,7 @@ Public viewer links to supported Drive archives need no sign-in when the Drive A
 
 Private save and reopening through Drive's actual Open with menu passed on October 20, 2026 with viewer 0.19.5. See the [dated browser-only validation](account-sessions.md#live-checks--2026-10-20).
 
-After the upload is verified, ColmapView creates a ColmapView Hub link with the current-view thumbnail and metadata where the Hub is enabled: a short name when the ZIP is shared with anyone with the link, an unguessable one when it is private. The result shows the Share link. If the Hub request fails, **Retry Hub link** retries only that step; it never repeats the Drive upload. Reopening the dialog keeps the completed result, and after a new dataset or an edit resets it, the Previous upload block keeps the Hub link.
+After the upload is verified, ColmapView creates a Spatial Hub link with the current-view thumbnail and metadata where the Hub is enabled: a short name when the ZIP is shared with anyone with the link, an unguessable one when it is private. The result shows the Share link. If the Hub request fails, **Retry Hub link** retries only that step; it never repeats the Drive upload. Reopening the dialog keeps the completed result, and after a new dataset or an edit resets it, the Previous upload block keeps the Hub link.
 
 Share links use `https://colmapview.opsiclear.com/s/<id>` and open the saved viewer URL directly. Existing `/hub/<id>` links and private delete links still work. Updated viewers accept the shorter address only when it identifies the same record on the configured Hub origin; older Hub responses remain supported.
 

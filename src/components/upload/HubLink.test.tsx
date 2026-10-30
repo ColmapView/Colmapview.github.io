@@ -23,8 +23,8 @@ describe('HubLinkResult', () => {
   });
 
   it('explains a failure, says the upload link still works, and offers Retry only when it can help', () => {
-    const props = renderResult({ phase: 'failed', viewerUrl, error: "Couldn't reach ColmapView Hub.", retryable: true });
-    expect(screen.getByRole('alert')).toHaveTextContent("Hub link not created: Couldn't reach ColmapView Hub. The link above still works.");
+    const props = renderResult({ phase: 'failed', viewerUrl, error: "Couldn't reach Spatial Hub.", retryable: true });
+    expect(screen.getByRole('alert')).toHaveTextContent("Hub link not created: Couldn't reach Spatial Hub. The link above still works.");
     fireEvent.click(screen.getByRole('button', { name: 'Retry Hub link' }));
     expect(props.onRetry).toHaveBeenCalledOnce();
     expect(screen.getByRole('alert')).toHaveFocus();
@@ -36,12 +36,12 @@ describe('HubLinkResult', () => {
   it('moves focus to the Hub status line after Retry, as the phase changes', () => {
     const onRetry = vi.fn();
     const props = { onRetry };
-    const { rerender } = render(<HubLinkResult state={{ phase: 'failed', viewerUrl, error: "Couldn't reach ColmapView Hub.", retryable: true }} {...props} />);
+    const { rerender } = render(<HubLinkResult state={{ phase: 'failed', viewerUrl, error: "Couldn't reach Spatial Hub.", retryable: true }} {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Retry Hub link' }));
     rerender(<HubLinkResult state={{ phase: 'creating', viewerUrl }} {...props} />);
     expect(screen.getByRole('status')).toHaveTextContent('Creating Hub link…');
     expect(screen.getByRole('status')).toHaveFocus();
-    rerender(<HubLinkResult state={{ phase: 'failed', viewerUrl, error: 'ColmapView Hub is unavailable.', retryable: true }} {...props} />);
+    rerender(<HubLinkResult state={{ phase: 'failed', viewerUrl, error: 'Spatial Hub is unavailable.', retryable: true }} {...props} />);
     expect(screen.getByRole('alert')).not.toHaveFocus();
   });
 

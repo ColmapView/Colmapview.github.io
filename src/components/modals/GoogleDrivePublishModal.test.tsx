@@ -204,11 +204,11 @@ describe('Google Drive publishing dialog', () => {
   });
   it('discloses the Hub link for the sharing choice and titles results by access', async () => {
     await renderOpenDialog();
-    expect(screen.getByText('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toHaveAccessibleDescription('Also creates a short ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.');
+    expect(screen.getByText('Also creates a short Spatial Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Publish shared dataset' })).toHaveAccessibleDescription('Also creates a short Spatial Hub link. Anyone with it sees the title, description, preview and dataset link. Original photos can retain metadata, such as location.');
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
-    expect(screen.getByText('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Save private dataset' })).toHaveAccessibleDescription('Also creates an unguessable ColmapView Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.');
+    expect(screen.getByText('Also creates an unguessable Spatial Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save private dataset' })).toHaveAccessibleDescription('Also creates an unguessable Spatial Hub link. Anyone with it sees the title, description, preview and dataset link; the data still needs access.');
     cleanup();
     const receipt = { fileId: 'f', driveUrl: 'https://drive.google.com/file/d/f/view', viewerUrl: 'https://colmapview.opsiclear.com/?url=x' };
     actions.publish = { phase: 'completed', receipt: { ...receipt, shared: false } };
@@ -223,10 +223,10 @@ describe('Google Drive publishing dialog', () => {
   it('shows no Hub disclosure where the Hub is off', async () => {
     hubLink.value = { ...hubLink.value, enabled: false };
     await renderOpenDialog();
-    expect(screen.queryByText(/ColmapView Hub link/)).toBeNull();
+    expect(screen.queryByText(/Spatial Hub link/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Publish shared dataset' })).not.toHaveAttribute('aria-describedby');
     fireEvent.change(screen.getByRole('combobox', { name: 'Access' }), { target: { value: 'private' } });
-    expect(screen.queryByText(/ColmapView Hub link/)).toBeNull();
+    expect(screen.queryByText(/Spatial Hub link/)).toBeNull();
   });
 
   it('moves focus to the first field after sign-in', async () => {

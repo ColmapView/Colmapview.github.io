@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.12] - 2026-10-29
+
+### Changed
+
+- Rename ColmapView Hub to Spatial Hub in upload disclosures, errors, Explore Hub tooltips, policy pages and current documentation. Existing URLs and integration identifiers remain compatible.
+
 ### Fixed
 
 - Check Hub empty-result semantics independently of its compact visible count wording in publication smoke tests.

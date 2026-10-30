@@ -70,7 +70,7 @@ describe('Hub controller', () => {
 
   it.each([['public', 'public'], ['private', 'private'], ['unknown', 'private']] as const)('sends a %s bucket as %s, checking once', async (result, access) => {
     const checkBucket = vi.fn().mockResolvedValue(result);
-    const request = vi.fn().mockRejectedValueOnce(new HubRequestError("Couldn't reach ColmapView Hub.", 'network')).mockResolvedValue(link);
+    const request = vi.fn().mockRejectedValueOnce(new HubRequestError("Couldn't reach Spatial Hub.", 'network')).mockResolvedValue(link);
     const { hub } = controller({ checkBucket, request });
     const phases: string[] = [];
     hub.subscribe(() => phases.push(hub.getSnapshot().phase));
@@ -84,12 +84,12 @@ describe('Hub controller', () => {
   });
 
   it('retries a network failure with the same payload and key, and offers no Retry for a rejection', async () => {
-    const request = vi.fn().mockRejectedValueOnce(new HubRequestError("Couldn't reach ColmapView Hub.", 'network'))
+    const request = vi.fn().mockRejectedValueOnce(new HubRequestError("Couldn't reach Spatial Hub.", 'network'))
       .mockRejectedValueOnce(new HubRequestError('Use a viewer link without access credentials.', 'rejected'));
     const { hub, thumbnail } = controller({ request });
     begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
-    expect(hub.getSnapshot()).toMatchObject({ phase: 'failed', error: "Couldn't reach ColmapView Hub.", retryable: true });
+    expect(hub.getSnapshot()).toMatchObject({ phase: 'failed', error: "Couldn't reach Spatial Hub.", retryable: true });
     await hub.retry();
     expect(request.mock.calls[1][1]).toBe(request.mock.calls[0][1]);
     expect(thumbnail).toHaveBeenCalledOnce();
@@ -160,7 +160,7 @@ describe('Hub controller', () => {
 
   it('shows one toast when a link finishes while its dialog is closed, and none while it is open', async () => {
     const notify = vi.fn();
-    const request = vi.fn().mockResolvedValueOnce(link).mockRejectedValueOnce(new HubRequestError('ColmapView Hub is unavailable.', 'unavailable')).mockResolvedValue(link);
+    const request = vi.fn().mockResolvedValueOnce(link).mockRejectedValueOnce(new HubRequestError('Spatial Hub is unavailable.', 'unavailable')).mockResolvedValue(link);
     const { hub } = controller({ notify, request });
     begin(hub, { title: 'Scene' }, { access: 'public', preview, source });
     await hub.finish(viewer);
@@ -261,9 +261,9 @@ describe('requestHubLink', () => {
     access: 'public' as const, publicAcknowledged: true as const };
 
   it.each([
-    ['a network error', () => Promise.reject(new TypeError('Failed to fetch')), "Couldn't reach ColmapView Hub.", 'network', 0],
-    ['a timeout', () => Promise.reject(new DOMException('The operation timed out.', 'TimeoutError')), "ColmapView Hub didn't respond.", 'timeout', 0],
-    ['a 503', () => Promise.resolve(new Response('Temporary failure', { status: 503 })), 'ColmapView Hub is unavailable.', 'unavailable', 0],
+    ['a network error', () => Promise.reject(new TypeError('Failed to fetch')), "Couldn't reach Spatial Hub.", 'network', 0],
+    ['a timeout', () => Promise.reject(new DOMException('The operation timed out.', 'TimeoutError')), "Spatial Hub didn't respond.", 'timeout', 0],
+    ['a 503', () => Promise.resolve(new Response('Temporary failure', { status: 503 })), 'Spatial Hub is unavailable.', 'unavailable', 0],
     ['a 429 with Retry-After', () => Promise.resolve(Response.json({ error: 'Too many attempts. Try again later.' }, { status: 429, headers: { 'Retry-After': '120' } })),
       'Too many requests from your network; try again in 2 min.', 'rate-limited', 120_000],
     ['a 429 without a readable Retry-After', () => Promise.resolve(Response.json({}, { status: 429 })),
@@ -272,20 +272,20 @@ describe('requestHubLink', () => {
       'Use a viewer link without access credentials.', 'rejected', 0],
     ['a 409', () => Promise.resolve(Response.json({ error: 'No free link name. Create a new link.' }, { status: 409 })), 'No free link name. Create a new link.', 'rejected', 0],
     ['a link on another host', () => Promise.resolve(Response.json({ url: 'https://evil.example/hub/X', managementPath: '/hub/manage/X' }, { status: 201 })),
-      'ColmapView Hub returned an invalid link.', 'rejected', 0],
+      'Spatial Hub returned an invalid link.', 'rejected', 0],
     ['a link under /hubX', () => Promise.resolve(Response.json({ url: 'https://hub.invalid/hubX/Name', managementPath: '/hub/manage/Name' }, { status: 201 })),
-      'ColmapView Hub returned an invalid link.', 'rejected', 0],
+      'Spatial Hub returned an invalid link.', 'rejected', 0],
     ['a relative link', () => Promise.resolve(Response.json({ url: '/hub/Name', managementPath: '/hub/manage/Name' }, { status: 201 })),
-      'ColmapView Hub returned an invalid link.', 'rejected', 0],
+      'Spatial Hub returned an invalid link.', 'rejected', 0],
     ['a delete link on another host', () => Promise.resolve(Response.json({ url: `${HUB}/Name`, managementPath: 'https://elsewhere.example/hub/manage/Name' }, { status: 201 })),
-      'ColmapView Hub returned an invalid link.', 'rejected', 0],
+      'Spatial Hub returned an invalid link.', 'rejected', 0],
     ['a delete link outside /hub/manage/', () => Promise.resolve(Response.json({ url: `${HUB}/Name`, managementPath: '/hub/Name' }, { status: 201 })),
-      'ColmapView Hub returned an invalid link.', 'rejected', 0],
+      'Spatial Hub returned an invalid link.', 'rejected', 0],
     ['a malformed delete link', () => Promise.resolve(Response.json({ url: `${HUB}/Name`, managementPath: 'https://[' }, { status: 201 })),
-      'ColmapView Hub returned an invalid link.', 'rejected', 0],
-    ['a 201 whose body is cut off', () => Promise.resolve(brokenBody(new TypeError('network error'))), "Couldn't reach ColmapView Hub.", 'network', 0],
-    ['a 201 whose body times out', () => Promise.resolve(brokenBody(new DOMException('The operation timed out.', 'TimeoutError'))), "ColmapView Hub didn't respond.", 'timeout', 0],
-    ['a 201 whose body is not JSON', () => Promise.resolve(new Response('<html>', { status: 201 })), 'ColmapView Hub returned an invalid link.', 'rejected', 0],
+      'Spatial Hub returned an invalid link.', 'rejected', 0],
+    ['a 201 whose body is cut off', () => Promise.resolve(brokenBody(new TypeError('network error'))), "Couldn't reach Spatial Hub.", 'network', 0],
+    ['a 201 whose body times out', () => Promise.resolve(brokenBody(new DOMException('The operation timed out.', 'TimeoutError'))), "Spatial Hub didn't respond.", 'timeout', 0],
+    ['a 201 whose body is not JSON', () => Promise.resolve(new Response('<html>', { status: 201 })), 'Spatial Hub returned an invalid link.', 'rejected', 0],
   ] as const)('maps %s', async (_name, respond, message, kind, retryAfterMs) => {
     vi.stubGlobal('fetch', vi.fn(respond));
     await expect(requestHubLink(HUB, payload)).rejects.toMatchObject({ message, kind, retryAfterMs });
