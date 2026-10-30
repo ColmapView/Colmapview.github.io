@@ -1,32 +1,32 @@
 {
   "schemaVersion": 2,
-  "version": "0.20.10",
-  "source": "153e60076877ca5f1c778d73c2958fdb812a01fe",
+  "version": "0.20.11",
+  "source": "fbc575b556c208d204e89db1bde278d218ec1518",
   "dirty": false,
   "files": [
     {
       "path": "index.html",
-      "artifact": "/hub/assets/github/c904fe16c5204cbacf188ece7e22e10b45cb71b9e385ccc348d4818e24174f3d.html",
-      "sha256": "c904fe16c5204cbacf188ece7e22e10b45cb71b9e385ccc348d4818e24174f3d",
-      "bytes": 33314
+      "artifact": "/hub/assets/github/e32fff7f2aa00a0376dd4a11a7fca11ebae2a9668e985640bad1c13d902a0a06.html",
+      "sha256": "e32fff7f2aa00a0376dd4a11a7fca11ebae2a9668e985640bad1c13d902a0a06",
+      "bytes": 33440
     },
     {
       "path": "entry/index.html",
-      "artifact": "/hub/assets/github/5fa15f2bd17759077491a88b02ea105e1702c2604d8fa8b0674f900b4e598074.html",
-      "sha256": "5fa15f2bd17759077491a88b02ea105e1702c2604d8fa8b0674f900b4e598074",
-      "bytes": 6515
+      "artifact": "/hub/assets/github/6a47d6123c2f54bbd6ff9f2afcb11581040b1387f2a7ac7e982772c43c9a99f9.html",
+      "sha256": "6a47d6123c2f54bbd6ff9f2afcb11581040b1387f2a7ac7e982772c43c9a99f9",
+      "bytes": 6641
     },
     {
       "path": "datasets/index.html",
-      "artifact": "/hub/assets/github/751da0e1d5b7a1fe1940c0d475b918e36780de8df08822fa4b9e44bb280ffcf2.html",
-      "sha256": "751da0e1d5b7a1fe1940c0d475b918e36780de8df08822fa4b9e44bb280ffcf2",
-      "bytes": 741
+      "artifact": "/hub/assets/github/cce32116ad67b220ea144bbdc316669dc79fef3db3aaf5af676945d9304b9516.html",
+      "sha256": "cce32116ad67b220ea144bbdc316669dc79fef3db3aaf5af676945d9304b9516",
+      "bytes": 735
     },
     {
       "path": "datasets/entry/index.html",
-      "artifact": "/hub/assets/github/751da0e1d5b7a1fe1940c0d475b918e36780de8df08822fa4b9e44bb280ffcf2.html",
-      "sha256": "751da0e1d5b7a1fe1940c0d475b918e36780de8df08822fa4b9e44bb280ffcf2",
-      "bytes": 741
+      "artifact": "/hub/assets/github/cce32116ad67b220ea144bbdc316669dc79fef3db3aaf5af676945d9304b9516.html",
+      "sha256": "cce32116ad67b220ea144bbdc316669dc79fef3db3aaf5af676945d9304b9516",
+      "bytes": 735
     }
   ]
 }
