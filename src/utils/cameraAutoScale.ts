@@ -1,4 +1,5 @@
 import type { CameraScaleFactor } from '../store/types';
+import { CAMERA } from '../theme/timing';
 
 type Point = readonly [number, number, number];
 
@@ -6,6 +7,11 @@ type Point = readonly [number, number, number];
 const DIAGONAL_SHARE = 0.03;
 /** Frustum depth relative to the median gap between neighbouring cameras. */
 const NEIGHBOUR_SHARE = 1.5;
+/**
+ * The selected photo sits at frustum depth and fly-to puts the eye at the
+ * capture centre, so a depth near the clipping plane would clip the photo.
+ */
+const MIN_DEPTH = CAMERA.nearPlane * 5;
 /** Cameras sampled for nearest-neighbour spacing; keeps 10k-image models cheap. */
 const SPACING_SAMPLE = 256;
 
@@ -58,7 +64,8 @@ export function getAutoCameraScale(positions: readonly Point[]): { factor: Camer
   if (!(diagonal > 0)) return null;
 
   const spacing = medianNeighbourSpacing(finite);
-  const target = Math.min(DIAGONAL_SHARE * diagonal, spacing > 0 ? NEIGHBOUR_SHARE * spacing : Infinity);
+  const target = Math.max(MIN_DEPTH,
+    Math.min(DIAGONAL_SHARE * diagonal, spacing > 0 ? NEIGHBOUR_SHARE * spacing : Infinity));
 
   const [factor, multiplier] = FACTORS.find(([, value]) => target / value <= SLIDER.max) ?? FACTORS[FACTORS.length - 1];
   const snapped = Math.round(target / multiplier / SLIDER.step) * SLIDER.step;

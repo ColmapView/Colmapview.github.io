@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { KeyHintLabel, KeyboardHintsProvider, KeyboardOnly, TouchOnly, stripKeyHints } from './keyboardHints';
+import { KeyHintLabel, KeyboardOnly, TouchOnly } from './keyboardHints';
+import { KeyboardHintsProvider, stripKeyHints } from './keyboardHintsContext';
 import { SelectRow, ToggleRow } from './controlRows/BasicRows';
 
 describe('keyboard hints', () => {

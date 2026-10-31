@@ -12,7 +12,8 @@ import {
   SliderRow,
   type PanelType,
 } from '../ControlComponents';
-import { KeyboardOnly, useKeyboardHints } from '../keyboardHints';
+import { KeyboardOnly } from '../keyboardHints';
+import { useKeyboardHints } from '../keyboardHintsContext';
 import { renderCameraModeButtonIcon } from '../viewerControlButtonIcons';
 import { getCameraModeButtonState } from '../viewerControlsViewModel';
 import {

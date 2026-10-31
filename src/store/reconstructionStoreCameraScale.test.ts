@@ -25,7 +25,7 @@ describe('reconstruction store frustum size', () => {
 
     const { cameraScaleFactor, cameraScale } = useCameraStore.getState();
     expect(cameraScaleFactor).toBe('0.01');
-    expect(Number(cameraScaleFactor) * cameraScale).toBeLessThan(0.002);
+    expect(Number(cameraScaleFactor) * cameraScale).toBeLessThanOrEqual(0.005 + 1e-9);
   });
 
   it('lets a share link size win over the automatic one', async () => {

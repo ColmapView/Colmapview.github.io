@@ -1,7 +1,7 @@
 import { memo, useId, type WheelEvent } from 'react';
 import { controlPanelStyles } from '../../../theme';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
-import { useKeyHintLabel } from '../keyboardHints';
+import { useKeyHintLabel } from '../keyboardHintsContext';
 import {
   getNextSelectRowValue,
   getSelectRowOptionValue,

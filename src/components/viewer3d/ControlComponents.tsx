@@ -27,7 +27,7 @@ import {
   shouldShowControlButtonPanel,
   type ControlPanelPosition,
 } from './controlButtonPolicy';
-import { KeyboardHintsProvider, stripKeyHints } from './keyboardHints';
+import { KeyboardHintsProvider, stripKeyHints } from './keyboardHintsContext';
 import { useControlButtonStoreFacade } from './useControlButtonStoreFacade';
 export { SelectRow, ToggleRow } from './controlRows/BasicRows';
 export type { SelectRowProps, ToggleRowProps } from './controlRows/BasicRows';

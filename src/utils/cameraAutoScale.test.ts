@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CAMERA } from '../theme/timing';
 import { getAutoCameraScale } from './cameraAutoScale';
 
 function ring(count: number, radius: number): [number, number, number][] {
@@ -25,8 +26,13 @@ describe('getAutoCameraScale', () => {
     const result = getAutoCameraScale(ring(104, 0.015));
 
     expect(result!.factor).toBe('0.01');
-    expect(effective(result!)).toBeLessThan(0.002);
-    expect(effective(result!)).toBeGreaterThan(0.0004);
+    expect(effective(result!)).toBeLessThanOrEqual(0.005 + 1e-9);
+  });
+
+  it('keeps the selected photo beyond the near clipping plane', () => {
+    const result = getAutoCameraScale(ring(104, 0.001));
+
+    expect(effective(result!)).toBeGreaterThanOrEqual(CAMERA.nearPlane * 5 - 1e-9);
   });
 
   it('keeps neighbouring frames apart along a long walk-through', () => {
