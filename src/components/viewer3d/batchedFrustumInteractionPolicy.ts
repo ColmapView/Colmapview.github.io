@@ -16,7 +16,7 @@ export interface BatchedFrustumTouchStart extends BatchedFrustumPointerPoint {
 
 export type BatchedFrustumTouchUpAction<T extends BatchedFrustumInteractionItem> =
   | { type: 'none' }
-  | { type: 'openContextMenu'; frustum: T; instanceId: number };
+  | { type: 'cameraTap'; frustum: T; instanceId: number };
 
 export const BATCHED_FRUSTUM_TOUCH_TAP_MAX_DISTANCE_SQUARED = 225;
 
@@ -75,6 +75,6 @@ export function getBatchedFrustumTouchUpAction<T extends BatchedFrustumInteracti
   });
 
   return frustum
-    ? { type: 'openContextMenu', frustum, instanceId: touchStart.instanceId }
+    ? { type: 'cameraTap', frustum, instanceId: touchStart.instanceId }
     : { type: 'none' };
 }

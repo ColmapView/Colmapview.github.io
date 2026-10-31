@@ -7,7 +7,7 @@ export interface FrustumPlaneTouchStart extends FrustumPlaneTouchPoint {
   fired: boolean;
 }
 
-export type FrustumPlaneTouchUpAction = 'none' | 'toggleSelectedTransparency' | 'openContextMenu';
+export type FrustumPlaneTouchUpAction = 'none' | 'toggleSelectedTransparency' | 'cameraTap';
 
 export const FRUSTUM_TOUCH_TAP_MAX_DISTANCE_SQUARED = 225;
 
@@ -37,5 +37,5 @@ export function getFrustumPlaneTouchUpAction({
   if (!touchStart || touchStart.fired) return 'none';
   if (getSquaredTouchTravel(touchStart, touchEnd) > maxDistanceSquared) return 'none';
 
-  return isSelected && isFlownIn ? 'toggleSelectedTransparency' : 'openContextMenu';
+  return isSelected && isFlownIn ? 'toggleSelectedTransparency' : 'cameraTap';
 }

@@ -44,7 +44,7 @@ describe('frustum plane touch policy', () => {
       touchEnd: { x: 20, y: 20 },
       isSelected: true,
       isFlownIn: false,
-    })).toBe('openContextMenu');
+    })).toBe('cameraTap');
   });
 
   it('opens the context menu for short non-selected taps', () => {
@@ -52,6 +52,6 @@ describe('frustum plane touch policy', () => {
       touchStart: { x: 10, y: 10, fired: false },
       touchEnd: { x: 20, y: 20 },
       isSelected: false,
-    })).toBe('openContextMenu');
+    })).toBe('cameraTap');
   });
 });

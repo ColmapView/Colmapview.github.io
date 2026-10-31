@@ -11,6 +11,7 @@ import {
   HOTKEYS,
   formatKeyCombo,
 } from './hotkeys';
+import { readProductionSources, stripComments } from '../test/sourceTree';
 
 function comboScopePairs() {
   return Object.entries(HOTKEYS).flatMap(([id, def]) =>
@@ -41,6 +42,18 @@ describe('HOTKEYS registry', () => {
       }
     }
     expect(collisions).toEqual([]);
+  });
+
+  it('binds every single-key hint that a UI label advertises', () => {
+    // Labels carry hints such as "Camera Display (F)"; touch mode strips them
+    // (stripKeyHints), so the letter is only a promise on keyboard devices.
+    const bound = new Set(comboScopePairs().map(({ combo }) => combo));
+    const unbound = readProductionSources().flatMap(({ relativePath, source }) =>
+      [...stripComments(source).matchAll(/['"`][^'"`\n]* \(([A-Z])\)/g)]
+        .filter((match) => !bound.has(match[1].toLowerCase()))
+        .map((match) => `${relativePath}: ${match[0].slice(1)}`)
+    );
+    expect(unbound).toEqual([]);
   });
 });
 

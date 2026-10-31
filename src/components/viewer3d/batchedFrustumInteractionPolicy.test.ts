@@ -73,6 +73,6 @@ describe('batched frustum interaction policy', () => {
       touchStart: { instanceId: 1, x: 20, y: 20, fired: false },
       touchEnd: { x: 22, y: 22 },
       selectedImageId: null,
-    })).toEqual({ type: 'openContextMenu', frustum: frustums[1], instanceId: 1 });
+    })).toEqual({ type: 'cameraTap', frustum: frustums[1], instanceId: 1 });
   });
 });

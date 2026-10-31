@@ -179,7 +179,7 @@ export function useBatchedFrustumInteractions<T extends BatchedFrustumInteractio
       },
       selectedImageId,
     });
-    if (action.type !== 'openContextMenu') return;
+    if (action.type !== 'cameraTap') return;
 
     e.stopPropagation();
     markFrustumTap();

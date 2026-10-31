@@ -108,9 +108,6 @@ test.describe('Phone touch gestures', () => {
   });
 
   test('the first tap selects a camera and the second flies into it', async () => {
-    // After the load the chrome has idled, and the first tap only wakes it.
-    await page.touchscreen.tap(20, 420);
-    await page.waitForTimeout(BETWEEN_TAPS_MS);
     const target = await cameraTarget(page);
     const before = await captureSceneCenter(page);
 
