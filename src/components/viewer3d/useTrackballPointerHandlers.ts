@@ -83,8 +83,8 @@ export function useTrackballPointerHandlers({
     const onPointerDown = (event: PointerEvent) => {
       handleTrackballPointerDown({ event, ...handlerOptionsRef.current });
     };
-    const onPointerUp = () => {
-      handleTrackballPointerUp(handlerOptionsRef.current);
+    const onPointerUp = (event: PointerEvent) => {
+      handleTrackballPointerUp({ event, ...handlerOptionsRef.current });
     };
     const onPointerMove = (event: MouseEvent) => {
       handleTrackballPointerMove({ event, ...handlerOptionsRef.current });

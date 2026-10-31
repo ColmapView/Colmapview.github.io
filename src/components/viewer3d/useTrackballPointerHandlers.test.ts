@@ -138,6 +138,38 @@ describe('trackball pointer handlers', () => {
     expect(options.isDraggingRef.current).toBe(false);
   });
 
+  it('leaves touch drags started by touch handlers to touch mode', () => {
+    const options = createOptions({
+      touchMode: true,
+      isDraggingRef: ref(true),
+      draggingRef: ref(true),
+      pointerLockRequestedRef: ref(false),
+      lastTimeRef: ref(100),
+    });
+    vi.spyOn(performance, 'now').mockReturnValue(120);
+
+    handleTrackballPointerMove({ event: pointerEvent({ clientX: 40, clientY: 20, pointerType: 'touch' }), ...options });
+    handleTrackballPointerUp({ event: pointerEvent({ pointerType: 'touch' }), ...options });
+
+    expect(options.canvas.requestPointerLock).not.toHaveBeenCalled();
+    expect(options.applyRotation).not.toHaveBeenCalled();
+    expect(options.isDraggingRef.current).toBe(true);
+    expect(options.draggingRef.current).toBe(true);
+  });
+
+  it('never requests pointer lock for touch drags outside touch mode', () => {
+    const options = createOptions({
+      isDraggingRef: ref(true),
+      lastMouseRef: ref({ x: 10, y: 20 }),
+      pointerLockRequestedRef: ref(false),
+    });
+
+    handleTrackballPointerMove({ event: pointerEvent({ clientX: 14, clientY: 18, pointerType: 'touch' }), ...options });
+
+    expect(options.canvas.requestPointerLock).not.toHaveBeenCalled();
+    expect(options.applyRotation).toHaveBeenCalledWith(2, -1);
+  });
+
   it('starts panning and disables auto-rotate for middle or right button drags', async () => {
     const options = createOptions({ autoRotateMode: 'cw' });
 

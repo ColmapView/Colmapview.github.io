@@ -61,6 +61,20 @@ export interface TrackballPointerMoveOptions extends TrackballPointerHandlersOpt
   event: MouseEvent;
 }
 
+export interface TrackballPointerUpOptions extends TrackballPointerHandlersOptions {
+  event?: MouseEvent;
+}
+
+function isTouchPointer(event: MouseEvent | undefined): boolean {
+  return (event as PointerEvent | undefined)?.pointerType === 'touch';
+}
+
+// Touch mode drives gestures from touch events; the matching pointer events
+// share drag refs and must not rotate twice or request pointer lock.
+function isTouchModeGesture(touchMode: boolean, event: MouseEvent | undefined): boolean {
+  return touchMode && isTouchPointer(event);
+}
+
 export function handleTrackballPointerDown({
   event,
   touchMode,
@@ -77,7 +91,7 @@ export function handleTrackballPointerDown({
   draggingRef,
   navActions,
 }: TrackballPointerDownOptions): void {
-  if (touchMode && event.pointerType === 'touch') return;
+  if (isTouchModeGesture(touchMode, event)) return;
 
   const button = event.button;
   lastMouseRef.current = { x: event.clientX, y: event.clientY };
@@ -106,7 +120,9 @@ export function handleTrackballPointerDown({
 }
 
 export function handleTrackballPointerUp({
+  event,
   canvas,
+  touchMode,
   applyRotation,
   updateCamera,
   isDraggingRef,
@@ -116,7 +132,8 @@ export function handleTrackballPointerUp({
   lastTimeRef,
   enabledRef,
   draggingRef,
-}: TrackballPointerHandlersOptions): void {
+}: TrackballPointerUpOptions): void {
+  if (isTouchModeGesture(touchMode, event)) return;
   if (!isDraggingRef.current && !isPanningRef.current) return;
 
   draggingRef.current = false;
@@ -180,6 +197,7 @@ export function handleTrackballPointerMove({
   pointerLock,
   pickingMode,
   radius,
+  touchMode,
   rotateSpeed,
   panSpeed,
   applyRotation,
@@ -198,6 +216,8 @@ export function handleTrackballPointerMove({
   draggingRef,
   navActions,
 }: TrackballPointerMoveOptions): void {
+  if (isTouchModeGesture(touchMode, event)) return;
+
   if (!enabledRef.current) {
     if (isDraggingRef.current || isPanningRef.current) {
       angularVelocityRef.current.x = 0;
@@ -223,7 +243,7 @@ export function handleTrackballPointerMove({
       navActions.clearNavigationHistory();
     }
 
-    if (shouldRequestPointerLock(pointerLock, pickingMode, pointerLockRequestedRef.current, isLocked)) {
+    if (!isTouchPointer(event) && shouldRequestPointerLock(pointerLock, pickingMode, pointerLockRequestedRef.current, isLocked)) {
       pointerLockRequestedRef.current = true;
       canvas.requestPointerLock();
     }
