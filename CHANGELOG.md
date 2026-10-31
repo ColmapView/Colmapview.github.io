@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.14] - 2026-10-31
+
 ### Fixed
 
 - Stop reporting valid COLMAP and GLOMAP models as having inconsistent feature links. A point that observes several features of one image (COLMAP track merging, as in Mip-NeRF 360 `bicycle`) and a track that claims a feature its image leaves unassigned (GLOMAP output) are accepted, as COLMAP's own reader accepts them. Feature matching and COLMAP export are available again for these scenes.
