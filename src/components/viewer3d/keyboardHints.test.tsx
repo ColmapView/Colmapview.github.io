@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { KeyboardHintsProvider, KeyboardOnly, TouchOnly, stripKeyHints } from './keyboardHints';
+import { KeyHintLabel, KeyboardHintsProvider, KeyboardOnly, TouchOnly, stripKeyHints } from './keyboardHints';
 import { SelectRow, ToggleRow } from './controlRows/BasicRows';
 
 describe('keyboard hints', () => {
@@ -15,6 +15,7 @@ describe('keyboard hints', () => {
       <KeyboardHintsProvider value={false}>
         <KeyboardOnly><span>WASD Speed</span></KeyboardOnly>
         <TouchOnly><span>About</span></TouchOnly>
+        <span><KeyHintLabel text="Lens undistortion (U)" /></span>
         <ToggleRow label="Gizmo (T)" checked={false} onChange={() => {}} />
         <SelectRow label="Horizon Lock (H)" value="a" onChange={() => {}} options={[{ value: 'a', label: 'A' }]} />
       </KeyboardHintsProvider>
@@ -22,6 +23,7 @@ describe('keyboard hints', () => {
 
     expect(screen.queryByText('WASD Speed')).toBeNull();
     expect(screen.getByText('About')).toBeTruthy();
+    expect(screen.getByText('Lens undistortion')).toBeTruthy();
     expect(screen.getByText('Gizmo')).toBeTruthy();
     expect(screen.getByText('Horizon Lock')).toBeTruthy();
   });

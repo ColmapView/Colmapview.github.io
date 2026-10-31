@@ -53,9 +53,11 @@ describe('camera display panel view-model helpers', () => {
 
   it('defines stable camera scale factor labels', () => {
     expect(CAMERA_SCALE_FACTOR_OPTIONS).toEqual([
+      { value: '0.01', label: '0.01×' },
       { value: '0.1', label: '0.1×' },
       { value: '1', label: '1×' },
       { value: '10', label: '10×' },
+      { value: '100', label: '100×' },
     ]);
   });
 

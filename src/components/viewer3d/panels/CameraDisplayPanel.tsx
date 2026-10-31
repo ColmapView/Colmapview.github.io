@@ -17,7 +17,7 @@ import {
   ToggleRow,
   type PanelType,
 } from '../ControlComponents';
-import { KeyboardOnly } from '../keyboardHints';
+import { KeyHintLabel, KeyboardOnly } from '../keyboardHints';
 import { renderCameraDisplayButtonIcon } from '../viewerControlButtonIcons';
 import {
   getCameraDisplayButtonState,
@@ -236,7 +236,7 @@ export function CameraDisplayPanel({
               formatValue={(v) => v.toFixed(2)}
             />
             <label className={styles.row}>
-              <span className="text-ds-secondary text-sm flex-1">{previewLabel}</span>
+              <span className="text-ds-secondary text-sm flex-1"><KeyHintLabel text={previewLabel} /></span>
               <ToggleSwitch ariaLabel={previewLabel} checked={undistortionEnabled} onChange={setUndistortionEnabled} />
             </label>
             <label className={styles.row}>

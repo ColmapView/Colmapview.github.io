@@ -22,6 +22,11 @@ export function useKeyHintLabel(text: string): string {
   return useKeyboardHints() ? text : stripKeyHints(text);
 }
 
+/** A label rendered inside a panel, for labels its owner computes outside the provider. */
+export function KeyHintLabel({ text }: { text: string }) {
+  return <>{useKeyHintLabel(text)}</>;
+}
+
 /** Renders keyboard- or mouse-only content only where it applies. */
 export function KeyboardOnly({ children }: { children: ReactNode }) {
   return useKeyboardHints() ? <>{children}</> : null;
