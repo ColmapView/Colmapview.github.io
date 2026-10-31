@@ -188,6 +188,13 @@ export const notificationStyles = {
   // Message text
   message: 'text-sm text-ds-primary break-words',
 
+  // Touch: a phone-width stack of narrow toasts that clamp long text.
+  touchContainer: 'fixed left-1/2 -translate-x-1/2 z-toast flex flex-col pointer-events-none items-center notification-stack-touch',
+  touchToast: `pointer-events-auto ${floatingPanelStyles.surface} flex items-stretch notification-toast-touch`,
+  touchContent: 'flex items-center flex-1 notification-content-touch',
+  touchMessage: 'text-xs text-ds-primary break-words',
+  touchMessageClamp: 'notification-message-clamp',
+
   // Close button area (right side)
   closeButton: 'flex-shrink-0 px-3 flex items-center text-ds-muted hover-ds-text-primary hover-ds-hover cursor-pointer transition-colors rounded-r-lg',
 

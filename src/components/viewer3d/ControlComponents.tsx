@@ -345,7 +345,7 @@ export const ControlButton = memo(function ControlButton({
         isHovered,
         disabled,
       }) && (
-        <PanelWrapper id={contentId} title={title!} anchorRef={containerRef} onReady={handlePanelReady} panelClassName={panelClassName}>
+        <PanelWrapper id={contentId} title={title!} anchorRef={containerRef} onReady={handlePanelReady} panelClassName={touchMode ? `${panelClassName ?? ''} hover-panel-touch` : panelClassName}>
           <KeyboardHintsProvider value={!touchMode}>{children}</KeyboardHintsProvider>
         </PanelWrapper>
       )}

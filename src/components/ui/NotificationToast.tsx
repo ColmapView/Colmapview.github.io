@@ -11,10 +11,13 @@ import {
 interface NotificationToastProps {
   notification: Notification;
   onClose: (id: string) => void;
+  /** Touch: narrow toast whose long message is clamped until tapped. */
+  compact?: boolean;
 }
 
-export function NotificationToast({ notification, onClose }: NotificationToastProps) {
+export function NotificationToast({ notification, onClose, compact = false }: NotificationToastProps) {
   const [isExiting, setIsExiting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const handleClose = useCallback(() => {
     setIsExiting(true);
@@ -39,12 +42,21 @@ export function NotificationToast({ notification, onClose }: NotificationToastPr
   const Icon = visualState.iconKind === 'info' ? InfoIcon : WarningIcon;
 
   return (
-    <div className={`${notificationStyles.toast} ${visualState.animationClass}`}>
+    <div className={`${compact ? notificationStyles.touchToast : notificationStyles.toast} ${visualState.animationClass}`}>
       <div className={`${notificationStyles.iconContainer} ${visualState.iconContainerClass}`}>
         <Icon className={notificationStyles.icon} />
       </div>
-      <div className={notificationStyles.content}>
-        <span className={notificationStyles.message}>{notification.message}</span>
+      <div className={compact ? notificationStyles.touchContent : notificationStyles.content}>
+        {compact ? (
+          <span
+            className={`${notificationStyles.touchMessage}${expanded ? '' : ` ${notificationStyles.touchMessageClamp}`}`}
+            onClick={() => setExpanded(value => !value)}
+          >
+            {notification.message}
+          </span>
+        ) : (
+          <span className={notificationStyles.message}>{notification.message}</span>
+        )}
       </div>
       <button
         className={notificationStyles.closeButton}
