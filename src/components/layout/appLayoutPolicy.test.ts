@@ -195,8 +195,8 @@ describe('app layout policy', () => {
       touchMode: true,
       hasShownTip: false,
     })).toEqual({
-      id: 'touchMode',
-      message: 'Tap to select, long-press for options',
+      id: 'touchCameraTaps',
+      message: 'Tap a camera to select it, tap again to fly in. Long-press opens its photo.',
     });
   });
 

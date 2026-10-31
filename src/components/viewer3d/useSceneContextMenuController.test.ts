@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
 import { usePointPickingStore, useUIStore } from '../../store';
 import { TOUCH } from '../../theme/sizing';
 import { getActiveSceneTouchPointerCount, resetFrustumTouchGuards } from './frustumTouchGuards';
@@ -32,6 +33,17 @@ function contextMenuEvent(nativePointerType?: string): ReactMouseEvent {
   } as unknown as ReactMouseEvent;
 }
 
+// Touch long-press only undoes point picks; the custom menu is desktop-only.
+function armPointPick(): void {
+  const picking = usePointPickingStore.getState();
+  picking.setPickingMode('distance-2pt');
+  picking.addSelectedPoint({ position: new THREE.Vector3(), point3DId: 1n });
+}
+
+function pickedPointCount(): number {
+  return usePointPickingStore.getState().selectedPoints.length;
+}
+
 afterEach(() => {
   // Unmount first: resetting the stores under a mounted hook is an update outside act().
   cleanup();
@@ -48,20 +60,20 @@ describe('useSceneContextMenuController', () => {
   it('clears pending scene long-press timers on unmount', () => {
     vi.useFakeTimers();
     useUIStore.getState().setTouchMode(true, 'url');
-    const openContextMenu = vi.spyOn(useUIStore.getState(), 'openContextMenu');
+    armPointPick();
     const { result, unmount } = renderHook(() => useSceneContextMenuController());
 
     act(() => result.current.handleTouchPointerDown(pointerEvent()));
     unmount();
     act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
 
-    expect(openContextMenu).not.toHaveBeenCalled();
+    expect(pickedPointCount()).toBe(1);
   });
 
   it('clears pending scene long-press timers when touch mode is disabled', () => {
     vi.useFakeTimers();
     useUIStore.getState().setTouchMode(true, 'url');
-    const openContextMenu = vi.spyOn(useUIStore.getState(), 'openContextMenu');
+    armPointPick();
     const { result, rerender } = renderHook(() => useSceneContextMenuController());
 
     act(() => result.current.handleTouchPointerDown(pointerEvent()));
@@ -69,10 +81,10 @@ describe('useSceneContextMenuController', () => {
     rerender();
     act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
 
-    expect(openContextMenu).not.toHaveBeenCalled();
+    expect(pickedPointCount()).toBe(1);
   });
 
-  it('opens the menu after a stationary single-finger long-press', () => {
+  it('never opens the custom menu from a touch long-press', () => {
     vi.useFakeTimers();
     useUIStore.getState().setTouchMode(true, 'url');
     const openContextMenu = vi.spyOn(useUIStore.getState(), 'openContextMenu');
@@ -81,13 +93,25 @@ describe('useSceneContextMenuController', () => {
     act(() => result.current.handleTouchPointerDown(pointerEvent({ pointerId: 1 })));
     act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
 
-    expect(openContextMenu).toHaveBeenCalledWith(10, 20);
+    expect(openContextMenu).not.toHaveBeenCalled();
   });
 
-  it('does not open the menu when a second finger joins before the delay (pinch)', () => {
+  it('undoes the last picked point after a stationary single-finger long-press', () => {
     vi.useFakeTimers();
     useUIStore.getState().setTouchMode(true, 'url');
-    const openContextMenu = vi.spyOn(useUIStore.getState(), 'openContextMenu');
+    armPointPick();
+    const { result } = renderHook(() => useSceneContextMenuController());
+
+    act(() => result.current.handleTouchPointerDown(pointerEvent({ pointerId: 1 })));
+    act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
+
+    expect(pickedPointCount()).toBe(0);
+  });
+
+  it('does not fire when a second finger joins before the delay (pinch)', () => {
+    vi.useFakeTimers();
+    useUIStore.getState().setTouchMode(true, 'url');
+    armPointPick();
     const { result } = renderHook(() => useSceneContextMenuController());
 
     act(() => result.current.handleTouchPointerDown(pointerEvent({ pointerId: 1, clientX: 10, clientY: 20 })));
@@ -96,13 +120,13 @@ describe('useSceneContextMenuController', () => {
     act(() => result.current.handleTouchPointerMove(pointerEvent({ pointerId: 2, clientX: 160, clientY: 260 })));
     act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
 
-    expect(openContextMenu).not.toHaveBeenCalled();
+    expect(pickedPointCount()).toBe(1);
   });
 
-  it('does not open the menu after one finger of a two-finger gesture lifts', () => {
+  it('does not fire after one finger of a two-finger gesture lifts', () => {
     vi.useFakeTimers();
     useUIStore.getState().setTouchMode(true, 'url');
-    const openContextMenu = vi.spyOn(useUIStore.getState(), 'openContextMenu');
+    armPointPick();
     const { result } = renderHook(() => useSceneContextMenuController());
 
     act(() => result.current.handleTouchPointerDown(pointerEvent({ pointerId: 1 })));
@@ -110,20 +134,20 @@ describe('useSceneContextMenuController', () => {
     act(() => result.current.handleTouchPointerUp(pointerEvent({ pointerId: 2, clientX: 120, clientY: 220 })));
     act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
 
-    expect(openContextMenu).not.toHaveBeenCalled();
+    expect(pickedPointCount()).toBe(1);
   });
 
   it('cancels the long-press when the pointer is cancelled (browser takes the gesture)', () => {
     vi.useFakeTimers();
     useUIStore.getState().setTouchMode(true, 'url');
-    const openContextMenu = vi.spyOn(useUIStore.getState(), 'openContextMenu');
+    armPointPick();
     const { result } = renderHook(() => useSceneContextMenuController());
 
     act(() => result.current.handleTouchPointerDown(pointerEvent({ pointerId: 1 })));
     act(() => result.current.handleTouchPointerCancel(pointerEvent({ pointerId: 1 })));
     act(() => vi.advanceTimersByTime(TOUCH.longPressDelay));
 
-    expect(openContextMenu).not.toHaveBeenCalled();
+    expect(pickedPointCount()).toBe(1);
   });
 
   it('ignores touch-derived native contextmenu events in touch mode', () => {
@@ -134,8 +158,7 @@ describe('useSceneContextMenuController', () => {
     const event = contextMenuEvent('touch');
     act(() => result.current.handleContextMenu(event));
 
-    // The OS long-press menu stays suppressed, but the app menu is owned by the
-    // controller's own long-press timer - not by this synthesized event.
+    // The OS long-press menu stays suppressed, and touch never opens the app menu.
     expect(event.preventDefault).toHaveBeenCalled();
     expect(openContextMenu).not.toHaveBeenCalled();
   });

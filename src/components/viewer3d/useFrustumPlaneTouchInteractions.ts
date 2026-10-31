@@ -15,6 +15,7 @@ interface FrustumPlaneTouchInteractionsOptions {
   enabled: boolean;
   imageId: number;
   isSelected: boolean;
+  isFlownIn?: boolean;
   onContextMenu: (imageId: number) => void;
   onLongPress?: (imageId: number) => void;
   setTouchTransparent: Dispatch<SetStateAction<boolean>>;
@@ -24,6 +25,7 @@ export function useFrustumPlaneTouchInteractions({
   enabled,
   imageId,
   isSelected,
+  isFlownIn,
   onContextMenu,
   onLongPress,
   setTouchTransparent,
@@ -66,6 +68,7 @@ export function useFrustumPlaneTouchInteractions({
       touchStart: touchDown ? { x: touchDown.x, y: touchDown.y, fired } : null,
       touchEnd: { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY },
       isSelected,
+      isFlownIn,
     });
 
     if (action === 'none') return;
@@ -78,7 +81,7 @@ export function useFrustumPlaneTouchInteractions({
 
     markFrustumTap();
     onContextMenu(imageId);
-  }, [imageId, isSelected, onContextMenu, setTouchTransparent]);
+  }, [imageId, isFlownIn, isSelected, onContextMenu, setTouchTransparent]);
 
   return {
     onPointerDown: enabled ? onPointerDown : undefined,

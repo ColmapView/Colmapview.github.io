@@ -176,6 +176,10 @@ export function useSceneContextMenuController(): SceneContextMenuController {
     }
 
     if (wasSceneObjectTouchDownRecent()) return;
+    // The custom menu is a desktop right-click affordance; touch long-press only
+    // undoes point picks.
+    if (getSceneContextMenuAction({ pickingMode, selectedPointsLength, markerRightClickHandled: false })
+      === 'open-context-menu') return;
 
     closeContextMenu();
     clearLongPress();

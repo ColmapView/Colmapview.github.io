@@ -20,7 +20,7 @@ export const TOUCH_LAYOUT_ROOT_CLASS = 'h-screen flex flex-col bg-ds-primary tou
  * retired once the alignment tools became visible in the toolbar, so the
  * context menu no longer needs to be advertised on load.
  */
-export type AppLayoutGuideTip = { id: 'touchMode'; message: 'Tap to select, long-press for options' };
+export type AppLayoutGuideTip = { id: 'touchCameraTaps'; message: 'Tap a camera to select it, tap again to fly in. Long-press opens its photo.' };
 
 export function getInitialGalleryPanelWidth(
   windowWidth: number,
@@ -149,5 +149,5 @@ export function getAppLayoutGuideTip({
     return null;
   }
 
-  return { id: 'touchMode', message: 'Tap to select, long-press for options' };
+  return { id: 'touchCameraTaps', message: 'Tap a camera to select it, tap again to fly in. Long-press opens its photo.' };
 }

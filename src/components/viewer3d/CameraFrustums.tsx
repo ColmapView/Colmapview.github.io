@@ -186,6 +186,7 @@ export function CameraFrustums() {
     contextMenu,
     handleArrowClick,
     handleArrowContextMenu,
+    handleCameraTouchTap,
     handleContextMenuSelect,
     handleContextMenuGoto,
     handleContextMenuInfo,
@@ -206,7 +207,10 @@ export function CameraFrustums() {
     setShowMatchesInModal,
     setHoveredImageId,
     requestHoverRefresh,
+    touchMode,
   });
+  // Touch taps select first; desktop right-click flies straight in.
+  const handleCameraTap = touchMode ? handleCameraTouchTap : handleArrowContextMenu;
 
   // Hide frustums when no frustums or in alignment mode
   if (frustums.length === 0 || isAlignmentMode) return null;
@@ -226,7 +230,7 @@ export function CameraFrustums() {
       lastNavigationToImageId={lastNavigationToImageId}
       onHover={setHoveredImageId}
       onClick={handleArrowClick}
-      onContextMenu={handleArrowContextMenu}
+      onContextMenu={handleCameraTap}
       onLongPress={openImageDetail}
       selectionColor={selectionColor}
       selectionColorMode={selectionColorMode}
@@ -260,7 +264,7 @@ export function CameraFrustums() {
         cameraScale={cameraScale}
         onHover={setHoveredImageId}
         onClick={handleArrowClick}
-        onContextMenu={handleArrowContextMenu}
+        onContextMenu={handleCameraTap}
         onLongPress={openImageDetail}
         touchMode={touchMode}
       />
@@ -292,7 +296,7 @@ export function CameraFrustums() {
           splatPsnrByImage={splatPsnrByImage}
           onHover={setHoveredImageId}
           onClick={handleArrowClick}
-          onContextMenu={handleArrowContextMenu}
+          onContextMenu={handleCameraTap}
           onLongPress={openImageDetail}
           lastNavigationToImageId={lastNavigationToImageId}
           touchMode={touchMode}
@@ -325,7 +329,7 @@ export function CameraFrustums() {
           matchedImageIds={matchedImageIds}
           onHover={setHoveredImageId}
           onClick={handleArrowClick}
-          onContextMenu={handleArrowContextMenu}
+          onContextMenu={handleCameraTap}
           onLongPress={openImageDetail}
           lastNavigationToImageId={lastNavigationToImageId}
           touchMode={touchMode}
@@ -348,7 +352,7 @@ export function CameraFrustums() {
           hoveredImageId={hoveredImageId}
           onHover={setHoveredImageId}
           onClick={handleArrowClick}
-          onContextMenu={handleArrowContextMenu}
+          onContextMenu={handleCameraTap}
           touchMode={touchMode}
           undistortionEnabled={undistortionEnabled}
           undistortionMode={undistortionMode}
@@ -403,7 +407,7 @@ export function CameraFrustums() {
         matchedImageIds={matchedImageIds}
         onHover={setHoveredImageId}
         onClick={handleArrowClick}
-        onContextMenu={handleArrowContextMenu}
+        onContextMenu={handleCameraTap}
         onLongPress={openImageDetail}
         lastNavigationToImageId={lastNavigationToImageId}
         touchMode={touchMode}

@@ -29,12 +29,22 @@ describe('frustum plane touch policy', () => {
     })).toBe('none');
   });
 
-  it('toggles selected plane transparency for short selected taps', () => {
+  it('toggles selected plane transparency for short taps once flown in', () => {
     expect(getFrustumPlaneTouchUpAction({
       touchStart: { x: 10, y: 10, fired: false },
       touchEnd: { x: 20, y: 20 },
       isSelected: true,
+      isFlownIn: true,
     })).toBe('toggleSelectedTransparency');
+  });
+
+  it('hands a selected tap to the camera tap handler until flown in', () => {
+    expect(getFrustumPlaneTouchUpAction({
+      touchStart: { x: 10, y: 10, fired: false },
+      touchEnd: { x: 20, y: 20 },
+      isSelected: true,
+      isFlownIn: false,
+    })).toBe('openContextMenu');
   });
 
   it('opens the context menu for short non-selected taps', () => {

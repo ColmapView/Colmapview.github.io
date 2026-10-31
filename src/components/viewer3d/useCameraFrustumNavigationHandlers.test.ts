@@ -200,6 +200,63 @@ describe('useCameraFrustumNavigationHandlers', () => {
     expect(options.showUndistortionTip).toHaveBeenCalledWith(targetFrustum.camera);
   });
 
+  describe('touch taps', () => {
+    it('selects an unselected camera without flying to it', () => {
+      const { options, navActions, selectionActions, targetFile, targetFrustum } = createOptions({ touchMode: true });
+      const { result } = renderHook(() => useCameraFrustumNavigationHandlers(options));
+
+      act(() => result.current.handleCameraTouchTap(20));
+
+      expect(selectionActions.setSelectedImageId).toHaveBeenCalledWith(20);
+      expect(options.prioritizeTexture).toHaveBeenCalledWith(targetFile, targetFrustum.image.name);
+      expect(navActions.flyToImage).not.toHaveBeenCalled();
+      expect(navActions.pushNavigationHistory).not.toHaveBeenCalled();
+    });
+
+    it('flies into the selected camera on a second tap', () => {
+      const { options, navActions } = createOptions({ touchMode: true, selectedImageId: 20 });
+      const { result } = renderHook(() => useCameraFrustumNavigationHandlers(options));
+
+      act(() => result.current.handleCameraTouchTap(20));
+
+      expect(navActions.pushNavigationHistory).toHaveBeenCalledWith(expect.objectContaining({ toImageId: 20 }));
+      expect(navActions.flyToImage).toHaveBeenCalledWith(20);
+    });
+
+    it('goes back when tapping the camera it already flew into', () => {
+      const historyEntry: NavigationHistoryEntry = { fromState: buildViewState(5), fromImageId: 10, toImageId: 20 };
+      const { options, navActions } = createOptions({ touchMode: true, selectedImageId: 20 });
+      vi.mocked(navActions.peekNavigationHistory).mockReturnValue(historyEntry);
+      vi.mocked(navActions.popNavigationHistory).mockReturnValue(historyEntry);
+      const { result } = renderHook(() => useCameraFrustumNavigationHandlers(options));
+
+      act(() => result.current.handleCameraTouchTap(20));
+
+      expect(navActions.flyToState).toHaveBeenCalledWith(historyEntry.fromState);
+      expect(navActions.flyToImage).not.toHaveBeenCalled();
+    });
+
+    it('still opens matched-image detail', () => {
+      const { options, navActions } = createOptions({ touchMode: true, matchedImageIds: new Set([20]) });
+      const { result } = renderHook(() => useCameraFrustumNavigationHandlers(options));
+
+      act(() => result.current.handleCameraTouchTap(20));
+
+      expect(options.openImageDetail).toHaveBeenCalledWith(10);
+      expect(navActions.flyToImage).not.toHaveBeenCalled();
+    });
+
+    it('skips keyboard-only tips when flying in', () => {
+      const { options, navActions } = createOptions({ touchMode: true, selectedImageId: 20 });
+      const { result } = renderHook(() => useCameraFrustumNavigationHandlers(options));
+
+      act(() => result.current.handleCameraTouchTap(20));
+
+      expect(navActions.flyToImage).toHaveBeenCalledWith(20);
+      expect(options.showUndistortionTip).not.toHaveBeenCalled();
+    });
+  });
+
   it('executes explicit context-menu goto with history and closes the menu', () => {
     const currentViewState = buildViewState(4);
     const { options, navActions } = createOptions({

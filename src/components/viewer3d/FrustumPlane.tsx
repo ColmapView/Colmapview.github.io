@@ -165,6 +165,7 @@ export const FrustumPlane = memo(function FrustumPlane({
     enabled: touchMode && !disableInteraction,
     imageId: image.imageId,
     isSelected,
+    isFlownIn: wouldGoBack,
     onContextMenu,
     onLongPress,
     setTouchTransparent,

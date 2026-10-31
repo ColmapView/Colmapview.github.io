@@ -43,6 +43,8 @@ interface CameraFrustumNavigationHandlersOptions {
   prioritizeTexture?: (imageFile: File, imageName: string) => void;
   showUndistortionTip?: (camera: Camera) => void;
   defer?: (callback: () => void) => void;
+  /** Touch skips the keyboard-only (U) tips. */
+  touchMode?: boolean;
 }
 
 interface CameraFrustumNavigationHandlers {
@@ -50,6 +52,8 @@ interface CameraFrustumNavigationHandlers {
   setContextMenu: Dispatch<SetStateAction<CameraFrustumContextMenuState | null>>;
   handleArrowClick: (imageId: ImageId) => void;
   handleArrowContextMenu: (imageId: ImageId) => void;
+  /** Touch: the first tap selects a camera, a tap on the selected camera flies in. */
+  handleCameraTouchTap: (imageId: ImageId) => void;
   handleContextMenuSelect: () => void;
   handleContextMenuGoto: () => void;
   handleContextMenuInfo: () => void;
@@ -101,6 +105,7 @@ export function useCameraFrustumNavigationHandlers({
   prioritizeTexture = prioritizeFrustumTexture,
   showUndistortionTip = showUndistortionTipForCamera,
   defer = (callback) => { setTimeout(callback, 0); },
+  touchMode = false,
 }: CameraFrustumNavigationHandlersOptions): CameraFrustumNavigationHandlers {
   const [contextMenu, setContextMenu] = useState<CameraFrustumContextMenuState | null>(null);
 
@@ -132,44 +137,11 @@ export function useCameraFrustumNavigationHandlers({
     }
   }, [openImageDetail, selectedImageId, selectionActions]);
 
-  const handleArrowContextMenu = useCallback((imageId: ImageId) => {
-    const frustum = frustums.find(f => f.image.imageId === imageId);
-    const getCurrentViewState = controls?.getCurrentViewState;
-    const lastEntry = navActions.peekNavigationHistory();
-    const action = getArrowContextMenuAction({
-      frustumExists: Boolean(frustum),
-      imageId,
-      selectedImageId,
-      matchedImageIds,
-      lastEntry,
-      canReadCurrentViewState: Boolean(getCurrentViewState),
-    });
-
-    if (action === 'none' || !frustum) return;
-
-    if (action === 'goBack') {
-      const entry = navActions.popNavigationHistory();
-      if (entry) {
-        goBackToHistoryEntry(entry);
-      }
-      return;
-    }
-
-    if (action === 'deselect') {
-      selectionActions.setSelectedImageId(null);
-      return;
-    }
-
-    if (action === 'openMatchedDetail' && selectedImageId !== null) {
-      setShowMatchesInModal(true);
-      setMatchedImageId(imageId);
-      openImageDetail(selectedImageId);
-      defer(() => setMatchedImageId(imageId));
-      return;
-    }
-
+  const flyIntoImage = useCallback((frustum: CameraFrustumItem) => {
+    const imageId = frustum.image.imageId;
     prioritizeTextureForImage(imageId);
 
+    const getCurrentViewState = controls?.getCurrentViewState;
     if (getCurrentViewState) {
       const currentViewState = getCurrentViewState();
       navActions.pushNavigationHistory({
@@ -195,28 +167,92 @@ export function useCameraFrustumNavigationHandlers({
 
     selectionActions.setSelectedImageId(imageId);
     navActions.flyToImage(imageId);
-    showUndistortionTip(frustum.camera);
+    if (!touchMode) showUndistortionTip(frustum.camera);
   }, [
     autoFovEnabled,
     cameraFov,
     cameraScale,
     clearHoverBeforeNavigation,
     controls,
+    navActions,
+    prioritizeTextureForImage,
+    selectedImageId,
+    selectionActions,
+    showUndistortionTip,
+    touchMode,
+    viewportSize.height,
+    viewportSize.width,
+  ]);
+
+  const getArrowAction = useCallback((imageId: ImageId) => {
+    const frustum = frustums.find(f => f.image.imageId === imageId);
+    const action = getArrowContextMenuAction({
+      frustumExists: Boolean(frustum),
+      imageId,
+      selectedImageId,
+      matchedImageIds,
+      lastEntry: navActions.peekNavigationHistory(),
+      canReadCurrentViewState: Boolean(controls?.getCurrentViewState),
+    });
+    return { frustum, action };
+  }, [controls, frustums, matchedImageIds, navActions, selectedImageId]);
+
+  const handleArrowContextMenu = useCallback((imageId: ImageId) => {
+    const { frustum, action } = getArrowAction(imageId);
+
+    if (action === 'none' || !frustum) return;
+
+    if (action === 'goBack') {
+      const entry = navActions.popNavigationHistory();
+      if (entry) {
+        goBackToHistoryEntry(entry);
+      }
+      return;
+    }
+
+    if (action === 'deselect') {
+      selectionActions.setSelectedImageId(null);
+      return;
+    }
+
+    if (action === 'openMatchedDetail' && selectedImageId !== null) {
+      setShowMatchesInModal(true);
+      setMatchedImageId(imageId);
+      openImageDetail(selectedImageId);
+      defer(() => setMatchedImageId(imageId));
+      return;
+    }
+
+    flyIntoImage(frustum);
+  }, [
     defer,
-    frustums,
+    flyIntoImage,
+    getArrowAction,
     goBackToHistoryEntry,
-    matchedImageIds,
     navActions,
     openImageDetail,
-    prioritizeTextureForImage,
     selectedImageId,
     selectionActions,
     setMatchedImageId,
     setShowMatchesInModal,
-    showUndistortionTip,
-    viewportSize.height,
-    viewportSize.width,
   ]);
+
+  const handleCameraTouchTap = useCallback((imageId: ImageId) => {
+    const { frustum, action } = getArrowAction(imageId);
+    if (!frustum) return;
+
+    if (action === 'flyToImage') {
+      setContextMenu(null);
+      prioritizeTextureForImage(imageId);
+      selectionActions.setSelectedImageId(imageId);
+      return;
+    }
+    if (action === 'deselect') {
+      flyIntoImage(frustum);
+      return;
+    }
+    handleArrowContextMenu(imageId);
+  }, [flyIntoImage, getArrowAction, handleArrowContextMenu, prioritizeTextureForImage, selectionActions]);
 
   const handleContextMenuSelect = useCallback(() => {
     if (!contextMenu) return;
@@ -288,6 +324,7 @@ export function useCameraFrustumNavigationHandlers({
     setContextMenu,
     handleArrowClick,
     handleArrowContextMenu,
+    handleCameraTouchTap,
     handleContextMenuSelect,
     handleContextMenuGoto,
     handleContextMenuInfo,

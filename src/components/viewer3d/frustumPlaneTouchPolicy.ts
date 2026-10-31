@@ -24,15 +24,18 @@ export function getFrustumPlaneTouchUpAction({
   touchStart,
   touchEnd,
   isSelected,
+  isFlownIn = true,
   maxDistanceSquared = FRUSTUM_TOUCH_TAP_MAX_DISTANCE_SQUARED,
 }: {
   touchStart: FrustumPlaneTouchStart | null;
   touchEnd: FrustumPlaneTouchPoint;
   isSelected: boolean;
+  /** The view has flown into this camera; until then a selected tap flies in. */
+  isFlownIn?: boolean;
   maxDistanceSquared?: number;
 }): FrustumPlaneTouchUpAction {
   if (!touchStart || touchStart.fired) return 'none';
   if (getSquaredTouchTravel(touchStart, touchEnd) > maxDistanceSquared) return 'none';
 
-  return isSelected ? 'toggleSelectedTransparency' : 'openContextMenu';
+  return isSelected && isFlownIn ? 'toggleSelectedTransparency' : 'openContextMenu';
 }
