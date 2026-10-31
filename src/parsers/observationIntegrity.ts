@@ -5,7 +5,7 @@ export interface ObservationIntegrity {
   status: 'valid' | 'invalid' | 'unavailable';
   checkedTracks: number;
   checkedObservations: number;
-  issues: { missingImage: number; invalidIndex: number; conflictingPoint: number; duplicateTrack: number; duplicateImage: number; missingTrack: number; nonfiniteTrackedXY: number };
+  issues: { missingImage: number; invalidIndex: number; conflictingPoint: number; duplicateTrack: number; missingTrack: number; nonfiniteTrackedXY: number };
   example?: string;
 }
 
@@ -20,7 +20,7 @@ interface GraphSource {
 
 export function unavailableObservationIntegrity(reason: string): ObservationIntegrity {
   return { status: 'unavailable', checkedTracks: 0, checkedObservations: 0,
-    issues: { missingImage: 0, invalidIndex: 0, conflictingPoint: 0, duplicateTrack: 0, duplicateImage: 0, missingTrack: 0, nonfiniteTrackedXY: 0 }, example: reason };
+    issues: { missingImage: 0, invalidIndex: 0, conflictingPoint: 0, duplicateTrack: 0, missingTrack: 0, nonfiniteTrackedXY: 0 }, example: reason };
 }
 
 /** Check both directions without materializing the model or retaining boxed observations. */
@@ -44,7 +44,6 @@ export function checkObservationGraph(images: ReadonlyMap<number, Image>, source
   // marker for every unassociated feature, including multi-gigabyte pose files.
   const offsets = new Float64Array(images.size + 1);
   for (let i = 0; i < counts.length; i++) offsets[i + 1] = offsets[i] + counts[i];
-  const seenPoints = new Uint32Array(source.pointCount);
   // At most 64 MiB of pairs per batch, or one image's tracks if it is larger.
   for (let first = 0; first < images.size;) {
     let end = first + 1;
@@ -62,11 +61,12 @@ export function checkObservationGraph(images: ReadonlyMap<number, Image>, source
       const count = image.numPoints2D ?? image.points2D.length;
       const expected = pairs.subarray(offsets[imageIndex] - offsets[first], offsets[imageIndex + 1] - offsets[first]).sort();
       let previousIndex = -1;
+      // A point may observe several features of one image: COLMAP's track merging
+      // (Reconstruction::MergePoints3D) produces this, so it is not an inconsistency.
       for (const pair of expected) {
-        const index = Number(pair >> 32n), point = Number(pair & 0xffffffffn);
+        const index = Number(pair >> 32n);
         if (previousIndex === index) issue('duplicateTrack', `More than one track targets feature ${imageId}:${index}.`);
-        if (seenPoints[point] === imageIndex + 1) issue('duplicateImage', `Point ${source.pointId(point)} has more than one track in image ${imageId}.`);
-        seenPoints[point] = imageIndex + 1; previousIndex = index;
+        previousIndex = index;
       }
       let observed = 0, track = 0;
       source.observations(imageId, (index, id, x, y) => {
@@ -78,10 +78,13 @@ export function checkObservationGraph(images: ReadonlyMap<number, Image>, source
         while (track < expected.length && Number(expected[track] >> 32n) === index) {
           targeted = true;
           const pointId = source.pointId(Number(expected[track++] & 0xffffffffn));
-          if (!associated || normalized !== pointId) issue('conflictingPoint', `Feature ${imageId}:${index} names point ${id}; its track names ${pointId}.`);
+          // An unassigned feature that a track claims is completed by COLMAP's reader
+          // (Reconstruction::AddPoint3D); GLOMAP writes models this way. Only a
+          // different point is a conflict.
+          if (associated && normalized !== pointId) issue('conflictingPoint', `Feature ${imageId}:${index} names point ${id}; its track names ${pointId}.`);
         }
         if (associated && !targeted) issue('missingTrack', `Feature ${imageId}:${index} has no reciprocal point track.`);
-        if (associated && (!Number.isFinite(x) || !Number.isFinite(y))) issue('nonfiniteTrackedXY', `Tracked feature ${imageId}:${index} has nonfinite coordinates.`);
+        if ((associated || targeted) && (!Number.isFinite(x) || !Number.isFinite(y))) issue('nonfiniteTrackedXY', `Tracked feature ${imageId}:${index} has nonfinite coordinates.`);
       });
       if (observed !== count) throw new Error(`Original observations are unavailable for image ${imageId}.`);
     }

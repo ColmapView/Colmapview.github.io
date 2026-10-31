@@ -32,15 +32,29 @@ describe('native observation integrity', () => {
     expect(() => assertReconstructionObservationIntegrity(data)).toThrow('Source feature links are inconsistent');
   });
 
-  it.each(['missingImage', 'invalidIndex', 'duplicateTrack', 'duplicateImage', 'missingTrack', 'nonfiniteTrackedXY'] as const)('detects %s without changing the model', kind => {
+  it('accepts a merged point that observes two features of one image', () => {
+    // COLMAP's Reconstruction::MergePoints3D keeps both features; 360_v2/bicycle has 846 such observations.
+    const data = model();
+    data.images.get(5)!.points2D.push(buildPoint2D({ point3DId: highId }));
+    data.points3D!.get(highId)!.track.push({ imageId: 5, point2DIdx: 2 });
+    expect(checkReconstructionObservations(data)).toMatchObject({ status: 'valid', checkedTracks: 2 });
+    expect(() => assertReconstructionObservationIntegrity(data)).not.toThrow();
+  });
+
+  it('accepts a tracked feature that the image leaves unassigned, as GLOMAP writes', () => {
+    // COLMAP's reader links the feature from the track (Reconstruction::AddPoint3D).
+    const data = model();
+    data.images.get(5)!.points2D[1].point3DId = -1n;
+    expect(checkReconstructionObservations(data).status).toBe('valid');
+    data.images.get(5)!.points2D[1].xy[0] = NaN;
+    expect(checkReconstructionObservations(data).issues.nonfiniteTrackedXY).toBe(1);
+  });
+
+  it.each(['missingImage', 'invalidIndex', 'duplicateTrack', 'missingTrack', 'nonfiniteTrackedXY'] as const)('detects %s without changing the model', kind => {
     const data = model(), point = data.points3D!.get(highId)!;
     if (kind === 'missingImage') point.track[0].imageId = 99;
     if (kind === 'invalidIndex') point.track[0].point2DIdx = 2;
     if (kind === 'duplicateTrack') point.track.push({ ...point.track[0] });
-    if (kind === 'duplicateImage') {
-      data.images.get(5)!.points2D.push(buildPoint2D({ point3DId: highId }));
-      point.track.push({ imageId: 5, point2DIdx: 2 });
-    }
     if (kind === 'missingTrack') point.track = [];
     if (kind === 'nonfiniteTrackedXY') data.images.get(5)!.points2D[1].xy[0] = NaN;
     const before = structuredClone(data);
