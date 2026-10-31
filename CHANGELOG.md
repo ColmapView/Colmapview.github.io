@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.13] - 2026-10-31
+
+### Changed
+
+- On touch screens, the first tap on a camera selects it, a second tap flies into it, and a tap inside toggles its transparency. Long-press opens the photo instead of a custom context menu.
+- Declutter touch controls: hide hotkey hints, WASD speed, pointer lock, Transform, Align and the empty Rig button; move About into Settings; hide the touch footer once a scene is loaded; cap touch popovers at 60% of the screen height.
+- Show at most two notifications on touch, clamped to three lines with tap to expand.
+- Size camera frustums relative to the scene on fresh loads, so tightly clustered reconstructions stay visible. Saved and shared views keep their own size, and the scale menu gains 0.01× and 100×.
+
+### Fixed
+
+- Stop one-finger touch drags from rotating the camera twice and requesting pointer lock, which showed the Android "to show your cursor" banner.
+
 ## [0.25.12] - 2026-10-29
 
 ### Changed
