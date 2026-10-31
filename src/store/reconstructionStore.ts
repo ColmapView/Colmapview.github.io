@@ -15,6 +15,9 @@ import {
 import { useSplatBackendStore } from './stores/splatBackendStore';
 import { useTransformStore } from './stores/transformStore';
 import { useDeletionStore } from './stores/deletionStore';
+import { useCameraStore } from './stores/cameraStore';
+import { getAutoCameraScale } from '../utils/cameraAutoScale';
+import { getImageWorldPosition } from '../utils/colmapTransforms';
 import { getDefaultBackgroundColorForSplatLoad } from './splatBackgroundPolicy';
 import {
   applyActiveSplatFile,
@@ -198,6 +201,16 @@ export type ReconstructionSourceType = 'local' | 'url' | 'manifest' | 'zip' | nu
  * Checks Hub startup data, hash format (#d=...) and legacy query format (?url=...).
  * Also detects inline manifest format (flag bit 2 set in #d=... data).
  */
+function applyAutoCameraScale(reconstruction: Reconstruction): void {
+  const size = getAutoCameraScale(
+    Array.from(reconstruction.images.values(), (image) => getImageWorldPosition(image).toArray())
+  );
+  if (!size) return;
+  const camera = useCameraStore.getState();
+  camera.setCameraScaleFactor(size.factor);
+  camera.setCameraScale(size.scale);
+}
+
 export function hasUrlToLoad(): boolean {
   if (typeof window === 'undefined') return false;
   const launch = readHubViewerUrl();
@@ -399,6 +412,8 @@ export const useReconstructionStore = create<ReconstructionState>((set, get) => 
     if (!options?.edited) {
       useDeletionStore.getState().clearPendingDeletions();
       useTransformStore.getState().resetTransform();
+      // Frustum size is in world units; a share link's explicit size is re-applied after this.
+      applyAutoCameraScale(reconstruction);
     }
   },
 

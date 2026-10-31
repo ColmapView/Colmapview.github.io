@@ -46,7 +46,7 @@ export const cameraSection = defineSection({
       enumValues: CAMERA_SCALE_FACTORS,
       default: '1',
       persist: true,
-      description: '0.1 | 1 | 10',
+      description: '0.01 | 0.1 | 1 | 10 | 100',
     },
     {
       key: 'scale',

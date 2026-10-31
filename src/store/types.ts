@@ -42,7 +42,7 @@ export type CameraDisplayMode = (typeof CAMERA_DISPLAY_MODES)[number];
 export const FRUSTUM_COLOR_MODES = ['single', 'byCamera', 'byRigFrame', 'splatPsnr', 'splatSsim'] as const;
 export type FrustumColorMode = (typeof FRUSTUM_COLOR_MODES)[number];
 
-export const CAMERA_SCALE_FACTORS = ['0.1', '1', '10'] as const;
+export const CAMERA_SCALE_FACTORS = ['0.01', '0.1', '1', '10', '100'] as const;
 export type CameraScaleFactor = (typeof CAMERA_SCALE_FACTORS)[number];
 
 export const UNDISTORTION_MODES = ['cropped', 'fullFrame'] as const;

@@ -67,9 +67,11 @@ export interface SelectedFrustumImageFetchOptions {
 }
 
 const CAMERA_SCALE_FACTOR_VALUES: Record<CameraScaleFactor, number> = {
+  '0.01': 0.01,
   '0.1': 0.1,
   '1': 1,
   '10': 10,
+  '100': 100,
 };
 
 /** Format image ID label: #{camId}:{imageId} when multiple cameras, #{imageId} otherwise. */

@@ -22,9 +22,11 @@ export const CAMERA_DISPLAY_MODE_OPTIONS: SelectOption<CameraDisplayMode>[] = [
 ];
 
 export const CAMERA_SCALE_FACTOR_OPTIONS: SelectOption<CameraScaleFactor>[] = [
+  { value: '0.01', label: '0.01×' },
   { value: '0.1', label: '0.1×' },
   { value: '1', label: '1×' },
   { value: '10', label: '10×' },
+  { value: '100', label: '100×' },
 ];
 
 const BASE_FRUSTUM_COLOR_MODE_OPTIONS: SelectOption<FrustumColorMode>[] = [
