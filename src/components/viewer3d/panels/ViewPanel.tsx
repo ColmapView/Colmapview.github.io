@@ -8,6 +8,7 @@ import {
   SliderRow,
   type PanelType,
 } from '../ControlComponents';
+import { KeyboardOnly } from '../keyboardHints';
 import {
   VIEW_DIRECTION_BUTTON_ROWS,
   VIEW_PROJECTION_OPTIONS,
@@ -84,7 +85,7 @@ export const ViewPanel = memo(function ViewPanel({
                 onClick={() => setView(button.direction)}
                 className={`${styles.actionButton} flex-1`}
               >
-                {button.label} <span className="text-ds-muted text-xs">({button.hotkey})</span>
+                {button.label} <KeyboardOnly><span className="text-ds-muted text-xs">({button.hotkey})</span></KeyboardOnly>
               </button>
             ))}
           </div>
@@ -92,7 +93,7 @@ export const ViewPanel = memo(function ViewPanel({
         <div className={styles.actionGroup}>
           <button onClick={onResetView} className={`${styles.actionButtonPrimary} flex-1`}>
             Reset View
-            <span className="text-ds-void/70 ml-2 text-xs">(R)</span>
+            <KeyboardOnly><span className="text-ds-void/70 ml-2 text-xs">(R)</span></KeyboardOnly>
           </button>
         </div>
       </div>

@@ -27,6 +27,7 @@ import {
   shouldShowControlButtonPanel,
   type ControlPanelPosition,
 } from './controlButtonPolicy';
+import { KeyboardHintsProvider, stripKeyHints } from './keyboardHints';
 import { useControlButtonStoreFacade } from './useControlButtonStoreFacade';
 export { SelectRow, ToggleRow } from './controlRows/BasicRows';
 export type { SelectRowProps, ToggleRowProps } from './controlRows/BasicRows';
@@ -259,7 +260,8 @@ export const ControlButton = memo(function ControlButton({
     return () => document.removeEventListener('touchstart', handleOutsideTouch);
   }, [contextMenuOpen, touchMode, isHovered, hasPanel, setActivePanel, contentId]);
 
-  const accessibleLabel = getControlButtonAccessibleLabel(tooltip, disabled);
+  const accessibleLabel = getControlButtonAccessibleLabel(touchMode ? stripKeyHints(tooltip) : tooltip, disabled);
+  const title = panelTitle && touchMode ? stripKeyHints(panelTitle) : panelTitle;
 
   return (
     <div
@@ -343,8 +345,8 @@ export const ControlButton = memo(function ControlButton({
         isHovered,
         disabled,
       }) && (
-        <PanelWrapper id={contentId} title={panelTitle!} anchorRef={containerRef} onReady={handlePanelReady} panelClassName={panelClassName}>
-          {children}
+        <PanelWrapper id={contentId} title={title!} anchorRef={containerRef} onReady={handlePanelReady} panelClassName={panelClassName}>
+          <KeyboardHintsProvider value={!touchMode}>{children}</KeyboardHintsProvider>
         </PanelWrapper>
       )}
     </div>

@@ -21,7 +21,9 @@ import {
   TOOLBAR_GROUP_CLASS,
   TOOLBAR_GROUP_LABELS,
   shouldShowCameraDependentPanels,
+  shouldShowEditingPanels,
   shouldShowMatchesPanel,
+  shouldShowRigPanel,
 } from './viewerControlsLayoutPolicy';
 
 export interface ViewerControlsToolbarProps {
@@ -45,6 +47,7 @@ function ToolbarDivider() {
 export function ViewerControlsToolbar({ controller }: ViewerControlsToolbarProps) {
   const {
     className,
+    touchMode,
     viewPanel,
     axesGridPanel,
     cameraModePanel,
@@ -70,8 +73,12 @@ export function ViewerControlsToolbar({ controller }: ViewerControlsToolbarProps
         <AxesGridPanel {...axesGridPanel} />
         <CameraModePanel {...cameraModePanel} />
         <BackgroundPanel {...backgroundPanel} />
-        <TransformPanel {...transformPanel} />
-        <AlignPanel {...alignPanel} />
+        {shouldShowEditingPanels(touchMode) && (
+          <>
+            <TransformPanel {...transformPanel} />
+            <AlignPanel {...alignPanel} />
+          </>
+        )}
       </div>
 
       <ToolbarDivider />
@@ -90,7 +97,7 @@ export function ViewerControlsToolbar({ controller }: ViewerControlsToolbarProps
           </>
         )}
 
-        <RigPanel {...rigPanel} />
+        {shouldShowRigPanel(touchMode, rigPanel.hasRigData) && <RigPanel {...rigPanel} />}
       </div>
 
       <ToolbarDivider />

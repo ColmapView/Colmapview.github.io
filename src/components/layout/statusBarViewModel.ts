@@ -18,7 +18,7 @@ export const STATUS_BAR_SHORTCUTS_BUTTON_CLASS =
 // bindings need a keyboard — so the label advertises Help rather than the
 // desktop bar's keyboard-shortcuts framing, and the title drops the (I) suffix
 // that nothing on a touch device can press.
-export const TOUCH_STATUS_BAR_HELP_LABEL = '? Help';
+export const TOUCH_STATUS_BAR_HELP_LABEL = 'About';
 // Aliased, not re-typed: renaming the panel must rename this tooltip with it.
 export const TOUCH_STATUS_BAR_HELP_TITLE = HOTKEY_HELP_TITLE;
 // No synthetic tap box: the touch bar is a 44px border box (h-11 in

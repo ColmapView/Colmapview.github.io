@@ -1,6 +1,7 @@
 import { memo, useId, type WheelEvent } from 'react';
 import { controlPanelStyles } from '../../../theme';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
+import { useKeyHintLabel } from '../keyboardHints';
 import {
   getNextSelectRowValue,
   getSelectRowOptionValue,
@@ -16,7 +17,8 @@ export interface ToggleRowProps {
   onChange: (checked: boolean) => void;
 }
 
-export const ToggleRow = memo(function ToggleRow({ label, checked, onChange }: ToggleRowProps) {
+export const ToggleRow = memo(function ToggleRow({ label: rawLabel, checked, onChange }: ToggleRowProps) {
+  const label = useKeyHintLabel(rawLabel);
   return (
     <label className={styles.row}>
       <span className={styles.label}>{label}</span>
@@ -34,7 +36,8 @@ export interface SelectRowProps<T extends string = string> {
   wrapLabel?: boolean;
 }
 
-export function SelectRow<T extends string>({ label, value, onChange, options, wrapLabel = false }: SelectRowProps<T>) {
+export function SelectRow<T extends string>({ label: rawLabel, value, onChange, options, wrapLabel = false }: SelectRowProps<T>) {
+  const label = useKeyHintLabel(rawLabel);
   const id = useId();
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault();

@@ -38,6 +38,7 @@ import { getViewerControlsContainerClassName } from './viewerControlsLayoutPolic
 
 export interface ViewerControlsController {
   className: string;
+  touchMode: boolean;
   viewPanel: ViewPanelProps;
   axesGridPanel: AxesGridPanelProps;
   cameraModePanel: CameraModePanelProps;
@@ -300,6 +301,7 @@ export function useViewerControlsController(): ViewerControlsController {
       autoHideButtons,
       touchMode,
     }),
+    touchMode,
     viewPanel: {
       ...panelState,
       cameraProjection: navNode.projection,

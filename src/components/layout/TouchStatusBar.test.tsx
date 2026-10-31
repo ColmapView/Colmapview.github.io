@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useReconstructionStore } from '../../store/reconstructionStore';
 import { useUIStore } from '../../store/stores/uiStore';
+import { buildReconstruction } from '../../test/builders';
 import { TouchStatusBar } from './TouchStatusBar';
 import {
   TOUCH_STATUS_BAR_HELP_LABEL,
@@ -18,7 +19,7 @@ describe('TouchStatusBar', () => {
     cleanup();
   });
 
-  it('opens the help panel from the only pointer route touch mode has', () => {
+  it('opens About from the empty-state bar', () => {
     render(<TouchStatusBar />);
 
     expect(useUIStore.getState().showHotkeyHelp).toBe(false);
@@ -26,6 +27,15 @@ describe('TouchStatusBar', () => {
     fireEvent.click(screen.getByRole('button', { name: TOUCH_STATUS_BAR_HELP_TITLE }));
 
     expect(useUIStore.getState().showHotkeyHelp).toBe(true);
+    expect(useUIStore.getState().hotkeyHelpInitialTab).toBe('about');
+  });
+
+  it('gives the scene the whole screen once a dataset is loaded', () => {
+    useReconstructionStore.setState({ reconstruction: buildReconstruction() });
+
+    const { container } = render(<TouchStatusBar />);
+
+    expect(container.querySelector('footer')).toBeNull();
   });
 
   it('sizes the tap target from the bar itself, not a synthetic tap box', () => {

@@ -12,6 +12,7 @@ import {
   SliderRow,
   type PanelType,
 } from '../ControlComponents';
+import { KeyboardOnly, useKeyboardHints } from '../keyboardHints';
 import { renderCameraModeButtonIcon } from '../viewerControlButtonIcons';
 import { getCameraModeButtonState } from '../viewerControlsViewModel';
 import {
@@ -19,6 +20,7 @@ import {
   CAMERA_MODE_KEYBOARD_HINT_LINES,
   CAMERA_MODE_MODIFIER_HINT_LINES,
   CAMERA_MODE_OPTIONS,
+  CAMERA_MODE_TOUCH_HINT_LINES,
   HORIZON_LOCK_OPTIONS,
   formatFlyTransitionDuration,
   getCameraModeMouseHintLines,
@@ -96,6 +98,7 @@ export function CameraModePanel({
           onChange={setCameraMode}
           options={CAMERA_MODE_OPTIONS}
         />
+        <KeyboardOnly>
         <SliderRow
           label="WASD Speed"
           value={wasdSpeed}
@@ -105,6 +108,7 @@ export function CameraModePanel({
           onChange={setWasdSpeed}
           formatValue={(v) => v.toFixed(1)}
         />
+        </KeyboardOnly>
         <SliderRow
           label="Fly Speed"
           value={flySpeed}
@@ -123,11 +127,13 @@ export function CameraModePanel({
           onChange={setFlyTransitionDuration}
           formatValue={formatFlyTransitionDuration}
         />
-        <label className={styles.row}>
-          <span className={styles.label}>Pointer Lock</span>
-          <span className="flex-1" />
-          <ToggleSwitch ariaLabel="Pointer Lock" checked={pointerLock} onChange={setPointerLock} />
-        </label>
+        <KeyboardOnly>
+          <label className={styles.row}>
+            <span className={styles.label}>Pointer Lock</span>
+            <span className="flex-1" />
+            <ToggleSwitch ariaLabel="Pointer Lock" checked={pointerLock} onChange={setPointerLock} />
+          </label>
+        </KeyboardOnly>
         <SelectRow
           label="Horizon Lock (H)"
           value={horizonLock}
@@ -153,6 +159,25 @@ export function CameraModePanel({
             />
           </>
         )}
+        <CameraModeHints mouseHintLines={mouseHintLines} />
+      </div>
+    </ControlButton>
+  );
+}
+
+function CameraModeHints({ mouseHintLines }: { mouseHintLines: string[] }) {
+  if (!useKeyboardHints()) {
+    return (
+      <div className={styles.hint}>
+        <div className="mb-1 font-medium">Touch:</div>
+        {CAMERA_MODE_TOUCH_HINT_LINES.map((line) => (
+          <div key={`touch-${line}`}>{line}</div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
         <div className={styles.hint}>
           <div className="mb-1 font-medium">Mouse:</div>
           {mouseHintLines.map((line) => (
@@ -167,7 +192,5 @@ export function CameraModePanel({
             <div key={`modifier-${line}`}>{line}</div>
           ))}
         </div>
-      </div>
-    </ControlButton>
   );
 }

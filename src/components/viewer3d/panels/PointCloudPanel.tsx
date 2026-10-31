@@ -10,6 +10,7 @@ import {
   ToggleRow,
   type PanelType,
 } from '../ControlComponents';
+import { KeyboardOnly } from '../keyboardHints';
 import { renderPointCloudButtonIcon } from '../viewerControlButtonIcons';
 import { getPointCloudButtonState } from '../viewerControlsViewModel';
 import {
@@ -135,7 +136,7 @@ export function PointCloudPanel({
           />
         )}
         <SliderRow
-          label={<>Size <span className="text-ds-muted text-xs inline-flex items-center gap-0.5">(Ctrl+<MouseScrollIcon className="w-3 h-3 inline" />)</span></>}
+          label={<>Size <KeyboardOnly><span className="text-ds-muted text-xs inline-flex items-center gap-0.5">(Ctrl+<MouseScrollIcon className="w-3 h-3 inline" />)</span></KeyboardOnly></>}
           value={pointSize}
           min={1}
           max={10}

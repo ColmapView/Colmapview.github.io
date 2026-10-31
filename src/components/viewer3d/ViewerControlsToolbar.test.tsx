@@ -89,6 +89,27 @@ describe('ViewerControlsToolbar cluster semantics', () => {
     expect(within(app).getByRole('button', { name: 'Show gallery' })).toBeInTheDocument();
   });
 
+  it('drops editing tools, the unavailable rig button and hotkey hints in touch mode', () => {
+    act(() => useUIStore.setState({ touchMode: true }));
+    render(<ToolbarHarness />);
+
+    const labels = screen.getAllByRole('button').map(button => button.getAttribute('aria-label'));
+    expect(labels.some(label => label?.startsWith('Transform'))).toBe(false);
+    expect(labels.some(label => label?.startsWith('Align tools'))).toBe(false);
+    expect(labels.some(label => label?.startsWith('Rig'))).toBe(false);
+    expect(labels).toContain('View options');
+    expect(labels.some(label => /\([A-Z]\)/.test(label ?? ''))).toBe(false);
+  });
+
+  it('keeps editing tools and the rig button on desktop', () => {
+    render(<ToolbarHarness />);
+
+    const labels = screen.getAllByRole('button').map(button => button.getAttribute('aria-label'));
+    expect(labels.some(label => label?.startsWith('Align tools'))).toBe(true);
+    expect(labels.some(label => label?.startsWith('Transform'))).toBe(true);
+    expect(labels.some(label => label?.startsWith('Rig'))).toBe(true);
+  });
+
   it('updates Matches availability as the selected camera family changes in a mixed Image Plane session', () => {
     useReconstructionStore.setState({ reconstruction: buildReconstruction({
       cameras: [buildCamera(), buildCamera({ cameraId: 2, modelId: CameraModelId.EQUIRECTANGULAR })],

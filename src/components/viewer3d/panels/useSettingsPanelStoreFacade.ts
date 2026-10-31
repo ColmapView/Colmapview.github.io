@@ -8,6 +8,7 @@ interface SettingsPanelUiFacade {
   setIdleHideTimeout: UIState['setIdleHideTimeout'];
   setShowAutoHideEditor: UIState['setShowAutoHideEditor'];
   openContextMenuEditor: UIState['openContextMenuEditor'];
+  setShowHotkeyHelp: UIState['setShowHotkeyHelp'];
 }
 
 export interface SettingsPanelStoreFacade {
@@ -19,6 +20,7 @@ export function useSettingsPanelStoreFacade(): SettingsPanelStoreFacade {
   const setIdleHideTimeout = useUIStore((s) => s.setIdleHideTimeout);
   const setShowAutoHideEditor = useUIStore((s) => s.setShowAutoHideEditor);
   const openContextMenuEditor = useUIStore((s) => s.openContextMenuEditor);
+  const setShowHotkeyHelp = useUIStore((s) => s.setShowHotkeyHelp);
 
   return {
     ui: {
@@ -26,6 +28,7 @@ export function useSettingsPanelStoreFacade(): SettingsPanelStoreFacade {
       setIdleHideTimeout,
       setShowAutoHideEditor,
       openContextMenuEditor,
+      setShowHotkeyHelp,
     },
   };
 }

@@ -51,6 +51,12 @@ export const CAMERA_MODE_KEYBOARD_HINT_LINES = [
   'Shift: Speed boost',
 ];
 
+export const CAMERA_MODE_TOUCH_HINT_LINES = [
+  'One finger: Rotate',
+  'Two fingers: Pan and pinch zoom',
+  'Double-tap: Reset view',
+];
+
 export const CAMERA_MODE_MODIFIER_HINT_LINES = [
   'Alt+Scroll: Camera size',
   'Ctrl+Scroll: Point size',

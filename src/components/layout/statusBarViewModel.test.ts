@@ -89,9 +89,8 @@ describe('status bar view model', () => {
   });
 
   it('offers touch mode its own entry point into the same panel', () => {
-    // Touch mode drops the desktop status bar entirely, so this is the only
-    // pointer route into HotkeyHelpModal on a phone or tablet.
-    expect(TOUCH_STATUS_BAR_HELP_LABEL).toBe('? Help');
+    // Touch opens the panel on About: the shortcut tabs need a keyboard.
+    expect(TOUCH_STATUS_BAR_HELP_LABEL).toBe('About');
     // No (I) suffix: the hotkey it names is unreachable without a keyboard.
     expect(TOUCH_STATUS_BAR_HELP_TITLE).not.toContain('(');
     // The bar is a 44px border box (TouchStatusBar h-11) whose 1px border-t

@@ -17,6 +17,7 @@ import {
   ToggleRow,
   type PanelType,
 } from '../ControlComponents';
+import { KeyboardOnly } from '../keyboardHints';
 import { renderCameraDisplayButtonIcon } from '../viewerControlButtonIcons';
 import {
   getCameraDisplayButtonState,
@@ -187,7 +188,7 @@ export function CameraDisplayPanel({
               options={CAMERA_SCALE_FACTOR_OPTIONS}
             />
             <SliderRow
-              label={<>Scale <span className="text-ds-muted text-xs inline-flex items-center gap-0.5">(Alt+<MouseScrollIcon className="w-3 h-3 inline" />)</span></>}
+              label={<>Scale <KeyboardOnly><span className="text-ds-muted text-xs inline-flex items-center gap-0.5">(Alt+<MouseScrollIcon className="w-3 h-3 inline" />)</span></KeyboardOnly></>}
               value={cameraScale}
               min={0.05}
               max={1}

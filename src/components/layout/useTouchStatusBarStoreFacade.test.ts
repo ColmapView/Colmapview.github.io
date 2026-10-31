@@ -19,7 +19,6 @@ describe('useTouchStatusBarStoreFacade', () => {
       urlLoading: true,
     });
     useUIStore.setState({
-      fps: 48,
       touchUI: {
         statusBar: false,
         galleryFAB: true,
@@ -33,7 +32,6 @@ describe('useTouchStatusBarStoreFacade', () => {
     const { result } = renderHook(() => useTouchStatusBarStoreFacade());
 
     expect(result.current).toEqual({
-      fps: 48,
       touchUI: {
         statusBar: false,
         galleryFAB: true,

@@ -36,6 +36,16 @@ export const TOOLBAR_GROUP_LABELS = {
  */
 export const TOOLBAR_GROUP_CLASS = 'contents';
 
+/** Transform and alignment edit the model for export; phones only view it. */
+export function shouldShowEditingPanels(touchMode: boolean): boolean {
+  return !touchMode;
+}
+
+/** A disabled rig button only takes space on a phone toolbar. */
+export function shouldShowRigPanel(touchMode: boolean, hasRigData: boolean): boolean {
+  return !touchMode || hasRigData;
+}
+
 export function shouldShowCameraDependentPanels(showCameras: boolean): boolean {
   return showCameras;
 }

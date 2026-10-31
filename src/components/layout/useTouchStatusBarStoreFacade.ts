@@ -2,7 +2,6 @@ import { useReconstructionStore } from '../../store/reconstructionStore';
 import { useUIStore } from '../../store/stores/uiStore';
 
 export interface TouchStatusBarStoreFacade {
-  fps: ReturnType<typeof useUIStore.getState>['fps'];
   touchUI: ReturnType<typeof useUIStore.getState>['touchUI'];
   autoHideButtons: ReturnType<typeof useUIStore.getState>['autoHideElements']['buttons'];
   isIdle: ReturnType<typeof useUIStore.getState>['isIdle'];
@@ -18,7 +17,6 @@ export interface TouchStatusBarStoreFacade {
 }
 
 export function useTouchStatusBarStoreFacade(): TouchStatusBarStoreFacade {
-  const fps = useUIStore((s) => s.fps);
   const touchUI = useUIStore((s) => s.touchUI);
   const autoHideButtons = useUIStore((s) => s.autoHideElements.buttons);
   const isIdle = useUIStore((s) => s.isIdle);
@@ -28,7 +26,6 @@ export function useTouchStatusBarStoreFacade(): TouchStatusBarStoreFacade {
   const reconstruction = useReconstructionStore((s) => s.reconstruction);
 
   return {
-    fps,
     touchUI,
     autoHideButtons,
     isIdle,

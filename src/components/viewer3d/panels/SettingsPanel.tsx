@@ -12,6 +12,7 @@ import {
   SliderRow,
   type PanelType,
 } from '../ControlComponents';
+import { KeyboardOnly, TouchOnly } from '../keyboardHints';
 import { buildExampleManifestJson } from '../viewerControlsViewModel';
 import {
   CLEAR_SETTINGS_CONFIRMATION,
@@ -38,6 +39,7 @@ export function SettingsPanel({ activePanel, setActivePanel }: SettingsPanelProp
       idleHideTimeout,
       setIdleHideTimeout,
       setShowAutoHideEditor,
+      setShowHotkeyHelp,
     },
   } = useSettingsPanelStoreFacade();
 
@@ -114,6 +116,8 @@ export function SettingsPanel({ activePanel, setActivePanel }: SettingsPanelProp
           </button>
         </div>}
         <ThemeSelect />
+        {/* The custom menu only opens from a right-click. */}
+        <KeyboardOnly>
         <div className={styles.actionGroup}>
           <button
             onClick={() => {
@@ -125,6 +129,21 @@ export function SettingsPanel({ activePanel, setActivePanel }: SettingsPanelProp
             Edit Context Menu
           </button>
         </div>
+        </KeyboardOnly>
+        {/* Touch has no status bar once data loads; About carries the links and policies. */}
+        <TouchOnly>
+          <div className={styles.actionGroup}>
+            <button
+              onClick={() => {
+                setShowHotkeyHelp(true, 'about');
+                setActivePanel(null);
+              }}
+              className={styles.actionButton}
+            >
+              About and policies
+            </button>
+          </div>
+        </TouchOnly>
 
         <div className="text-ds-muted text-xs uppercase tracking-wide mt-4 mb-2">
           {SETTINGS_PANEL_SECTION_LABELS.developer}
