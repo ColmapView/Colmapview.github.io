@@ -52,13 +52,22 @@ test('GitHub gallery stays on GitHub with live search, metadata, images and GitH
   expect(errors).toEqual([]);
 });
 
-test('GitHub Hub root is a real gallery and has a server-rendered fallback without redirecting', async ({ page }) => {
-  await page.goto(github + '/hub/');
-  await expect(page.locator('#catalog-results [data-entry-id]').first()).toBeVisible({ timeout: 30_000 });
-  expect(new URL(page.url()).origin).toBe(github);
-  const html = await readFile(path.join(directory, 'index.html'), 'utf8');
-  expect(html).not.toMatch(/http-equiv="refresh"|share-redirect\.js/);
-  expect(html).toContain('Browse the server-rendered catalog');
+test.describe('JavaScript disabled', () => {
+  test.use({ javaScriptEnabled: false });
+  test('GitHub Hub explains its gallery requirement and retains viewer and policy links without redirecting', async ({ page }) => {
+    await page.goto(github + '/hub/');
+    await expect(page).toHaveURL(github + '/hub/');
+    const explanation = page.locator('noscript p');
+    await expect(explanation).toBeVisible();
+    await expect(explanation).toContainText('JavaScript');
+    await expect(page.getByRole('link', { name: 'Open viewer', exact: true })).toHaveAttribute('href', github + '/latest/');
+    await page.locator('.catalog-notes > summary').click();
+    const policies = page.getByRole('navigation', { name: 'About and policies' });
+    for (const name of ['About', 'Privacy', 'Terms']) await expect(policies.getByRole('link', { name, exact: true })).toBeVisible();
+    const html = await readFile(path.join(directory, 'index.html'), 'utf8');
+    expect(html).not.toMatch(/http-equiv="refresh"|share-redirect\.js/);
+    expect(html).not.toContain('Browse the server-rendered catalog');
+  });
 });
 
 test('retired GitHub catalog and metadata bookmarks redirect within the same host', async ({ page }) => {
