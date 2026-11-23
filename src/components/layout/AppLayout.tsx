@@ -5,6 +5,7 @@ import { Scene3D } from '../viewer3d';
 import { ImageGallery } from '../gallery/ImageGallery';
 import { GalleryErrorBoundary } from '../gallery/GalleryErrorBoundary';
 import { GalleryCollapseHandle } from './GalleryCollapseHandle';
+import { ImageDetailModal } from '../modals/ImageDetailModal';
 import { useHotkeyScope } from '../../hooks/useHotkeyScope';
 import { LAYOUT_PANELS } from '../../theme';
 import { clearBodyCursor, setBodyCursor } from '../../utils/bodyCursor';
@@ -21,7 +22,6 @@ import {
 } from './appLayoutPolicy';
 import { useAppLayoutStoreFacade } from './useAppLayoutStoreFacade';
 
-const LazyImageDetailModal = lazy(() => import('../modals/ImageDetailModal').then((m) => ({ default: m.ImageDetailModal })));
 const LazyTouchGalleryDrawer = lazy(() => import('./TouchGalleryDrawer').then((m) => ({ default: m.TouchGalleryDrawer })));
 
 function useResizablePanel(defaultWidthPercent: number) {
@@ -170,11 +170,7 @@ export function AppLayout() {
           </Suspense>
         )}
 
-        {imageDetailId !== null && (
-          <Suspense fallback={null}>
-            <LazyImageDetailModal />
-          </Suspense>
-        )}
+        {imageDetailId !== null && <ImageDetailModal />}
       </div>
     );
   }
@@ -211,11 +207,7 @@ export function AppLayout() {
       </div>
 
       {!embedMode && <StatusBar />}
-      {imageDetailId !== null && (
-        <Suspense fallback={null}>
-          <LazyImageDetailModal />
-        </Suspense>
-      )}
+      {imageDetailId !== null && <ImageDetailModal />}
     </div>
   );
 }

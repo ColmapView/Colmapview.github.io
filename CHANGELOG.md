@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.17] - 2026-11-23
+
+### Fixed
+
+- Import and mount `ImageDetailModal` synchronously in `AppLayout` so opening an image from the gallery renders the detail modal immediately without a lazy-chunk suspense gap (superseding unpublished `0.25.16`).
+
 ## [0.25.16] - 2026-11-23
 
 ### Fixed
