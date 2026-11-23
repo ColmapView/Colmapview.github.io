@@ -1,0 +1,66 @@
+[
+  {
+    "name": "@ffmpeg/core",
+    "version": "0.12.10",
+    "file": "ffmpeg-core.txt",
+    "source": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html"
+  },
+  {
+    "name": "@ffmpeg/ffmpeg",
+    "version": "0.12.15",
+    "file": "ffmpeg-wrapper.txt",
+    "source": "https://raw.githubusercontent.com/ffmpegwasm/ffmpeg.wasm/71aa99d37c02a7b4c435275ca9ef50e612f6efa1/LICENSE"
+  },
+  {
+    "name": "@react-three/fiber",
+    "version": "9.5.0",
+    "file": "react-three-fiber.txt",
+    "source": "https://raw.githubusercontent.com/pmndrs/react-three-fiber/54c5467d1bc5d1cb117edc33802b27e38f6bc5c2/LICENSE"
+  },
+  {
+    "name": "gearhash-jit",
+    "version": "1.0.2",
+    "file": "gearhash-jit.txt",
+    "source": "https://raw.githubusercontent.com/huggingface/huggingface.js/50b7fa1c13a5e02a67fafb1893271f96c4dbba2d/LICENSE"
+  },
+  {
+    "name": "react-hotkeys-hook",
+    "version": "5.2.3",
+    "file": "react-hotkeys-hook.txt",
+    "source": "https://raw.githubusercontent.com/JohannesKlauss/react-hotkeys-hook/ae74e905690a69e950ee8b23cd883d874eff2028/LICENSE"
+  },
+  {
+    "name": "gif.js",
+    "version": "0.2.0",
+    "file": "gif-js.txt",
+    "source": "https://github.com/jnordberg/gif.js/tree/55bdbfea897753787fd2f4efc62f144371351522"
+  },
+  {
+    "name": "maath",
+    "version": "0.10.8",
+    "file": "maath.txt",
+    "source": "https://github.com/pmndrs/math/tree/626d198fbae28ba82f2f1b184db7fcafd4d23846"
+  },
+  {
+    "name": "stats-gl",
+    "version": "2.4.2",
+    "file": "stats-gl.txt",
+    "source": "https://github.com/RenaudRohlinger/stats-gl/tree/c12b2e391d5a88616e0b30f3c7f0577966426239"
+  },
+  {
+    "name": "libarchive.js",
+    "version": "2.0.2",
+    "file": "libarchive-js.txt",
+    "source": "https://github.com/nika-begiashvili/libarchivejs",
+    "extra": true,
+    "packageRoot": "node_modules/libarchive.js"
+  },
+  {
+    "name": "gs-toolbox",
+    "version": "0.1.0-colmapview.1",
+    "file": "gs-toolbox.txt",
+    "source": "https://github.com/ColmapView/Colmapview.github.io/tree/main/vendor/gs-toolbox",
+    "extra": true,
+    "packageRoot": "vendor/gs-toolbox"
+  }
+]
