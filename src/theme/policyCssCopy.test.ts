@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 // The Spatial Hub serves a byte-for-byte copy of public/policy.css (colmapview_hub/public/hub/colmapview.css)
 // and pins the same hash in colmapview_hub/scripts/check-colmapview-css.mjs. Change both files and both hashes together.
-const PINNED = '3f4a63e60475947785a400fc0e804ffe1b011f558beca064d127db266ed1409e';
+const PINNED = '0f45f4f10386496861760fe68b396e530084fc29714741800a96f5e03200a247';
 
 describe('public/policy.css', () => {
   it('matches the copy the Spatial Hub pins', () => {

@@ -5,12 +5,13 @@ import type { ResolveCameraFrame } from './nerfTransforms';
 import type { NumpyCameraArray } from './numpyCameraArrays';
 import { decomposePinholeProjection } from './projectionCamera';
 import { dimension, finite, importError, positive } from './types';
+import { yieldToMain } from './yieldToMain';
 
 export async function normalizeLlff(array: NumpyCameraArray, names: readonly string[], resolve: ResolveCameraFrame, signal?: AbortSignal) {
   if (array.columns !== 17 || names.length !== array.rows) return importError('INVALID_METADATA', 'LLFF requires an N by 17 array and one ordered photograph per camera.');
   const result = emptyCameraDataset('llff', array.rows);
   for (let index = 0; index < array.rows; index++) {
-    if (index > 0 && index % 256 === 0) await new Promise<void>(done => setTimeout(done, 0));
+    if (index > 0 && index % 256 === 0) await yieldToMain();
     signal?.throwIfAborted();
     // The final two values are bounds; they do not participate in the camera or media model.
     const p = Array.from(array.values.subarray(index * 17, index * 17 + 15), (value, column) => finite(value, `poses[${index}][${column}]`));
@@ -42,7 +43,7 @@ export async function normalizeDtu(arrays: ReadonlyMap<string, NumpyCameraArray>
   if (names.length !== count) return importError('INVALID_IMAGE_ORDER', 'DTU camera count does not match the image order.');
   const result = emptyCameraDataset('dtu', count);
   for (let index = 0; index < count; index++) {
-    if (index > 0 && index % 256 === 0) await new Promise<void>(done => setTimeout(done, 0));
+    if (index > 0 && index % 256 === 0) await yieldToMain();
     signal?.throwIfAborted();
     const worldArray = arrays.get(`world_mat_${index}`)!, scaleArray = arrays.get(`scale_mat_${index}`)!;
     const world = Array.from(worldArray.values, value => finite(value, 'world_mat'));

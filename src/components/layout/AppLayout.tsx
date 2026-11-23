@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { StatusBar } from './StatusBar';
 import { TouchStatusBar } from './TouchStatusBar';
-import { TouchGalleryDrawer } from './TouchGalleryDrawer';
 import { Scene3D } from '../viewer3d';
 import { ImageGallery } from '../gallery/ImageGallery';
 import { GalleryErrorBoundary } from '../gallery/GalleryErrorBoundary';
-import { ImageDetailModal } from '../modals/ImageDetailModal';
 import { GalleryCollapseHandle } from './GalleryCollapseHandle';
 import { useHotkeyScope } from '../../hooks/useHotkeyScope';
 import { LAYOUT_PANELS } from '../../theme';
@@ -22,6 +20,9 @@ import {
   TOUCH_LAYOUT_ROOT_CLASS,
 } from './appLayoutPolicy';
 import { useAppLayoutStoreFacade } from './useAppLayoutStoreFacade';
+
+const LazyImageDetailModal = lazy(() => import('../modals/ImageDetailModal').then((m) => ({ default: m.ImageDetailModal })));
+const LazyTouchGalleryDrawer = lazy(() => import('./TouchGalleryDrawer').then((m) => ({ default: m.TouchGalleryDrawer })));
 
 function useResizablePanel(defaultWidthPercent: number) {
   const [panelWidth, setPanelWidth] = useState(() => {
@@ -94,6 +95,7 @@ export function AppLayout() {
       embedMode,
       touchMode,
       touchUI,
+      imageDetailId,
       reconstruction,
       urlLoading,
     },
@@ -154,21 +156,25 @@ export function AppLayout() {
     return (
       <div className={TOUCH_LAYOUT_ROOT_CLASS} data-touch-mode="true">
         {/* Full-screen 3D Viewer */}
-        <div className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden">
           <Scene3D />
-        </div>
+        </main>
 
         {/* Simplified status bar */}
         <TouchStatusBar />
 
         {/* Gallery drawer (toggled by gallery button in ViewerControls) */}
         {touchUI.galleryDrawer && (
-          <TouchGalleryDrawer
-            onClose={() => setTouchUIVisible('galleryDrawer', false)}
-          />
+          <Suspense fallback={null}>
+            <LazyTouchGalleryDrawer onClose={() => setTouchUIVisible('galleryDrawer', false)} />
+          </Suspense>
         )}
 
-        <ImageDetailModal />
+        {imageDetailId !== null && (
+          <Suspense fallback={null}>
+            <LazyImageDetailModal />
+          </Suspense>
+        )}
       </div>
     );
   }
@@ -178,9 +184,9 @@ export function AppLayout() {
     <div className="h-screen flex flex-col bg-ds-primary relative">
       <div className="flex-1 flex overflow-hidden">
         {/* 3D Viewer - takes remaining space */}
-        <div className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0">
           <Scene3D />
-        </div>
+        </main>
 
         {/* Resize handle - hairline with hover highlight, carrying the collapse
             chevron. Rendered whether or not the gallery is collapsed (hidden in
@@ -190,7 +196,8 @@ export function AppLayout() {
 
         {/* Gallery panel with smooth transition (disabled during resize, hidden in embed mode) */}
         {!embedMode && (
-          <div
+          <aside
+            aria-label="Image gallery"
             className={`overflow-hidden flex-shrink-0 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
             style={getGalleryPanelStyle({ hideGallery, panelWidth })}
           >
@@ -199,12 +206,16 @@ export function AppLayout() {
                 <ImageGallery isResizing={isResizing} />
               </GalleryErrorBoundary>
             </div>
-          </div>
+          </aside>
         )}
       </div>
 
       {!embedMode && <StatusBar />}
-      <ImageDetailModal />
+      {imageDetailId !== null && (
+        <Suspense fallback={null}>
+          <LazyImageDetailModal />
+        </Suspense>
+      )}
     </div>
   );
 }

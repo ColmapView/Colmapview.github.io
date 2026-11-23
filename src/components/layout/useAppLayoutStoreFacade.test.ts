@@ -46,9 +46,15 @@ describe('useAppLayoutStoreFacade', () => {
         galleryDrawer: true,
         modalControls: false,
       },
+      imageDetailId: null,
       reconstruction,
       urlLoading: true,
     });
+
+    act(() => {
+      useUIStore.getState().openImageDetail(0);
+    });
+    expect(result.current.data.imageDetailId).toBe(0);
   });
 
   it('routes layout actions back to owning stores', () => {

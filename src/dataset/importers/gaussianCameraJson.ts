@@ -3,6 +3,7 @@ import { worldToCameraFromCenter, validateRotation } from './cameraMath';
 import { emptyCameraDataset, addCameraFrame, finishCameraDataset } from './cameraDatasetBuilder';
 import type { ResolveCameraFrame } from './nerfTransforms';
 import { dimension, finite, importError, object, positive } from './types';
+import { yieldToMain } from './yieldToMain';
 
 export function isGaussianCameraJson(value: unknown): boolean {
   const first = Array.isArray(value) ? value[0] : undefined;
@@ -15,7 +16,7 @@ export async function normalizeGaussianCameraJson(value: unknown, resolve: Resol
   const result = emptyCameraDataset('gaussian-splatting', value.length);
   const ids = new Set<number>();
   for (let index = 0; index < value.length; index++) {
-    if (index > 0 && index % 256 === 0) await new Promise<void>(done => setTimeout(done, 0));
+    if (index > 0 && index % 256 === 0) await yieldToMain();
     signal?.throwIfAborted();
     const frame = object(value[index], `cameras[${index}]`);
     if (frame.id !== undefined) {

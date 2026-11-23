@@ -4,9 +4,8 @@ const lockName = (name: string) => `${ARCHIVE_STORAGE_DIRECTORY}:${name}`;
 
 async function acquireTemporaryLease(name: string, signal: AbortSignal): Promise<void> {
   if (typeof navigator.locks?.request !== 'function') return;
-  let release!: () => void, acquired!: () => void, reject!: (reason: unknown) => void;
-  const held = new Promise<void>(resolve => { release = resolve; });
-  const ready = new Promise<void>((resolve, fail) => { acquired = resolve; reject = fail; });
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
+  const { promise: ready, resolve: acquired, reject } = Promise.withResolvers<void>();
   const done = navigator.locks.request(lockName(name), { signal }, () => { acquired(); return held; });
   void done.catch(reject);
   await ready;

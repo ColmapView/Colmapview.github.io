@@ -5,6 +5,7 @@ import { validateCloudTransform, xyzRgbPly } from './pointCloudFile';
 import { readCameraSourceFile } from './sourceAccess';
 import { imageResourceUrl, leafPath, parentPath, resolveSourcePath } from './sourcePaths';
 import { importError, type CameraDatasetSource, type ImportDiagnostic } from './types';
+import { yieldToMain } from './yieldToMain';
 
 const pointCloudName = /^(?:points_gt|points3d|points|point_cloud|sparse_pc)\.ply$/i;
 const MAX_POINT_CLOUD_BYTES = 64 * 1024 * 1024;
@@ -45,7 +46,7 @@ export async function readCompanionPointCloud(source: CameraDatasetSource, metad
     const points = await parsePointCloudPlyFile(file);
     let steps = 0;
     for (const point of points.values()) {
-      if (++steps % 1024 === 0) await new Promise<void>(done => setTimeout(done, 0));
+      if (++steps % 1024 === 0) await yieldToMain();
       signal?.throwIfAborted();
       const xyz = point.xyz;
       point.xyz = [0, 1, 2].map(row => matrix[row * 4] * xyz[0] + matrix[row * 4 + 1] * xyz[1] + matrix[row * 4 + 2] * xyz[2] + matrix[row * 4 + 3]) as [number, number, number];

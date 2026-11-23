@@ -43,7 +43,7 @@ export function visitImageObservations(file: Blob, range: ObservationRange, read
 /** Keep original observations in the Blob; only pose headers enter WASM memory. */
 export async function indexImageFile(file: Blob) {
   const read = (start: number, end: number) => file.slice(start, end).arrayBuffer().catch(error => {
-    throw new Error(`Could not read binary pose metadata at byte ${start}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Could not read binary pose metadata at byte ${start}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   });
   const countBytes = await read(0, 8);
   if (countBytes.byteLength !== 8) throw new Error('Truncated binary image count');

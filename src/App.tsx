@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { HotkeysProvider } from 'react-hotkeys-hook';
 import { DropZone } from './components/dropzone';
-import { AppLayout } from './components/layout';
+import { AppLayout } from './components/layout/AppLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HotkeyHelpModal } from './components/modals/HotkeyHelpModal';
 import { SplatPickerModal } from './components/modals/SplatPickerModal';

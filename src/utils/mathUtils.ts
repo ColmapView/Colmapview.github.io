@@ -25,6 +25,6 @@ export function percentile(sorted: number[], p: number): number {
  */
 export function median(arr: number[]): number {
   if (arr.length === 0) return 0;
-  const sorted = [...arr].sort((a, b) => a - b);
+  const sorted = arr.toSorted((a, b) => a - b);
   return percentile(sorted, 50);
 }

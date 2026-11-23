@@ -28,3 +28,15 @@ it('keeps a mouse hint dismissed until the pointer leaves its owner', () => {
   fireEvent.mouseOver(button);
   expect(screen.getByRole('tooltip')).toBeInTheDocument();
 });
+
+it('ignores mousemove over elements without tooltips so idle pointer movement causes no state updates', () => {
+  render(<><div data-testid="empty">Canvas</div><button data-tooltip="Hint">Action</button><MouseTooltip /></>);
+  const empty = screen.getByTestId('empty');
+  const button = screen.getByRole('button');
+  fireEvent.mouseMove(empty, { clientX: 50, clientY: 60 });
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  fireEvent.mouseMove(button, { clientX: 120, clientY: 140 });
+  expect(screen.getByRole('tooltip')).toHaveTextContent('Hint');
+  fireEvent.mouseMove(empty, { clientX: 200, clientY: 220 });
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+});

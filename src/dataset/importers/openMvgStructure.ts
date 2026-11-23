@@ -3,6 +3,7 @@ import type { Image, Point3D, Point3DId } from '../../types/colmap';
 import { getCameraIntrinsics } from '../../utils/cameraIntrinsics';
 import { distortNormalized } from '../../utils/cameraUndistortion';
 import { importError, object, type NormalizedCameraDataset } from './types';
+import { yieldToMain } from './yieldToMain';
 
 export function openMvgId(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
@@ -46,7 +47,7 @@ export async function addOpenMvgStructure(value: unknown, result: NormalizedCame
     let errorCount=0;
     for (const rawObservation of landmark.observations) {
       if (++steps % 1024 === 0) {
-        await new Promise<void>(done => setTimeout(done,0));
+        await yieldToMain();
         signal?.throwIfAborted();
       }
       const observation=object(rawObservation,'observation'), data=object(observation.value,'observation.value');
@@ -74,7 +75,7 @@ export async function addOpenMvgStructure(value: unknown, result: NormalizedCame
     }
     if (!errorCount) unknownErrors++;
     points.set(point3DId,point);
-    if (++steps % 1024 === 0) await new Promise<void>(done => setTimeout(done,0));
+    if (++steps % 1024 === 0) await yieldToMain();
   }
   signal?.throwIfAborted();
   result.points3D=points;

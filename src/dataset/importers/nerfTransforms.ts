@@ -3,6 +3,7 @@ import { CameraModelId } from '../../types/cameraModelId';
 import { nerfCameraToColmap } from './cameraMath';
 import { dimension, finite, importError, object, positive, MAX_CAMERA_FRAMES,
   type ImportedImageBinding, type NormalizedCameraDataset } from './types';
+import { yieldToMain } from './yieldToMain';
 
 export interface ResolvedCameraFrame {
   path: string;
@@ -133,7 +134,7 @@ export async function normalizeNerfTransforms(value: unknown, resolve: ResolveCa
   const saved = Object.fromEntries(['applied_transform','applied_scale','aabb_scale','scale','offset'].filter(key => root[key] !== undefined).map(key => [key,root[key]]));
   if (Object.keys(saved).length) result.savedWorldMetadata = saved;
   for (let index=0; index<root.frames.length; index++) {
-    if (index > 0 && index%256 === 0) await new Promise<void>(done => setTimeout(done,0));
+    if (index > 0 && index%256 === 0) await yieldToMain();
     signal?.throwIfAborted();
     const frame = object(root.frames[index],`frames[${index}]`);
     requireExplicitCalibration(root,frame,index);

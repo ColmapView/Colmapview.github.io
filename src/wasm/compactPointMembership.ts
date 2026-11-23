@@ -18,7 +18,7 @@ function hasDuplicatePointIds(ids: BigUint64Array): boolean {
   if (increasing) return false;
   // Normal sorted IDs need no allocation. Unsorted input uses a temporary native
   // uint64 sort to prove uniqueness without retaining one boxed bigint per ID.
-  const sorted = ids.slice().sort();
+  const sorted = ids.toSorted();
   for (let i = 1; i < sorted.length; i++) if (sorted[i] === sorted[i - 1]) return true;
   return false;
 }

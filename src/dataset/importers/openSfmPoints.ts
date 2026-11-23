@@ -1,5 +1,6 @@
 import type { Point3D, Point3DId } from '../../types/colmap';
 import { importError, object, type NormalizedCameraDataset } from './types';
+import { yieldToMain } from './yieldToMain';
 
 export function openSfmPointIds(value: unknown): Map<string, bigint> {
   const ids = value === undefined ? [] : Object.keys(object(value, 'OpenSfM points'));
@@ -18,7 +19,7 @@ export async function addOpenSfmPoints(value: unknown, result: NormalizedCameraD
   if (!numericIds) rows.sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0);
   const points=new Map<Point3DId,Point3D>();
   for (const [index,[id,raw]] of rows.entries()) {
-    if (index > 0 && index % 1024 === 0) await new Promise<void>(done => setTimeout(done,0));
+    if (index > 0 && index % 1024 === 0) await yieldToMain();
     signal?.throwIfAborted();
     const row=object(raw,`OpenSfM point ${id}`);
     const xyz=row.coordinates, rgb=row.color;

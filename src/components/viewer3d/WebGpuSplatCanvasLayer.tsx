@@ -751,10 +751,7 @@ async function createProgressiveVisibleRenderer({
   let stage: 'preview' | 'full' = 'preview';
   let previewFirstFrameResolved = false;
   let fullFirstFrameResolved = false;
-  let resolvePreviewFirstFrame: (() => void) | null = null;
-  const previewFirstFrame = new Promise<void>((resolve) => {
-    resolvePreviewFirstFrame = resolve;
-  });
+  const { promise: previewFirstFrame, resolve: resolvePreviewFirstFrame } = Promise.withResolvers<void>();
 
   let renderer: VisibleWebGpuSplatRendererAdapter;
   try {
@@ -768,7 +765,7 @@ async function createProgressiveVisibleRenderer({
           if (previewOnly && preview.metricReady) {
             reportMetricReady();
           }
-          resolvePreviewFirstFrame?.();
+          resolvePreviewFirstFrame();
           return;
         }
         if (stage === 'full' && !fullFirstFrameResolved) {

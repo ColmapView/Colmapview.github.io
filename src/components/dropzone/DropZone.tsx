@@ -1,11 +1,12 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
 import { useFileDropzone } from '../../hooks/useFileDropzone';
 import { useUrlLoader } from '../../hooks/useUrlLoader';
 import { runUrlLoadPreparation, type UrlLoadPreparation } from '../../hooks/urlLoaderLoadGuard';
 import { clearPersistedSettings } from '../../store/migration';
 import { importConfigFile } from '../../config/configuration';
 import { TIMING, buttonStyles, loadingStyles, toastStyles, dragOverlayStyles } from '../../theme';
-import { UrlInputModal } from '../modals/UrlInputModal';
+import { isGoogleDriveOpenWithSearch } from '../../features/googleDrive/openWith';
+import { getViewerStartupUrl } from '../../utils/hubViewerLaunch';
 import { publicAsset } from '../../utils/paths';
 import { requestConfirmation } from '../../utils/confirmation';
 import { containsEventTarget } from '../../utils/domTargetGuards';
@@ -16,7 +17,9 @@ import { createExampleManifest, parseManifestContent } from './dropZoneManifestP
 import { useDropZoneStoreFacade } from './useDropZoneStoreFacade';
 import { CloseIcon, PlusIcon } from '../../icons';
 import { StorageAccessPrompt } from './StorageAccessPrompt';
-import { GoogleDriveOpenWith } from './GoogleDriveOpenWith';
+
+const LazyUrlInputModal = lazy(() => import('../modals/UrlInputModal').then((m) => ({ default: m.UrlInputModal })));
+const LazyGoogleDriveOpenWith = lazy(() => import('./GoogleDriveOpenWith').then((m) => ({ default: m.GoogleDriveOpenWith })));
 
 interface DropZoneProps {
   children: React.ReactNode;
@@ -31,6 +34,8 @@ export function DropZone({ children }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isPanelDismissed, setIsPanelDismissed] = useState(false);
   const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
+  const [hasOpenedUrlModal, setHasOpenedUrlModal] = useState(false);
+  const [driveOpenWith] = useState(() => isGoogleDriveOpenWithSearch(getViewerStartupUrl().search));
   const { handleDrop, handleDragOver, handleBrowse } = useFileDropzone();
   const { loadFromUrl, loadFromManifest, urlLoading, urlProgress, setUrlLoading, setUrlProgress } = useUrlLoader();
   const {
@@ -51,6 +56,11 @@ export function DropZone({ children }: DropZoneProps) {
   const prepareUrlLoad = useCallback((message: string, prepare: UrlLoadPreparation) =>
     runUrlLoadPreparation({ setError, setUrlLoading, setUrlProgress }, message, prepare), [setError, setUrlLoading, setUrlProgress]);
 
+  const handleOpenUrlModal = useCallback(() => {
+    setHasOpenedUrlModal(true);
+    setIsUrlModalOpen(true);
+  }, []);
+
   // Handle URL loading from modal
   const handleUrlLoad = useCallback(async (url: string) => {
     setIsUrlModalOpen(false);
@@ -69,7 +79,7 @@ export function DropZone({ children }: DropZoneProps) {
         try {
           content = await file.text();
         } catch (err) {
-          throw new Error(`Failed to load manifest: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          throw new Error(`Failed to load manifest: ${err instanceof Error ? err.message : 'Unknown error'}`, { cause: err });
         }
         assertCurrent();
         const result = parseManifestContent(content);
@@ -202,7 +212,7 @@ export function DropZone({ children }: DropZoneProps) {
       {!reconstruction && !urlLoading && !hasUrlLoadRequest && !isDragOver && !isPanelDismissed && !touchMode && (
         <DesktopDropZonePanel
           urlLoading={urlLoading}
-          onOpenUrlModal={() => setIsUrlModalOpen(true)}
+          onOpenUrlModal={handleOpenUrlModal}
           onLoadRemoteDataset={handleUrlLoad}
           onOpenManifestFile={() => manifestInputRef.current?.click()}
           onBrowse={handleBrowse}
@@ -216,7 +226,7 @@ export function DropZone({ children }: DropZoneProps) {
       {!reconstruction && !urlLoading && !hasUrlLoadRequest && !isPanelDismissed && touchMode && (
         <TouchDropZonePanel
           urlLoading={urlLoading}
-          onOpenUrlModal={() => setIsUrlModalOpen(true)}
+          onOpenUrlModal={handleOpenUrlModal}
           onLoadRemoteDataset={handleUrlLoad}
           onDismiss={() => setIsPanelDismissed(true)}
         />
@@ -276,16 +286,23 @@ export function DropZone({ children }: DropZoneProps) {
         </div>
       )}
 
-      {/* URL Input Modal */}
-      <GoogleDriveOpenWith loadFromUrl={loadFromUrl} loadFromManifest={loadFromManifest}
-        onOpenUrlModal={() => setIsUrlModalOpen(true)} onLoadRemoteDataset={handleUrlLoad} />
-      <StorageAccessPrompt onOpenUrlModal={() => setIsUrlModalOpen(true)} onLoadRemoteDataset={handleUrlLoad} />
-      <UrlInputModal
-        isOpen={isUrlModalOpen}
-        onClose={() => setIsUrlModalOpen(false)}
-        onLoad={handleUrlLoad}
-        loading={urlLoading}
-      />
+      {driveOpenWith && (
+        <Suspense fallback={null}>
+          <LazyGoogleDriveOpenWith loadFromUrl={loadFromUrl} loadFromManifest={loadFromManifest}
+            onOpenUrlModal={handleOpenUrlModal} onLoadRemoteDataset={handleUrlLoad} />
+        </Suspense>
+      )}
+      <StorageAccessPrompt onOpenUrlModal={handleOpenUrlModal} onLoadRemoteDataset={handleUrlLoad} />
+      {hasOpenedUrlModal && (
+        <Suspense fallback={null}>
+          <LazyUrlInputModal
+            isOpen={isUrlModalOpen}
+            onClose={() => setIsUrlModalOpen(false)}
+            onLoad={handleUrlLoad}
+            loading={urlLoading}
+          />
+        </Suspense>
+      )}
 
     </div>
   );

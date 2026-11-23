@@ -2,7 +2,7 @@
 export function cloudflareStaticHeaders() {
   const htmlRoutes = ['/', '/index', '/index.html', '/about', '/about.html', '/privacy', '/privacy.html', '/terms', '/terms.html'];
   return [
-    '/*\n  Cross-Origin-Opener-Policy: same-origin-allow-popups\n  Referrer-Policy: strict-origin',
+    '/*\n  Cross-Origin-Opener-Policy: same-origin-allow-popups\n  Referrer-Policy: strict-origin\n  X-Content-Type-Options: nosniff\n  Permissions-Policy: camera=(), geolocation=(), microphone=()',
     ...htmlRoutes.map(route => `${route}\n  Cache-Control: public, no-cache, no-transform`),
     ...['/hf-callback', '/hf-callback.html'].map(route => `${route}\n  Cache-Control: no-store, no-transform`),
     '/deployment.json\n  Cache-Control: no-cache',

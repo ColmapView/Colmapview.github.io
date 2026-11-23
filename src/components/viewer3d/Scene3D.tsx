@@ -15,7 +15,6 @@ import { ScreenshotCapture } from './ScreenshotCapture';
 import { FpsTracker } from './FpsTracker';
 import { SceneRenderWakeups } from './SceneRenderWakeups';
 import { FooterBranding } from './FooterBranding';
-import { SplatPsnrEvaluator } from './SplatPsnrEvaluator';
 import { SplatBackendStatusNotifier } from './SplatBackendStatusNotifier';
 import {
   shouldClearUnavailableForcedWebGpuSplatLoading,
@@ -23,10 +22,6 @@ import {
   shouldRenderWebGpuSplatCanvas,
   shouldSyncWebGpuSplatCanvasFrame,
 } from './WebGpuSplatCanvasLayerPolicy';
-import {
-  WebGpuSplatCanvasBridge,
-  WebGpuSplatCanvasLayer,
-} from './WebGpuSplatCanvasLayer';
 import { isWebGpuAdapterUnavailableReason } from '../../splat/webgpu/webGpuSplatDevice';
 import { GlobalContextMenu } from './contextMenu/GlobalContextMenu';
 import { Scene3DE2EProbe } from './Scene3DE2EProbe';
@@ -73,6 +68,9 @@ import {
 const loadSplatLayer = () => import('./PointCloud/SplatLayer').then((module) => ({ default: module.SplatLayer }));
 
 const LazySplatLayer = lazy(loadSplatLayer);
+const LazySplatPsnrEvaluator = lazy(() => import('./SplatPsnrEvaluator').then((m) => ({ default: m.SplatPsnrEvaluator })));
+const WebGpuSplatCanvasLayer = lazy(() => import('./WebGpuSplatCanvasLayer').then((m) => ({ default: m.WebGpuSplatCanvasLayer })));
+const WebGpuSplatCanvasBridge = lazy(() => import('./WebGpuSplatCanvasLayer').then((m) => ({ default: m.WebGpuSplatCanvasBridge })));
 
 function SplatRuntimePreloader({
   requestedBackend,
@@ -261,7 +259,11 @@ function SceneContent() {
         setSparkPreloadFailed={setSparkPreloadFailed}
         splatFile={splatFile}
       />
-      <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasBridgeEnabled} modelMatrix={webGpuSplatModelMatrix} />
+      {webGpuSplatCanvasMounted && (
+        <Suspense fallback={null}>
+          <WebGpuSplatCanvasBridge enabled={webGpuSplatCanvasBridgeEnabled} modelMatrix={webGpuSplatModelMatrix} />
+        </Suspense>
+      )}
       <group matrixAutoUpdate={false} matrix={transformGroupMatrix}>
         {transformableContent}
       </group>
@@ -283,7 +285,11 @@ function SceneContent() {
       <FloorPlaneWidget boundsRadius={bounds.radius} />
 
       {e2eProbeEnabled && <Scene3DE2EProbe />}
-      <SplatPsnrEvaluator />
+      {splatFile && (
+        <Suspense fallback={null}>
+          <LazySplatPsnrEvaluator />
+        </Suspense>
+      )}
 
       <TrackballControls target={bounds.center} radius={bounds.radius} resetTrigger={viewResetTrigger} viewDirection={viewDirection} viewTrigger={viewTrigger} />
     </>
@@ -441,23 +447,27 @@ export function Scene3D() {
       onMouseDown={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseDown}
       onMouseUp={sceneContextMenu.touchMode ? undefined : sceneContextMenu.handleMouseUp}
     >
-      <WebGpuSplatCanvasLayer
-        mounted={webGpuSplatCanvasMounted}
-        visible={webGpuSplatCanvasVisible}
-        splatFile={splatFile}
-        addNotification={addNotification}
-        removeNotification={removeNotification}
-        getUrlProgress={getUrlProgress}
-        setUrlLoading={setUrlLoading}
-        setUrlProgress={setUrlProgress}
-        reportLoadingProgress={webGpuSplatCanvasReportsLoading}
-        isDatasetLoadPendingForSplat={isDatasetLoadPendingForSplat}
-        isSplatDownloadPending={isSplatDownloadPending}
-        onRuntimeReady={handleWebGpuSplatRuntimeReady}
-        onMetricRuntimeReady={handleWebGpuSplatMetricRuntimeReady}
-        onRuntimeFailed={handleWebGpuSplatRuntimeFailed}
-        onAdapterUnavailable={handleWebGpuSplatAdapterUnavailable}
-      />
+      {webGpuSplatCanvasMounted && (
+        <Suspense fallback={null}>
+          <WebGpuSplatCanvasLayer
+            mounted={webGpuSplatCanvasMounted}
+            visible={webGpuSplatCanvasVisible}
+            splatFile={splatFile}
+            addNotification={addNotification}
+            removeNotification={removeNotification}
+            getUrlProgress={getUrlProgress}
+            setUrlLoading={setUrlLoading}
+            setUrlProgress={setUrlProgress}
+            reportLoadingProgress={webGpuSplatCanvasReportsLoading}
+            isDatasetLoadPendingForSplat={isDatasetLoadPendingForSplat}
+            isSplatDownloadPending={isSplatDownloadPending}
+            onRuntimeReady={handleWebGpuSplatRuntimeReady}
+            onMetricRuntimeReady={handleWebGpuSplatMetricRuntimeReady}
+            onRuntimeFailed={handleWebGpuSplatRuntimeFailed}
+            onAdapterUnavailable={handleWebGpuSplatAdapterUnavailable}
+          />
+        </Suspense>
+      )}
       <Scene3DErrorBoundary backgroundColor={backgroundColor}>
         {/* Inside the boundary on purpose. The two settle paths that run while
             a splat is being prepared — SplatRuntimePreloader and SplatLayer —

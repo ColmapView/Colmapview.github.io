@@ -57,13 +57,12 @@ export function MouseTooltip() {
   const currentElementRef = useRef<HTMLElement | null>(null);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    setMousePos({ x: e.clientX, y: e.clientY });
-
     const nextTarget = getMouseTooltipTarget(e.target);
 
     if (nextTarget?.element === dismissedTarget.current) return;
     dismissedTarget.current = null;
     if (nextTarget) {
+      setMousePos({ x: e.clientX, y: e.clientY });
       if (shouldUpdateMouseTooltipTarget({
         next: nextTarget,
         currentElement: currentElementRef.current,
@@ -84,6 +83,7 @@ export function MouseTooltip() {
     if (nextTarget?.element === dismissedTarget.current) return;
     dismissedTarget.current = null;
     if (nextTarget) {
+      setMousePos({ x: e.clientX, y: e.clientY });
       currentElementRef.current = nextTarget.element;
       setTooltip(nextTarget.text);
     }

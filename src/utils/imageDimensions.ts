@@ -1,9 +1,10 @@
 export interface ImageDimensions { width: number; height: number }
 export interface ImageDimensionsOptions { applyOrientation?: boolean; signal?: AbortSignal }
 
+const asciiDecoder = new TextDecoder();
 const dimensions = (width: number, height: number): ImageDimensions | null => width > 0 && height > 0 ? { width, height } : null;
 const ascii = (view: DataView, offset: number, length: number) =>
-  String.fromCharCode(...new Uint8Array(view.buffer, view.byteOffset + offset, length));
+  asciiDecoder.decode(new Uint8Array(view.buffer, view.byteOffset + offset, length));
 const orient = (size: ImageDimensions | null, orientation: number) => size && orientation >= 5 && orientation <= 8
   ? { width: size.height, height: size.width } : size;
 

@@ -7,6 +7,7 @@ export interface AppLayoutStoreFacadeData {
   embedMode: boolean;
   touchMode: boolean;
   touchUI: TouchUIVisibility;
+  imageDetailId: number | null;
   reconstruction: ReturnType<typeof useReconstructionStore.getState>['reconstruction'];
   urlLoading: boolean;
 }
@@ -28,6 +29,7 @@ export function useAppLayoutStoreFacade(): AppLayoutStoreFacade {
   const embedMode = useUIStore((s) => s.embedMode);
   const touchMode = useUIStore((s) => s.touchMode);
   const touchUI = useUIStore((s) => s.touchUI);
+  const imageDetailId = useUIStore((s) => s.imageDetailId);
   const setTouchUIVisible = useUIStore((s) => s.setTouchUIVisible);
   const toggleGalleryCollapsed = useUIStore((s) => s.toggleGalleryCollapsed);
 
@@ -42,6 +44,7 @@ export function useAppLayoutStoreFacade(): AppLayoutStoreFacade {
       embedMode,
       touchMode,
       touchUI,
+      imageDetailId,
       reconstruction,
       urlLoading,
     },

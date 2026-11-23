@@ -66,6 +66,7 @@ export const ColorPickerRow = memo(function ColorPickerRow({ label, value, onCha
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
       e.preventDefault();
       e.stopPropagation();
       restoreEditFocus.current = true;
@@ -179,6 +180,7 @@ export const HueRow = memo(function HueRow({ label, value, onChange }: HueRowPro
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
       e.preventDefault();
       e.stopPropagation();
       restoreEditFocus.current = true;
@@ -291,6 +293,7 @@ export const HueSliderRow = memo(function HueSliderRow({ label, value, onChange 
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
       e.preventDefault();
       e.stopPropagation();
       restoreEditFocus.current = true;

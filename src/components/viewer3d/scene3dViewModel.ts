@@ -247,9 +247,9 @@ function buildCameraPositionBounds(positions: Array<{ x: number; y: number; z: n
     median(zCoords),
   ];
 
-  const sortedX = [...xCoords].sort((a, b) => a - b);
-  const sortedY = [...yCoords].sort((a, b) => a - b);
-  const sortedZ = [...zCoords].sort((a, b) => a - b);
+  const sortedX = xCoords.toSorted((a, b) => a - b);
+  const sortedY = yCoords.toSorted((a, b) => a - b);
+  const sortedZ = zCoords.toSorted((a, b) => a - b);
 
   const rangeX = percentile(sortedX, 95) - percentile(sortedX, 5);
   const rangeY = percentile(sortedY, 95) - percentile(sortedY, 5);

@@ -7,6 +7,7 @@ import { emptyCameraDataset as empty, addCameraFrame as add, finishCameraDataset
 import { addOpenMvgStructure, openMvgId } from './openMvgStructure';
 import { addOpenSfmPoints } from './openSfmPoints';
 import type { Image } from '../../types/colmap';
+import { yieldToMain } from './yieldToMain';
 
 export function isOpenSfm(value: unknown): boolean {
   const root = Array.isArray(value) ? value[0] : value;
@@ -19,7 +20,7 @@ export async function normalizeOpenSfm(value: unknown, resolve: ResolveCameraFra
   const cameras = object(root.cameras,'cameras');
   const result = empty('opensfm',shots.length);
   for (const [index,[name,raw]] of shots.entries()) {
-    if (index > 0 && index % 256 === 0) await new Promise<void>(done => setTimeout(done,0));
+    if (index > 0 && index % 256 === 0) await yieldToMain();
     signal?.throwIfAborted();
     const shot = object(raw,`shots.${name}`);
     const camera = object(cameras[String(shot.camera)],`cameras.${String(shot.camera)}`);
@@ -67,7 +68,7 @@ export async function normalizeOpenMvg(value: unknown, resolve: ResolveCameraFra
   const result=empty('openmvg',views.length);
   const imagesByView=new Map<number,Image|undefined>();
   for (const [index,row] of views.entries()) {
-    if (index > 0 && index % 256 === 0) await new Promise<void>(done => setTimeout(done,0));
+    if (index > 0 && index % 256 === 0) await yieldToMain();
     signal?.throwIfAborted();
     const viewId=openMvgId(row.key,'view');
     if (imagesByView.has(viewId)) return importError('INVALID_METADATA',`Duplicate OpenMVG view ID: ${viewId}.`);
@@ -120,7 +121,7 @@ export async function normalizeBundler(text: string, names: readonly string[], r
     return parts;
   };
   for (let index=0; index<count; index++) {
-    if (index > 0 && index % 256 === 0) await new Promise<void>(done => setTimeout(done,0));
+    if (index > 0 && index % 256 === 0) await yieldToMain();
     signal?.throwIfAborted();
     const at=2+index*5;
     const [f,k1,k2]=numbers(lines[at],3,`camera ${index} intrinsics`);

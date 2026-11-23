@@ -25,7 +25,11 @@ export const useUITheme = create<{ theme: UITheme; setTheme: (theme: UITheme) =>
 export function initializeUITheme(): () => void {
   const media = window.matchMedia('(prefers-color-scheme: light)');
   const apply = () => {
-    document.documentElement.dataset.uiTheme = resolveUITheme(useUITheme.getState().theme, media.matches);
+    const theme = useUITheme.getState().theme;
+    const resolved = resolveUITheme(theme, media.matches);
+    document.documentElement.dataset.uiTheme = resolved;
+    const meta = document.querySelector('meta[name="color-scheme"]');
+    if (meta) meta.setAttribute('content', theme === 'system' ? 'dark light' : resolved);
   };
   const sync = (event: StorageEvent) => {
     if (event.key === STORAGE_KEYS.theme || event.key === null) useUITheme.setState({ theme: readTheme() });

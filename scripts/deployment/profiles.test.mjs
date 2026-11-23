@@ -627,6 +627,8 @@ test('Cloudflare artifact headers prevent callback caching and preserve HTML byt
         ? 'no-store, no-transform' : 'public, no-cache, no-transform', route);
       assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
       assert.equal(response.headers.get('referrer-policy'), 'strict-origin');
+      assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(response.headers.get('permissions-policy'), 'camera=(), geolocation=(), microphone=()');
       assert.equal(await response.text(), '<html><body>prepared bytes</body></html>');
     }
     for (const name of ['entry.js', 'style.css', 'worker.wasm']) {

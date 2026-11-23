@@ -162,14 +162,14 @@ describe('DropZone preparation cancellation', () => {
 });
 
 describe('DropZone drops over an open dialog', () => {
-  it('ignores files dropped on the Load URL dialog, without letting the browser open them', () => {
+  it('ignores files dropped on the Load URL dialog, without letting the browser open them', async () => {
     vi.mocked(useUrlLoader).mockReturnValue({
       loadFromUrl: vi.fn(), loadFromManifest: vi.fn(), urlLoading: false, urlProgress: null,
       urlError: null, clearUrlError: vi.fn(), setUrlLoading: vi.fn(), setUrlProgress: vi.fn(),
     });
     render(<DropZone><div>Viewer</div></DropZone>);
     fireEvent.click(screen.getByRole('button', { name: 'Load URL' }));
-    const dialog = screen.getByRole('dialog', { name: 'Load from URL' });
+    const dialog = await screen.findByRole('dialog', { name: 'Load from URL' });
     const dataTransfer = { types: ['Files'], files: [new File(['x'], 'cameras.bin')], items: [] };
 
     fireEvent.dragEnter(dialog, { dataTransfer });

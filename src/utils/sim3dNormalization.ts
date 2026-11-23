@@ -99,7 +99,7 @@ export function computeNormalizeScale(
 }
 
 function percentile(arr: number[], p: number): number {
-  const sorted = [...arr].sort((a, b) => a - b);
+  const sorted = arr.toSorted((a, b) => a - b);
   const idx = p * (sorted.length - 1);
   const lower = Math.floor(idx);
   const upper = Math.ceil(idx);

@@ -144,6 +144,9 @@
 
   /* Component Sizes */
   --scrollbar-width: 12px;
+  --scrollbar-thumb: var(--border-light);
+  --scrollbar-track: var(--bg-secondary);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   --control-btn-size: 2.5rem;
   --control-panel-gap: 0.5rem;
   --tap-target-min: 44px; /* mirrors TOUCH.minTapTarget (src/theme/sizing.ts) */
@@ -1491,22 +1494,24 @@ legend {
    SCROLLBAR STYLING
    ============================================ */
 
-::-webkit-scrollbar {
-  width: var(--scrollbar-width);
-  height: var(--scrollbar-width);
-}
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
+  }
 
-::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-}
+  ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
 
-::-webkit-scrollbar-thumb {
-  background: var(--border-light);
-  border-radius: var(--radius-full);
-}
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: var(--radius-full);
+  }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
 }
 
 /* Opaque control surfaces remain legible over any reconstruction background. */
@@ -1691,6 +1696,11 @@ h3.panel-heading {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .animate-slide-in-right,
+  .animate-fade-out {
+    animation: none;
   }
 }
 
@@ -2309,10 +2319,14 @@ h3.panel-heading {
 }
 
 .notification-message-clamp {
+  overflow: hidden;
+}
+
+/* Keep multiline clamping on the text box inside the native button. */
+span.notification-message-clamp {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .touch-control-panel {
@@ -2489,4 +2503,88 @@ input.hue-slider::-moz-range-thumb { background: var(--text-primary); }
 .switch-track::before { content: ''; position: absolute; inset: -8px -4px; }
 @media (pointer: coarse) {
   .switch-track::before { min-width: 44px; min-height: 44px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+}
+
+@media (forced-colors: active) {
+  /* Keep vendor range selectors separate so each engine can parse its own rules. */
+  input[type="range"]::-webkit-slider-runnable-track {
+    border: 1px solid ButtonText;
+    background: Canvas;
+  }
+
+  input[type="range"]::-moz-range-track {
+    border: 1px solid ButtonText;
+    background: Canvas;
+  }
+
+  input[type="range"]::-moz-range-progress {
+    background: Highlight;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    background: Highlight;
+    border: 1px solid Highlight;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    background: Highlight;
+    border: 1px solid Highlight;
+  }
+
+  input[type="range"]:focus-visible,
+  input[type="checkbox"]:focus-visible,
+  input[type="radio"]:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="checkbox"]:is(:hover, :focus),
+  input[type="radio"]:is(:hover, :focus) {
+    border-color: ButtonText;
+    background-color: Canvas;
+  }
+
+  input[type="checkbox"]:checked,
+  input[type="radio"]:checked {
+    border-color: Highlight;
+    background-color: Highlight;
+  }
+
+  input[type="checkbox"]:checked::after {
+    border-color: HighlightText;
+  }
+
+  input[type="radio"]:checked::after {
+    background-color: HighlightText;
+  }
+
+  .switch-track {
+    border: 1px solid ButtonText;
+  }
+
+  .switch-on {
+    border-color: Highlight;
+    background-color: Highlight;
+  }
+
+  .switch-thumb {
+    background-color: ButtonText;
+    border: 1px solid ButtonText;
+  }
+
+  .switch-on .switch-thumb {
+    background-color: HighlightText;
+    border-color: HighlightText;
+  }
+
+  .color-swatch {
+    forced-color-adjust: none;
+    border: 1px solid ButtonText;
+  }
+
+  .color-swatch:has(input:focus-visible) {
+    outline-color: Highlight;
+  }
 }

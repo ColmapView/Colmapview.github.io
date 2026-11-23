@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <!-- Dataset URLs can contain private file identifiers. Do not load page analytics. -->
     <meta name="referrer" content="strict-origin" />
+    <meta name="color-scheme" content="dark light" />
+    <script>
+      try {
+        var stored = localStorage.getItem('colmap-viewer-theme');
+        var pref = stored === 'light' || stored === 'system' ? stored : 'dark';
+        var resolved = pref === 'system' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : pref;
+        document.documentElement.dataset.uiTheme = resolved;
+        var meta = document.querySelector('meta[name="color-scheme"]');
+        if (meta) meta.setAttribute('content', pref === 'system' ? 'dark light' : resolved);
+      } catch {}
+    </script>
+    <meta name="text-scale" content="scale" />
     <meta name="colmapview-hub-launch" content="1" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />

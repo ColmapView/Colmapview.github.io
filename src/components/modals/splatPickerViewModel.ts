@@ -119,7 +119,7 @@ export function getSplatPickerItems(
     while (start > 0 && suffixCounts.get(path.slice(start).join('/')) !== 1) start--;
     return [source.path, path.slice(start).join('/')];
   }));
-  const bySize = [...sources].sort((a, b) =>
+  const bySize = sources.toSorted((a, b) =>
     getSortableSplatSize(a.size) - getSortableSplatSize(b.size) || a.path.localeCompare(b.path));
   return bySize.map((source) => {
     const sizeLabel = formatSplatSize(source.size);

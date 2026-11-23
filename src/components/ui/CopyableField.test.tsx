@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CopyableField } from './CopyableField';
 
@@ -58,5 +58,50 @@ describe('CopyableField', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
     expect(screen.getByRole('button', { name: 'Copied' })).toBeVisible();
     expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('announces repeated copies in a pre-mounted status beside the button', async () => {
+    render(<CopyableField label="Viewer link" value="https://viewer.example/" />);
+    const button = screen.getByRole('button', { name: 'Copy' });
+    const status = button.nextElementSibling as HTMLElement;
+    expect(button).not.toHaveAttribute('aria-live');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+    expect(status).toBeEmptyDOMElement();
+
+    fireEvent.click(button);
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBe(button);
+    expect(status.textContent).toBe('Copied');
+
+    fireEvent.click(button);
+    await waitFor(() => expect(status.textContent).toBe('Copied\u00A0'));
+    expect(button).toHaveTextContent('Copied');
+  });
+
+  it('resets the button and status after 2500 ms', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<CopyableField label="Viewer link" value="https://viewer.example/" />);
+      const button = screen.getByRole('button', { name: 'Copy' });
+      const status = button.nextElementSibling as HTMLElement;
+      await act(async () => {
+        fireEvent.click(button);
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(2499);
+      });
+      expect(button).toHaveTextContent('Copied');
+      expect(status).toHaveTextContent('Copied');
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(button).toHaveTextContent('Copy');
+      expect(status).toBeEmptyDOMElement();
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
   });
 });

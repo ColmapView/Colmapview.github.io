@@ -5,6 +5,7 @@ import { openSfmPointIds } from './openSfmPoints';
 import { readCameraSourceFile } from './sourceAccess';
 import { leafPath, parentPath } from './sourcePaths';
 import { importError, MAX_CAMERA_METADATA_BYTES, object, type CameraDatasetSource, type NormalizedCameraDataset, type ImportDiagnostic } from './types';
+import { yieldToMain } from './yieldToMain';
 
 /** Native tab-separated tracks, versions 0, 1 and 2 (despite the .csv suffix). */
 export async function addOpenSfmTracks(root: Record<string, unknown>, result: NormalizedCameraDataset, text: string, signal?: AbortSignal): Promise<void> {
@@ -21,7 +22,7 @@ export async function addOpenSfmTracks(root: Record<string, unknown>, result: No
   const seenTracks = new Map<number, Set<string>>();
   let steps = 0, omitted = 0;
   for (const line of lines) {
-    if (++steps % 1024 === 0) await new Promise<void>(done => setTimeout(done, 0));
+    if (++steps % 1024 === 0) await yieldToMain();
     signal?.throwIfAborted();
     if (!line.trim()) continue;
     const fields = line.split('\t'), expected = [8, 9, 11][version];
@@ -40,7 +41,7 @@ export async function addOpenSfmTracks(root: Record<string, unknown>, result: No
     const camera = result.cameras.get(image.cameraId)!, intrinsics = getCameraIntrinsics(camera);
     const rotation = new Quaternion(image.qvec[1], image.qvec[2], image.qvec[3], image.qvec[0]), translation = new Vector3(...image.tvec);
     for (const [, observation] of [...observations.get(image.imageId) ?? []].sort(([a], [b]) => a - b)) {
-      if (++steps % 1024 === 0) await new Promise<void>(done => setTimeout(done, 0));
+      if (++steps % 1024 === 0) await yieldToMain();
       signal?.throwIfAborted();
       // OpenSfM normalized OpenCV pixel+0.5; COLMAP already uses half-integer centers.
       const size = Math.max(camera.width, camera.height), xy: [number, number] = [observation.x * size + camera.width / 2, observation.y * size + camera.height / 2];

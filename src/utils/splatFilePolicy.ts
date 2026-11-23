@@ -37,7 +37,7 @@ export function compareSplatCandidates(a: SplatCandidate, b: SplatCandidate): nu
 export function sortSplatCandidatesByPreference<TCandidate extends SplatCandidate>(
   candidates: readonly TCandidate[]
 ): TCandidate[] {
-  return [...candidates].sort((a, b) => compareSplatCandidates(b, a));
+  return candidates.toSorted((a, b) => compareSplatCandidates(b, a));
 }
 
 /** Formats our WebGPU renderer, PSNR/SSIM evaluator and byte-less touch loader can decode. */

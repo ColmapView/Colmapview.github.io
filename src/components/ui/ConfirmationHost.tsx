@@ -10,6 +10,7 @@ import {
   getConfirmationDialogStyle,
   getConfirmationOverlayStyle,
 } from './confirmationHostPolicy';
+import { getModalDialogFocusableElements, openModalDialog } from './modalDialogShellPolicy';
 
 interface PendingConfirmation {
   request: ConfirmationRequest;
@@ -80,15 +81,14 @@ export function ConfirmationHost() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault();
         settle(false);
         return;
       }
 
       if (event.key !== 'Tab') return;
 
-      const focusable = Array.from(
-        dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not([disabled])') ?? []
-      );
+      const focusable = getModalDialogFocusableElements(dialogRef.current);
       if (focusable.length === 0) return;
 
       const first = focusable[0];
@@ -104,8 +104,7 @@ export function ConfirmationHost() {
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return openModalDialog(handleKeyDown);
   }, [pending, settle]);
 
   useEffect(() => {

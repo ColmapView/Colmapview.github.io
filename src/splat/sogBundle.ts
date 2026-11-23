@@ -102,7 +102,7 @@ function decodeName(nameBytes: Uint8Array, flags: number): string {
   if (!(flags & UTF8_NAME_FLAG)) {
     // Spark's zip reader decodes names without the UTF-8 flag as CP437; only ASCII reads the same both ways.
     if (nameBytes.some((byte) => byte > 0x7f)) fail(`${new TextDecoder().decode(nameBytes)} has a non-ASCII name not marked as UTF-8.`);
-    return String.fromCharCode(...nameBytes);
+    return utf8Name.decode(nameBytes);
   }
   try {
     return utf8Name.decode(nameBytes);

@@ -77,12 +77,7 @@ export async function startScreenshotWebCodecsRecording({
   log = appLogger.info,
   errorLog = appLogger.error,
 }: ScreenshotWebCodecsStartOptions): Promise<Blob | null> {
-  let resolveRecording: (blob: Blob | null) => void = () => {};
-  let rejectRecording: (error: unknown) => void = () => {};
-  const completion = new Promise<Blob | null>((resolve, reject) => {
-    resolveRecording = resolve;
-    rejectRecording = reject;
-  });
+  const { promise: completion, resolve: resolveRecording, reject: rejectRecording } = Promise.withResolvers<Blob | null>();
 
   const { width, height } = getEvenDownsampledDimensions(sourceWidth, sourceHeight, downsample);
   const bitrate = getVideoBitrate(width, height, recordingQuality);

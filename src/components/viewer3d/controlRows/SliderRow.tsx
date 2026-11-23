@@ -81,6 +81,7 @@ export const SliderRow = memo(function SliderRow({ label, value, min, max, step,
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
       e.preventDefault();
       e.stopPropagation();
       restoreFocus.current = true;

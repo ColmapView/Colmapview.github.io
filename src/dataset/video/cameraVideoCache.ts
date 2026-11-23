@@ -71,8 +71,7 @@ export function createCameraVideoCache(budgetBytes = CAMERA_VIDEO_CACHE_BYTES, o
   const add = (source: CameraVideoSource) => {
     const key = keyOf(source), existing = entries.get(key);
     if (existing) return existing;
-    let resolve!: Entry['resolve'], reject!: Entry['reject'];
-    const promise = new Promise<Blob>((done, failed) => { resolve = done; reject = failed; });
+    const { promise, resolve, reject } = Promise.withResolvers<Blob>();
     // A failed prefetch is quiet; selecting it retries through acquire.
     void promise.catch(() => {});
     const entry: Entry = { source, controller: new AbortController(), promise, resolve, reject, listeners: new Set(),

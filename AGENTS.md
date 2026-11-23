@@ -22,6 +22,10 @@ This is a Vite + React 19 TypeScript app for viewing COLMAP reconstructions. Cor
 
 Use TypeScript, React function components, and existing local patterns before introducing new abstractions. Keep shared policies in helpers or stores rather than duplicating behavior in components. Use two-space indentation where files already do, `PascalCase` for components, `useCamelCase` for hooks, and descriptive `camelCase` for functions and variables. Prefer accessible controls with stable labels over brittle DOM selectors. Run `npm run lint` before handoff.
 
+## Browser Support Policy
+
+Target Baseline Widely Available for core functionality. Use Baseline Newly Available features and other optional capabilities such as WebGPU, `scheduler.yield()`, `color-scheme`, `text-scale`, and `ariaNotify` as progressive enhancements with feature detection and safe fallbacks.
+
 ## Testing Guidelines
 
 Use Vitest with jsdom for unit and component behavior. Keep tests close to the code under test and name them `*.test.ts` or `*.test.tsx`. Use Playwright for browser behavior in `e2e/`; prefer locator expectations over fixed sleeps. Add focused tests when changing shared helpers, parsing, store actions, dataset access, or viewer workflows.

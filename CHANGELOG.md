@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.15] - 2026-11-23
+
+### Changed
+
+- Modernize web-platform defaults and accessibility without changing visuals: add `color-scheme` and `text-scale` metadata with FOUC-free startup theme sync, scale policy typography with `rem`, adopt standard `scrollbar-color` with `@supports` fallback, add `<main>` and `<aside aria-label="Image gallery">` landmarks, support `@media (forced-colors: active)` on controls and swatches, and send `X-Content-Type-Options: nosniff` and `Permissions-Policy` headers on Cloudflare Pages artifacts.
+- Improve responsiveness and initial load bundle size: extract a shared `scheduler.yield()` helper across all dataset importers, split optional modals, touch gallery drawer, Google Drive Open With helper, WebGPU splat layer, and PSNR evaluator with `React.lazy()`, and modernize `Error` causes, `TextDecoder`, `.toSorted()`, and `Promise.withResolvers()`.
+- Align Hub publication checks with the JavaScript gallery.
+
+### Fixed
+
+- Respect IME composition (`isComposing` / `keyCode === 229`) before committing `Enter` edits in color and slider rows, expose close-button accessible names on floating windows, and route `ConfirmationHost` and `TouchGalleryDrawer` through modal focus trapping and Escape handling.
+- Keep toast notifications in a pre-mounted `region` with `ariaNotify()` support, hover/focus auto-dismiss pause, unmount timer cleanup, reduced-motion overrides, and keyboard-accessible touch expansion; move `CopyableField` copy status into a sibling live region with automatic reset and VoiceOver repeat handling; stop emitting idle `mousemove` state updates in `MouseTooltip`.
+
 ## [0.25.14] - 2026-10-31
 
 ### Fixed

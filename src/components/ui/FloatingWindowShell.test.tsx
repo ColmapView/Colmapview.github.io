@@ -49,7 +49,9 @@ describe('FloatingWindowShell', () => {
 
     fireEvent.pointerDown(panelRef.current!);
     fireEvent.pointerDown(screen.getByText('Floating title').parentElement!);
-    fireEvent.click(screen.getByTitle('Close'));
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    expect(closeButton).toHaveAttribute('title', 'Close');
+    fireEvent.click(closeButton);
 
     expect(onPanelPointerDown).toHaveBeenCalledTimes(2);
     expect(onHeaderPointerDown).toHaveBeenCalledTimes(1);

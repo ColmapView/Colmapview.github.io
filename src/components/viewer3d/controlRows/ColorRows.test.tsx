@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ColorPickerRow, HueRow, HueSliderRow } from './ColorRows';
+import { SliderRow } from './SliderRow';
 afterEach(cleanup);
 it('exposes hex editing as a button and commits keyboard input', () => {
   const onChange = vi.fn();
@@ -12,6 +13,29 @@ it('exposes hex editing as a button and commits keyboard input', () => {
   fireEvent.keyDown(input, { key: 'Enter' });
   expect(onChange).toHaveBeenCalledWith('#112233');
   expect(screen.getByRole('button', { name: 'Edit hex color' })).toHaveFocus();
+});
+it('ignores Enter during IME composition in ColorPickerRow, HueRow, HueSliderRow, and SliderRow', () => {
+  const onChange = vi.fn();
+  render(<ColorPickerRow label="Background" value="#ffffff" onChange={onChange} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Edit hex color' }));
+  const colorInput = screen.getByRole('textbox', { name: 'Background' });
+  fireEvent.change(colorInput, { target: { value: '#112233' } });
+  fireEvent.keyDown(colorInput, { key: 'Enter', isComposing: true });
+  fireEvent.keyDown(colorInput, { key: 'Enter', keyCode: 229 });
+  expect(onChange).not.toHaveBeenCalled();
+  expect(colorInput).toBeInTheDocument();
+
+  cleanup();
+  const onSliderChange = vi.fn();
+  render(<SliderRow label="Opacity" value={0.5} min={0} max={1} step={0.1} onChange={onSliderChange} />);
+  fireEvent.doubleClick(screen.getByRole('button', { name: 'Edit Opacity' }));
+  const sliderInput = screen.getByRole('textbox', { name: 'Opacity' });
+  fireEvent.change(sliderInput, { target: { value: '0.8' } });
+  fireEvent.keyDown(sliderInput, { key: 'Enter', isComposing: true });
+  fireEvent.keyDown(sliderInput, { key: 'Enter', keyCode: 229 });
+  expect(onSliderChange).not.toHaveBeenCalled();
+  fireEvent.keyDown(sliderInput, { key: 'Enter' });
+  expect(onSliderChange).toHaveBeenCalledWith(0.8);
 });
 it.each(['color', 'numeric'])('supports canceling %s hue edits', (kind) => {
   const onChange = vi.fn();

@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { ImageGallery } from '../gallery/ImageGallery';
 import { GalleryErrorBoundary } from '../gallery/GalleryErrorBoundary';
 import { TOUCH } from '../../theme/sizing';
+import { getModalDialogFocusableElements, openModalDialog } from '../ui/modalDialogShellPolicy';
+import { useFloatingDialogFocus } from '../ui/useFloatingDialogFocus';
 import {
   getTouchGalleryDrawerPanelStyle,
   getTouchGalleryDrawerEndAction,
@@ -26,6 +28,42 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef<number | null>(null);
   const currentXRef = useRef<number>(0);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useFloatingDialogFocus(true, drawerRef);
+
+  useEffect(() => openModalDialog((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onCloseRef.current();
+      return;
+    }
+
+    if (event.key !== 'Tab') return;
+
+    const focusable = getModalDialogFocusableElements(drawerRef.current);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      drawerRef.current?.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }), []);
 
   // Handle swipe-to-close gesture
   const handleTouchStart = useCallback((e: TouchEvent) => {
@@ -103,6 +141,7 @@ export function TouchGalleryDrawer({ onClose }: TouchGalleryDrawerProps) {
       {/* Drawer */}
       <div
         ref={drawerRef}
+        tabIndex={-1}
         className={TOUCH_GALLERY_DRAWER_PANEL_CLASS}
         style={getTouchGalleryDrawerPanelStyle(TOUCH.drawerWidth)}
         role="dialog"

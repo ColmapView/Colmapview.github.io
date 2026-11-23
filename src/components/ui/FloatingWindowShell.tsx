@@ -161,6 +161,7 @@ export function FloatingWindowShell({
             onPointerDown={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
             className={modalStyles.toolHeaderClose}
+            aria-label={closeTitle}
             title={closeTitle}
           >
             {renderCloseIcon ?? <CloseIcon className="w-3.5 h-3.5" />}
