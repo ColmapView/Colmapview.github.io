@@ -95,7 +95,6 @@ export function AppLayout() {
       embedMode,
       touchMode,
       touchUI,
-      imageDetailId,
       reconstruction,
       urlLoading,
     },
@@ -170,7 +169,7 @@ export function AppLayout() {
           </Suspense>
         )}
 
-        {imageDetailId !== null && <ImageDetailModal />}
+        <ImageDetailModal />
       </div>
     );
   }
@@ -207,7 +206,7 @@ export function AppLayout() {
       </div>
 
       {!embedMode && <StatusBar />}
-      {imageDetailId !== null && <ImageDetailModal />}
+      <ImageDetailModal />
     </div>
   );
 }

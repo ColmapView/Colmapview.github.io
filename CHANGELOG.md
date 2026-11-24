@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.18] - 2026-11-24
+
+### Fixed
+
+- Restore the custom 12px rounded scrollbars in Chromium and Safari, which `0.25.15` had replaced with platform scrollbars; Firefox keeps the themed `scrollbar-color`.
+- Keep `ImageDetailModal` mounted while closed again, so match-line opacity, mask view mode and the lazy 2D-point cache survive closing and reopening an image.
+
 ## [0.25.17] - 2026-11-23
 
 ### Fixed

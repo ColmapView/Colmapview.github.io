@@ -146,7 +146,6 @@
   --scrollbar-width: 12px;
   --scrollbar-thumb: var(--border-light);
   --scrollbar-track: var(--bg-secondary);
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   --control-btn-size: 2.5rem;
   --control-panel-gap: 0.5rem;
   --tap-target-min: 44px; /* mirrors TOUCH.minTapTarget (src/theme/sizing.ts) */
@@ -1494,23 +1493,29 @@ legend {
    SCROLLBAR STYLING
    ============================================ */
 
-@supports not (scrollbar-color: auto) {
-  ::-webkit-scrollbar {
-    width: var(--scrollbar-width);
-    height: var(--scrollbar-width);
-  }
+/* Custom bars where the engine styles them; standard colours elsewhere (Firefox).
+   A non-auto scrollbar-color would switch Chromium to its platform scrollbars. */
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
 
-  ::-webkit-scrollbar-track {
-    background: var(--scrollbar-track);
-  }
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
 
-  ::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb);
-    border-radius: var(--radius-full);
-  }
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+}
 
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted);
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  :root {
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   }
 }
 
