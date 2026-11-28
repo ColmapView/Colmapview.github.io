@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.19] - 2026-11-27
+
+### Added
+
+- Add a `splat` query parameter to viewer links: `?url=…&splat=<path>` opens that splat from the dataset instead of showing the splat picker, and `&splat=none` opens the COLMAP scene only. A `#d=` share link's splat choice still wins, Hub share addresses accept it as a visitor override, and touch devices keep the existing memory-budget prompt.
+
 ## [0.25.18] - 2026-11-24
 
 ### Fixed

@@ -32,7 +32,7 @@ The toolbar's **Align** button holds everything that works out *where the scene 
 ### Export & Sharing
 - **Multiple Export Formats** - COLMAP binary/text, PLY point clouds, config YAML, ZIP archives.
 - **Screenshot & Recording** - PNG/JPEG/WebP screenshots, GIF/WebM/MP4 video export with quality controls.
-- **URL Sharing** - Share reconstructions with encoded camera view state. Embeddable iframes.
+- **URL Sharing** - Share reconstructions with encoded camera view state. Embeddable iframes. Add `&splat=<path>` to a `?url=` link to open a specific splat from the dataset without the splat picker (for example `&splat=surface_gaussians.ply`), or `&splat=none` for the COLMAP scene only. A share link's own splat choice takes precedence, and touch devices still ask before downloading a splat over their memory budget.
 - **Social Sharing** - One-click share to X/LinkedIn with auto-generated stats.
 - **Publish to Google Drive** - On the configured [custom viewer](https://colmapview.opsiclear.com/), save the current dataset as a ZIP with link sharing or Private access. Includes source photos or matched video frames, masks, the active splat, and viewer settings. GitHub and preview viewers offer an explicit link to the custom host. See [Drive publishing setup](docs/google-drive-publishing.md) and [dual-host deployment](docs/dual-hosting.md).
 - **Self-Contained Assets** - The interface typefaces (IBM Plex Sans, JetBrains Mono) ship with the app, so a page load makes no Google Fonts request — embeds and offline use stay self-contained.

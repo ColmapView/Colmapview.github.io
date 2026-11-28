@@ -145,7 +145,9 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
         assertCurrent();
         return callback(...args);
       };
-    const initialHash = applyUrlOverrides ? getViewerStartupUrl().hash : '';
+    const startupUrl = applyUrlOverrides ? getViewerStartupUrl() : null;
+    const initialHash = startupUrl?.hash ?? '';
+    const initialSearch = startupUrl?.search ?? '';
     let savedViewerState: PublishedViewerState | null = null;
     let autoSplatSourceId: string | undefined;
     const load: UrlLoadContext = {
@@ -186,7 +188,7 @@ export function useUrlLoadActions({ logger = appLogger, applyUrlOverrides = fals
     try {
       // Decode source choices before any network transfer; an explicit None must
       // never turn into an eager full splat request while URL settings decode.
-      const shared = await decodeSharedViewerOverrides(initialHash);
+      const shared = await decodeSharedViewerOverrides(initialHash, initialSearch);
       assertCurrent();
       requestSplatForLoad(shared);
       const loaded = await work(load);

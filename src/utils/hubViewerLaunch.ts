@@ -31,7 +31,7 @@ export function getViewerStartupUrl(): URL {
   const current = new URL(window.location.href);
   const launch = readHubViewerUrl();
   if (!launch) return current;
-  for (const key of ['embed', 'touch', 'splatBackend']) {
+  for (const key of ['embed', 'touch', 'splatBackend', 'splat']) {
     if (current.searchParams.has(key)) launch.searchParams.set(key, current.searchParams.get(key)!);
   }
   launch.hash = current.hash || launch.hash;

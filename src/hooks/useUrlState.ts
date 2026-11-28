@@ -71,10 +71,35 @@ export function collectShareConfig(): ShareConfig {
 /** Settings carried by the viewer URL itself, which take precedence over a dataset's saved state. */
 export interface SharedViewerOverrides { config?: ShareConfig; viewState?: CameraViewState | null }
 
-export async function decodeSharedViewerOverrides(hash: string): Promise<SharedViewerOverrides | null> {
+/** Query parameter that names the splat a viewer link opens with, e.g. `?url=…&splat=surface.ply`. */
+export const SPLAT_QUERY_PARAM = 'splat';
+/** `?splat=none` opens the COLMAP scene without a splat. */
+export const SPLAT_QUERY_NONE = 'none';
+const SPLAT_QUERY_MAX_LENGTH = 1024;
+
+/**
+ * The splat source a viewer link's `splat` query parameter selects: a path relative to the loaded
+ * dataset (matched like a shared `activeSourceId`), '' for `none`, or undefined when absent or unusable.
+ */
+export function readSplatQueryParam(search: string): string | undefined {
+  const value = new URLSearchParams(search).get(SPLAT_QUERY_PARAM)?.trim();
+  if (!value || value.length > SPLAT_QUERY_MAX_LENGTH) return undefined;
+  return value.toLowerCase() === SPLAT_QUERY_NONE ? '' : value;
+}
+
+/**
+ * Settings the viewer URL carries: its `#d=`/camera fragment, plus the `splat` query parameter. A
+ * fragment's own splat choice wins, since a share link records the sharer's latest pick.
+ */
+export async function decodeSharedViewerOverrides(hash: string, search = ''): Promise<SharedViewerOverrides | null> {
   const shared = await decodeShareData(hash);
   const viewState = shared?.viewState ?? await decodeCameraStateFromHash(hash);
-  return shared?.config || viewState ? { config: shared?.config ?? undefined, viewState } : null;
+  let config = shared?.config ?? undefined;
+  const querySplat = readSplatQueryParam(search);
+  if (querySplat !== undefined && config?.splat?.activeSourceId === undefined) {
+    config = { ...config, splat: { ...config?.splat, activeSourceId: querySplat } };
+  }
+  return config || viewState ? { config, viewState } : null;
 }
 
 /**

@@ -23,12 +23,13 @@ it.each(['/s/d/AAAAAAAAAAAAAAAA', '/s/RoughhewnBiplane', '/hub/roughhewnbiplane'
 });
 
 it('pins the dataset while honoring visitor display flags and a newer camera view', () => {
-  launch(target, '/s/d/AAAAAAAAAAAAAAAA?url=https://attacker.example&embed=1&touch=0&splatBackend=webgl#c=new');
+  launch(target, '/s/d/AAAAAAAAAAAAAAAA?url=https://attacker.example&embed=1&touch=0&splatBackend=webgl&splat=none#c=new');
   const url = getViewerStartupUrl();
   expect(url.searchParams.get('url')).toBe('https://example.com/scene.json');
   expect(url.searchParams.get('embed')).toBe('1');
   expect(url.searchParams.get('touch')).toBe('0');
   expect(url.searchParams.get('splatBackend')).toBe('webgl');
+  expect(url.searchParams.get('splat')).toBe('none');
   expect(url.hash).toBe('#c=new');
 });
 

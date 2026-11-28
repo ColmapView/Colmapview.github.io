@@ -12,7 +12,8 @@ import { buildPendingFetch, buildFile, buildLoadedFiles } from '../test/builders
 import type { CameraViewState } from '../store/types';
 import type { ColmapManifest } from '../types/manifest';
 import { decodeShareData } from '../utils/shareDataCodec';
-import { applySavedViewerState, applyShareConfig, collectShareConfig, decodeSharedViewerOverrides, generateEmbedUrl, generateShareableUrl } from './useUrlState';
+import { applySavedViewerState, applyShareConfig, collectShareConfig, decodeSharedViewerOverrides, generateEmbedUrl, generateShareableUrl,
+  readSplatQueryParam } from './useUrlState';
 import { createIdentityEuler } from '../utils/sim3dTransforms';
 import type { PublishedViewerState } from '../utils/publishedViewerState';
 import { getSplatLoadingProgress } from '../utils/splatLoadingProgressPolicy';
@@ -135,6 +136,56 @@ describe('URL state sharing', () => {
     expect(useReconstructionStore.getState().requestedSplatSourceId).toBeNull();
     expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
     expect(usePointCloudStore.getState().pointSize).toBe(config.pointCloud?.pointSize);
+  });
+
+  it.each([
+    ['?url=x&splat=splats/alternate.spz', 'splats/alternate.spz'],
+    ['?splat=%20surface_gaussians.ply%20', 'surface_gaussians.ply'],
+    ['?splat=none', ''],
+    ['?splat=NONE', ''],
+    ['?splat=', undefined],
+    ['?url=x', undefined],
+    [`?splat=${'a'.repeat(1025)}`, undefined],
+  ])('reads the splat query parameter %s', (search, expected) => {
+    expect(readSplatQueryParam(search)).toBe(expected);
+  });
+
+  it('takes the splat from the query when the fragment does not choose one', async () => {
+    expect((await decodeSharedViewerOverrides('', '?splat=splats/alternate.spz'))?.config?.splat?.activeSourceId)
+      .toBe('splats/alternate.spz');
+    const hash = new URL(generateEmbedUrl(manifest, viewState, { ui: { backgroundColor: '#123456' } })).hash;
+    const merged = await decodeSharedViewerOverrides(hash, '?splat=none');
+    expect(merged?.config?.splat?.activeSourceId).toBe('');
+    expect(merged?.config?.ui?.backgroundColor).toBe('#123456');
+    expect(merged?.viewState?.position).toEqual(viewState.position);
+    expect(await decodeSharedViewerOverrides('', '')).toBeNull();
+  });
+
+  it('lets a share fragment that chose a splat win over the query parameter', async () => {
+    const hash = new URL(generateEmbedUrl(manifest, viewState, { splat: { activeSourceId: 'splats/active.spz' } })).hash;
+    expect((await decodeSharedViewerOverrides(hash, '?splat=splats/alternate.spz'))?.config?.splat?.activeSourceId)
+      .toBe('splats/active.spz');
+  });
+
+  it('opens the splat a ?splat= link names instead of offering the picker', async () => {
+    const alternate = installSavedSplatSources();
+    useReconstructionStore.getState().setShowSplatPicker(true);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await applySavedViewerState(null, await decodeSharedViewerOverrides('', '?splat=splats/alternate.spz'));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBe(alternate);
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
+  });
+
+  it('keeps COLMAP only for ?splat=none over a saved splat without downloading it', async () => {
+    installSavedSplatSources();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await applySavedViewerState(savedSplatState(), await decodeSharedViewerOverrides('', '?splat=none'));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(useReconstructionStore.getState().loadedFiles?.splatFile).toBeUndefined();
+    expect(useReconstructionStore.getState().showSplatPicker).toBe(false);
   });
 
   it.each([
